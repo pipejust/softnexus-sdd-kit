@@ -3,7 +3,9 @@
 //   Altum -> Repo : ver altum-backlog.mjs (proyectos, tareas existentes, importar).
 //   Firma de webhooks de Altum: verifyAltumSignature() para el receptor (n8n u otro).
 // Una clave por empresa (X-API-Key); el resto del contrato es igual para todas.
+import { execFileSync } from 'node:child_process';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import os from 'node:os';
 import { findMark, itemPlainBody } from './body.mjs';
 import { setExternalId } from './items.mjs';
 import { readState, writeState } from './store.mjs';
@@ -58,10 +60,38 @@ function blockersMessage(detail) {
 // Una sola variable por empresa (key_env, ej. SN_ALTUM_KEY_SOFTNEXUS). En el computador de cada persona
 // guarda SU clave personal (dice quién es, de qué empresa y qué proyectos tiene asignados); en el CI,
 // la clave de la empresa. El plugin no distingue: Altum sabe de quién es cada clave (GET /me).
+//
+// Si la variable no está en el entorno (las apps de escritorio no leen ~/.zshrc), en macOS se busca en el
+// Llavero, donde la dejó sn-clave-altum.sh. El valor se queda en memoria: nunca se imprime ni se guarda.
+const keyCache = new Map();
+
+function fromKeychain(name) {
+  if (process.platform !== 'darwin') return '';
+  if (keyCache.has(name)) return keyCache.get(name);
+  let value = '';
+  try {
+    value = execFileSync('security', ['find-generic-password', '-a', os.userInfo().username, '-s', name, '-w'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim();
+  } catch {
+    value = ''; // no hay entrada en el Llavero
+  }
+  keyCache.set(name, value);
+  return value;
+}
+
+export function keyName(connector) {
+  return connector.key_env || 'SN_ALTUM_KEY';
+}
+
+export function hasKey(connector) {
+  return Boolean(process.env[keyName(connector)] || fromKeychain(keyName(connector)));
+}
+
 function key(connector) {
-  const name = connector.key_env || 'SN_ALTUM_KEY';
-  if (!process.env[name]) throw new Error(`falta la clave de Altum en la variable ${name}: guárdala con "bash scripts/sn/sn-clave-altum.sh" (una sola vez, sirve para todos tus proyectos)`);
-  return process.env[name];
+  const name = keyName(connector);
+  const value = process.env[name] || fromKeychain(name);
+  if (!value) throw new Error(`falta la clave de Altum (${name}): guárdala con "bash scripts/sn/sn-clave-altum.sh" (una sola vez, sirve para todos tus proyectos)`);
+  return value;
 }
 
 export async function api(connector, method, route, body, headers = {}) {
@@ -84,7 +114,7 @@ export async function api(connector, method, route, body, headers = {}) {
   const reasons = {
     401: 'clave de API inválida (revisa la variable de la clave)',
     403: 'la clave no tiene permiso: revisa que tenga tasks:read / tasks:write y, si es personal, que estés asignado a ese proyecto',
-    404: 'no existe: revisa project_id o la URL base',
+    404: 'no existe, o tu clave personal no alcanza ese proyecto: revisa el project_id y que estés asignado a él en Altum',
   };
   if (!response.ok) throw new Error(`Altum HTTP ${response.status}${reasons[response.status] ? ` — ${reasons[response.status]}` : ''} en ${route}`);
   return response.status === 204 ? null : response.json();
