@@ -6,7 +6,9 @@
 //   node sn-sync.mjs fetch <conector> <id-externo>                       trae una tarea del sistema externo
 //   node sn-sync.mjs list                                                ítems y su etapa (Markdown, sin conexión)
 //   node sn-sync.mjs show <ID>                                           ficha completa + commits, firmas, evidencia
-//   node sn-sync.mjs projects <altum>                                    proyectos de la empresa (para elegir project_id)
+//   node sn-sync.mjs whoami                                              de quién es la clave y qué proyectos tiene
+//   node sn-sync.mjs projects [--json]                                   proyectos que ve la clave, con su clave corta
+//   node sn-sync.mjs clone <clave o nombre> [--in <carpeta>]             clona ese proyecto desde el repo_url de Altum
 //   node sn-sync.mjs backlog <altum> [--all] [--json]                    tareas del proyecto: pendientes y si ya están en el repo
 //   node sn-sync.mjs pull <altum> [--apply] [--include-closed]           Altum -> repo: tareas abiertas sin traer (--apply las crea)
 //   node sn-sync.mjs link <ITEM> <altum> <id-tarea>                      enlaza un ítem con una tarea que ya existe en Altum
@@ -21,6 +23,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NotRetryable } from './sync/altum.mjs';
 import { backlogMarkdown, listProjects, pullAltum, readBacklog, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
+import { alreadyThere, cloneProject, findProject, targetDir } from './sync/altum-clone.mjs';
 import { clearInbox, describe, isWatching, readInbox, stopWatch, watch } from './sync/altum-watch.mjs';
 import { deliver, fetchExternal } from './sync/connectors.mjs';
 import { readItems, setExternalId, writeImportedItem } from './sync/items.mjs';
@@ -184,10 +187,41 @@ function altumConnector(config, name) {
   return connector;
 }
 
+// El conector de Altum del repo; si todavía no hay ninguno, basta la clave para leer y clonar.
+function anyAltum(config) {
+  return config?.connectors.find((c) => c.kind === 'altum') || { name: 'altum', kind: 'altum' };
+}
+
 async function projects(config) {
-  const list = await listProjects(altumConnector(config, args[1]));
-  if (!list.length) return console.log('La clave no ve proyectos. Revisa que sea la clave de la empresa correcta.');
-  list.forEach((p) => console.log(`${p.id}  ${p.name || '(sin nombre)'}${p.client ? `  cliente: ${p.client}` : ''}${p.status ? `  [${p.status}]` : ''}${p.members != null ? `  ${p.members} integrantes` : ''}`));
+  const list = await listProjects(anyAltum(config));
+  if (!list.length) return console.log('La clave no ve proyectos. Revisa que sea la clave correcta.');
+  if (flag('--json')) return process.stdout.write(`${JSON.stringify(list, null, 2)}\n`);
+  console.log('clave                  proyecto');
+  list.forEach((p) => console.log(`${p.key.padEnd(22)} ${p.name || '(sin nombre)'}${p.client ? `  · cliente: ${p.client}` : ''}${p.repo ? '' : '  (sin repositorio en Altum)'}  ${p.id}`));
+  console.log('\nPara empezar a trabajar en uno: clone <clave o nombre>');
+}
+
+// clone <clave o nombre> [--in <carpeta>] [--dry-run]: busca el proyecto en Altum y lo clona desde repo_url.
+// Sirve aunque este repositorio no tenga nada configurado: solo hace falta la clave de Altum.
+async function clone(config) {
+  const query = args.slice(1).filter((a, i) => !a.startsWith('--') && args[i] !== '--in').join(' ').trim();
+  if (!query) throw new Error('uso: clone <clave o nombre del proyecto> [--in <carpeta>] [--dry-run]');
+  const { match, candidates } = findProject(await listProjects(anyAltum(config)), query);
+  if (candidates) {
+    console.log(`Hay ${candidates.length} proyectos parecidos a "${query}". ¿Cuál es?`);
+    candidates.forEach((p) => console.log(`  ${p.key.padEnd(22)} ${p.name}${p.client ? `  · cliente: ${p.client}` : ''}`));
+    process.exitCode = 1;
+    return;
+  }
+  if (!match) throw new Error(`ninguno de tus proyectos se parece a "${query}". Mira la lista con "projects"; si falta uno, pide que te asignen a él en Altum.`);
+  if (!match.repo) throw new Error(`"${match.name}" no tiene repositorio registrado en Altum. Regístralo en su ficha ("Repositorio" → Registrar) y vuelve a intentar.`);
+  const parent = option('--in', '..');
+  const dir = targetDir(match, parent);
+  if (alreadyThere(dir)) return console.log(`"${match.name}" ya está en ${dir}. Ábrelo ahí; no se clona de nuevo.`);
+  if (flag('--dry-run')) return console.log(`git clone ${match.repo} ${dir}`);
+  cloneProject(match, parent);
+  console.log(`Clonado: ${match.name} → ${dir}`);
+  console.log(`Ábrelo con Claude Code. Si todavía no tiene la metodología, usa /sn-setup (proyecto de Altum: ${match.id}).`);
 }
 
 async function backlog(config) {
@@ -263,7 +297,8 @@ else if (command === 'show') {
   else { console.log(`No existe el ítem ${args[1]}. Usa "list" para ver los ids.`); process.exitCode = 1; }
 }
 else if (command === 'githooks') githooks();
-// whoami funciona aunque el repositorio todavía no esté conectado: basta la clave personal en el entorno.
+// clone y whoami funcionan aunque el repositorio todavía no esté conectado: basta la clave de Altum.
+else if (command === 'clone') await clone(config);
 else if (command === 'whoami') {
   const connector = config?.connectors.find((c) => c.kind === 'altum' && (!args[1] || c.name === args[1]))
     || { name: 'altum', kind: 'altum' };
@@ -286,6 +321,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|whoami|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|whoami|clone|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }

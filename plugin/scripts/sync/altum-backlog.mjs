@@ -2,12 +2,20 @@
 // Un repositorio de código = un proyecto de Altum de una empresa (la clave X-API-Key dice cuál empresa).
 import { findMark } from './body.mjs';
 import { api, KIND_TO_TYPE, listTasks, projectStates } from './altum.mjs';
+import { projectKey } from './altum-clone.mjs';
 import { readItems } from './items.mjs';
 
-// Proyectos de la empresa (la clave dice cuál): id, nombre, cliente, estado e integrantes.
+// Proyectos que ve la clave: id, clave corta (para escribirla), nombre, cliente, estado, integrantes
+// y el repositorio registrado en Altum (repo_url), que es de donde se clona.
+export function toProject(p) {
+  return {
+    id: p.id, key: projectKey(p.name), name: p.name || '', client: p.client_name || '',
+    status: p.status || '', members: p.members?.length ?? null, repo: p.repo_url || '',
+  };
+}
+
 export async function listProjects(connector) {
-  const list = await api(connector, 'GET', '/projects');
-  return list.map((p) => ({ id: p.id, name: p.name || '', client: p.client_name || '', status: p.status || '', members: p.members?.length ?? null }));
+  return (await api(connector, 'GET', '/projects')).map(toProject);
 }
 
 // Quién es la clave (GET /me): persona o empresa, a qué empresa pertenece y qué proyectos tiene asignados.
@@ -25,12 +33,12 @@ export function whoAmIText(me, projectId) {
   if (!me) return 'Altum todavía no dice de quién es la clave (falta GET /me, pedido F). La conexión funciona igual.\n';
   const who = me.user ? `Clave personal de ${me.user.name || ''} <${me.user.email || '?'}>` : `Clave de la empresa (${me.key?.name || 'CI / servidores'})`;
   const projects = me.projects || [];
-  const lines = projects.map((p) => `  ${p.id}  ${p.name || ''}${p.client_name ? `  cliente: ${p.client_name}` : ''}${p.is_lead ? '  [líder]' : ''}`);
+  const lines = projects.map((p) => `  ${projectKey(p.name).padEnd(22)} ${p.name || ''}${p.client_name ? `  · cliente: ${p.client_name}` : ''}${p.is_lead ? '  [líder]' : ''}${p.repo_url ? '' : '  (sin repositorio en Altum)'}`);
   const here = !projectId ? 'Este repositorio todavía no está unido a un proyecto: dile "conecta este proyecto con Altum" (/sn-connect).' : projects.some((p) => p.id === projectId)
     ? `Este repositorio: proyecto ${projectId} — asignado.`
     : `Este repositorio: proyecto ${projectId} — NO estás asignado. Pide al líder del proyecto en Altum que te agregue.`;
   return `${who}\nEmpresa: ${me.company?.name || '?'}${me.company?.slug ? ` (${me.company.slug})` : ''}\n`
-    + `${me.user ? 'Proyectos asignados' : 'Proyectos de la empresa'} (${projects.length}):\n${lines.join('\n')}\n${here ? `\n${here}\n` : ''}`;
+    + `${me.user ? 'Proyectos asignados' : 'Proyectos de la empresa'} (${projects.length}) — escribe la clave de la izquierda:\n${lines.join('\n')}\n${here ? `\n${here}\n` : ''}`;
 }
 
 function linkedIndex(connector, root) {

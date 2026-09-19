@@ -37,6 +37,7 @@ COMANDOS DE SOFTNEXUS
   /sn-validate   (líder) Validar lo que me pidieron
   /sn-items      Ver y copiar las historias (y todo lo que se hizo)
   /sn-connect    Conectar Altum, Matrix, GitHub/Orca (tareas al día solas)
+                 "clóname el proyecto X" → lo trae a tu computador desde Altum
                  "¿quién soy en Altum?" → tu nombre y tus proyectos asignados
                  "guarda mi clave de Altum" → una vez; sin ella no ves proyectos
   /sn-explain    Explícame lo que se hizo
