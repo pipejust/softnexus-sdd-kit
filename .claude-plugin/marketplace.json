@@ -1,0 +1,14 @@
+{
+  "name": "softnexus",
+  "description": "Marketplace interno de Softnexus: metodología Spec Driven para Claude Code.",
+  "owner": {
+    "name": "Softnexus"
+  },
+  "plugins": [
+    {
+      "name": "softnexus-sdd",
+      "source": "./plugin",
+      "description": "Metodología Spec Driven de Softnexus (skills sn-*, guardas deterministas)."
+    }
+  ]
+}
