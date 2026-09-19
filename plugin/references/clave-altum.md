@@ -18,6 +18,9 @@
    - No hace falta reiniciar nada: si la variable no está en el entorno (las apps de escritorio no leen `~/.zshrc`), el plugin busca la clave en el Llavero él mismo.
 3. **Comprobar y seguir:** `… whoami` muestra nombre, empresa y **proyectos asignados**. Si este repositorio corresponde a uno de ellos y no está unido, ofrécele conectarlo con `sn-connect`. Si el proyecto no aparece, no está asignada a él: que el líder del proyecto la agregue en Altum (el acceso cambia al instante, sin regenerar la clave).
 
+## Después de la clave: traer el proyecto
+Con la clave lista, la persona no necesita buscar URLs: `node scripts/sn/sn-sync.mjs projects` lista sus proyectos con una **clave corta** (`busco-facil`, `mi-angel`) y `… clone <clave o nombre>` lo clona desde el repositorio que Altum tiene registrado en ese proyecto (`repo_url`). Si el proyecto no tiene repositorio registrado, hay que ponerlo en su ficha de Altum ("Repositorio" → Registrar); lo puede hacer cualquiera del equipo del proyecto.
+
 ## Casos aparte
 - **Varias empresas con su propio Altum:** `bash … sn-clave-altum.sh <empresa>` (una por empresa) y en el conector del repo `"key_env": "SN_ALTUM_KEY_<EMPRESA>"`.
 - **CI y servidores:** clave de empresa (`sk_live_`, la crea un administrador en Configuración → Claves de API) como secreto: `gh secret set SN_ALTUM_KEY`.

@@ -10,6 +10,9 @@ Las plantillas están en `${CLAUDE_PLUGIN_ROOT}/plantillas/` (dentro del plugin 
 ## 0. La clave de Altum de la persona (una sola vez en su computador)
 Antes de nada, comprueba si ya la tiene: `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" whoami`. Si falta, ofrécele guardarla siguiendo `${CLAUDE_PLUGIN_ROOT}/references/clave-altum.md` (la genera en su perfil de Altum y la pega en la terminal, nunca en el chat). Con la clave lista, el agente ya sabe quién es y qué proyectos tiene asignados. Si dice que no, sigue sin Altum.
 
+## 0b. ¿La persona ya tiene el proyecto en su computador?
+Si dice "no lo tengo", "clóname el proyecto X" o abrió una carpeta vacía: `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" clone <nombre o clave>`. Busca el proyecto en Altum por su nombre (sin importar tildes ni mayúsculas), lee el repositorio que tiene registrado y lo clona en una carpeta al lado de la actual. Si hay varios parecidos, te los muestra para que la persona elija; si no tiene repositorio registrado en Altum, dilo tal cual: hay que registrarlo en la ficha del proyecto ("Repositorio" → Registrar). Para ver todos: `… projects`. Luego abre esa carpeta y sigue desde el paso 1.
+
 ## 1. Revisar sin tocar
 - ¿Es repo git? ¿Rama actual? ¿Hay cambios sin guardar? (si hay, detente y pregunta).
 - Detecta el stack **leyendo el código**: `package.json` (scripts, dependencias), `pnpm-lock`/`yarn.lock`/`package-lock`, `tsconfig`, carpetas `supabase/`, `prisma/`, `app/`, `src/`, configuración de tests (vitest, jest, playwright), CI existente (`.github/workflows`), estilos (tailwind, tokens, fuentes).
