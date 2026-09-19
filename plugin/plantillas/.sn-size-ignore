@@ -1,0 +1,4 @@
+# Archivos que pueden superar 1000 líneas porque son generados o datos (no código escrito a mano).
+# Un patrón por línea, estilo glob. Agregar aquí requiere aprobación del líder técnico.
+# supabase/seed.sql
+# src/i18n/*.json

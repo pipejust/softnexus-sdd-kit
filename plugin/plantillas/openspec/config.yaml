@@ -1,0 +1,44 @@
+# openspec/config.yaml — plantilla Softnexus
+# Se inyecta en cada artefacto que genera OpenSpec (proposal, specs, design, tasks).
+schema: spec-driven
+
+context: |
+  Proyecto: <nombre> — <una frase del producto>.
+  Stack aprobado: <copiar de AGENTS.md §2>.
+  Usuarios: <roles del sistema>.
+  Cliente sector público: los artefactos (proposal, specs, evidencia) son entregables
+  contractuales; deben poder leerse sin conocer el código.
+  Idioma de los artefactos: español.
+
+rules:
+  proposal:
+    - Declarar tamaño (XS/S/M/L; XL prohibido, dividir) y riesgo (R0–R4).
+    - Incluir "Fuera de alcance" explícito.
+    - Si riesgo >= R3, incluir plan de rollback.
+    - Máximo 1 día de trabajo humano+agente; si no cabe, proponer slices.
+  specs:
+    - Cada requisito con escenarios Given/When/Then.
+    - Mínimo un escenario happy path, uno de fallo y uno de borde por requisito.
+    - Criterios observables y medibles (nada de "rápido", "seguro", "bonito").
+    - Incluir estados de UI cuando aplique - vacío, cargando, error, sin permisos.
+  design:
+    - Reutilizar patrones existentes del repo; citar el archivo que sirve de ejemplo.
+    - Listar archivos a tocar. Si son más de ~10, justificar o dividir.
+    - Diseñar por módulos pequeños - cada archivo nuevo con una responsabilidad y pensado para 200-400 líneas.
+    - Si un archivo existente quedaría sobre 800 líneas, el diseño pone el código nuevo en un módulo aparte.
+    - Si el archivo es deuda heredada (.sn-size-baseline), no puede crecer - el código nuevo va en otro módulo.
+    - Toda dependencia nueva debe existir en el stack aprobado.
+  tasks:
+    - Tareas atómicas de <= 30 minutos, ordenadas por dependencia.
+    - La primera tarea de lógica escribe el test que falla (TDD).
+    - Última tarea siempre - correr gates (lint, typecheck, test, build) y /sn-evidence.
+
+operations:
+  apply:
+    guidance:
+      - Marcar cada tarea al terminarla; no avanzar con tests rojos.
+      - Si una tarea revela que la spec está mal, parar y actualizar la spec antes de seguir.
+      - Si cambia UI, abrir la página y tomar screenshot antes de dar la tarea por hecha.
+  archive:
+    guidance:
+      - Archivar solo después del merge a main.

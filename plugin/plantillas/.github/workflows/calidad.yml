@@ -1,0 +1,31 @@
+# Softnexus: puertas automáticas en cada PR. Ajusta el gestor de paquetes y los comandos a AGENTS.md §3.
+name: calidad
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Tamaño de archivos (máximo 1000 líneas)
+        run: node scripts/check-file-size.mjs
+      - name: Specs válidas (OpenSpec)
+        run: npx -y @fission-ai/openspec@latest validate --all --no-interactive
+      - name: Secretos
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Lint · tipos · tests · build
+        run: |
+          npm run lint
+          npm run typecheck --if-present
+          npm test --if-present
+          npm run build

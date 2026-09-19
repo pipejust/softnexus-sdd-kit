@@ -1,0 +1,37 @@
+# Softnexus: mantiene los sistemas de tareas al día con lo que pasa en GitHub
+# (PR abiertos/unidos, validaciones empujadas desde el computador del líder, merges a la rama principal).
+# Secretos: agrégalos en Settings > Secrets and variables > Actions con los mismos nombres de .sn/connectors.json.
+name: sn-sync
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    types: [opened, reopened, ready_for_review, closed, synchronize]
+
+concurrency:
+  group: sn-sync-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: hashFiles('.sn/connectors.json') != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Sincronizar (foto completa, idempotente)
+        run: node scripts/sn/sn-sync.mjs sync --upsert-only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SN_ALTUM_KEY: ${{ secrets.SN_ALTUM_KEY }}
+          SN_WEBHOOK_SECRET: ${{ secrets.SN_WEBHOOK_SECRET }}
+          SN_MATRIX_TOKEN: ${{ secrets.SN_MATRIX_TOKEN }}
