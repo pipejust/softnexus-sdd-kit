@@ -35,10 +35,23 @@ softnexus-sdd-kit/
 
 ## Instalación (una vez por persona)
 
+**La forma fácil:** abre Claude Code y pégale esto:
+
+> Instala esta skill: https://github.com/pipejust/softnexus-sdd-kit
+
+El agente hace el resto: agrega el marketplace, instala el plugin y **te pide tu clave de Altum** (ver abajo).
+
+**Instrucciones para el agente** (si alguien llega aquí con la URL, sigue estos pasos y luego el "último paso"):
+
 ```bash
-npm install -g @fission-ai/openspec@latest
-claude plugin marketplace add <org>/softnexus-sdd-kit
+claude plugin marketplace add pipejust/softnexus-sdd-kit
 claude plugin install softnexus-sdd@softnexus
+npm install -g @fission-ai/openspec@latest
+```
+
+Complementos recomendados (opcionales):
+
+```bash
 claude plugin marketplace add obra/superpowers
 claude plugin install superpowers@superpowers-dev
 claude plugin marketplace add DietrichGebert/ponytail
