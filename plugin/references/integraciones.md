@@ -144,6 +144,7 @@ Contrato vigente de Altum: `altum-api-contrato.md`; resumen de lo que ya está e
 - **Personal (`sk_user_…`, lo normal):** la genera la propia persona en Altum → Mi perfil → Mis datos → "Tu clave personal de API" → Regenerar. Nace con `tasks:read`, `tasks:write` y `projects:read`, y alcanza **solo a los proyectos donde está asignada** (en otro: `403 "No estás asignado a este proyecto"`; asignarla o quitarla cambia su acceso al instante). Sus cambios quedan como `updated_by: {type:"user", …}`, así nadie recibe avisos de lo propio.
 - **De empresa (`sk_live_…`):** la crea un administrador en Configuración → Claves de API eligiendo alcances; ve todos los proyectos. Para CI y servidores.
 - **Variable:** `SN_ALTUM_KEY` para todo (el `key_env` del conector solo se usa si la persona trabaja con varias empresas con su propio Altum: `SN_ALTUM_KEY_<EMPRESA>`).
+- **Dónde la busca el motor:** primero la variable de entorno; si no está (las apps de escritorio no leen `~/.zshrc`), en macOS la lee del **Llavero** con `security find-generic-password`. El valor se queda en memoria del proceso: nunca se imprime ni se escribe en disco.
 - **Guardarla:** `bash scripts/sn/sn-clave-altum.sh` (la pide sin mostrarla, la deja en el Llavero de macOS y la carga en cada terminal). **Comprobarla:** `sn-sync whoami` — funciona aunque el repositorio no esté conectado y lista los proyectos asignados.
 - Límite 120 peticiones/minuto **por clave** (no por IP), sin otro límite diario u horario; con una clave por persona, el límite no se comparte.
 

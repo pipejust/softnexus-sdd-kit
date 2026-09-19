@@ -8,6 +8,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const REMIND_EVERY_MS = 12 * 60 * 60 * 1000;
 
@@ -53,14 +54,16 @@ try {
   const event = payload.hook_event_name;
   if (existsSync(script)) {
     const connector = altumConnector(root);
-    const hasKey = !!process.env[connector?.key_env || 'SN_ALTUM_KEY'];
-    if (event === 'SessionStart' && !hasKey) {
+    // La clave puede estar en el entorno o, en macOS, en el Llavero: se pregunta al motor.
+    const { hasKey } = await import(pathToFileURL(path.join(root, 'scripts/sn/sync/altum.mjs')).href);
+    const tieneClave = hasKey(connector || {});
+    if (event === 'SessionStart' && !tieneClave) {
       if (shouldRemind(root)) context(FALTA_CLAVE, 'SessionStart');
     } else if (event === 'SessionStart' && connector?.project_id && connector.watch !== false) {
       spawn(process.execPath, [script, 'watch', connector.name, '--background'], { cwd: root, detached: true, stdio: 'ignore' }).unref();
     } else if (event === 'SessionEnd') {
       execFileSync(process.execPath, [script, 'watch-stop'], { cwd: root, stdio: 'ignore', timeout: 5000 });
-    } else if (event === 'UserPromptSubmit' && !hasKey) {
+    } else if (event === 'UserPromptSubmit' && !tieneClave) {
       if (shouldRemind(root)) context(FALTA_CLAVE);
     } else if (event === 'UserPromptSubmit' && connector?.project_id) {
       const notes = execFileSync(process.execPath, [script, 'inbox'], { cwd: root, encoding: 'utf8', timeout: 5000 }).trim();
