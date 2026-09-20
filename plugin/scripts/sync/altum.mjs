@@ -150,7 +150,8 @@ export async function projectStates(connector, { fresh = false } = {}) {
 }
 
 async function fetchProjectStates(connector) {
-  const list = await api(connector, 'GET', `/projects/${connector.project_id}/config/estados`);
+  const raw = await api(connector, 'GET', `/projects/${connector.project_id}/config/estados`);
+  const list = Array.isArray(raw) ? raw : raw?.items || [];
   return {
     valid: list.map((s) => s.key),
     done: list.filter((s) => ['done', 'cancelled'].includes(s.kind)).map((s) => s.key),
@@ -163,7 +164,8 @@ const DEFAULT_FIELDS = { risk: 'riesgo', size: 'tamano', stage_label: 'etapa' };
 
 async function projectFields(connector) {
   try {
-    return await api(connector, 'GET', `/projects/${connector.project_id}/config/campos`);
+    const raw = await api(connector, 'GET', `/projects/${connector.project_id}/config/campos`);
+    return Array.isArray(raw) ? raw : raw?.items || [];
   } catch (error) {
     if (/HTTP 404/.test(error.message)) return [];
     throw error;
