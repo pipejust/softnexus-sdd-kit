@@ -32,8 +32,11 @@ export function findProject(projects, query) {
 //   dentro de una carpeta madre  → <carpeta>/<clave del proyecto>   (crea la carpeta del proyecto)
 //   en una ruta exacta           → esa misma ruta, con el contenido del repositorio adentro
 // Si la carpeta madre YA se llama como el proyecto, no se anida otra igual dentro.
-export function targetDir(project, parent, { exact = false } = {}) {
-  const clave = project.key || projectKey(project.name);
+// Cuando el proyecto tiene VARIOS repositorios, la carpeta se llama como el repositorio elegido
+// (si no, dos repositorios del mismo proyecto pelearían por la misma carpeta).
+export function targetDir(project, parent, { exact = false, repo = null } = {}) {
+  const variosRepos = (project.repos?.length || 0) > 1;
+  const clave = variosRepos && repo?.name ? projectKey(repo.name.split('/').pop()) : project.key || projectKey(project.name);
   const destino = path.resolve(parent);
   if (exact || path.basename(destino) === clave) return destino;
   return path.join(destino, clave);
@@ -45,8 +48,22 @@ export function alreadyThere(dir) {
 
 export function cloneProject(project, parent, opciones = {}) {
   const dir = targetDir(project, parent, opciones);
-  if (!project.repo) throw new Error(`el proyecto "${project.name}" no tiene repositorio registrado en Altum: regístralo en su ficha ("Repositorio" → Registrar) y vuelve a intentar`);
+  const url = opciones.repo?.url || project.repo;
+  if (!url) throw new Error(`el proyecto "${project.name}" no tiene repositorio registrado en Altum: regístralo en su ficha ("Repositorios") y vuelve a intentar`);
   if (alreadyThere(dir)) return { dir, cloned: false };
-  execFileSync('git', ['clone', project.repo, dir], { stdio: 'inherit' });
+  execFileSync('git', ['clone', url, dir], { stdio: 'inherit' });
   return { dir, cloned: true };
+}
+
+// ¿Cuál de los repositorios del proyecto? Con uno solo, ese. Con varios, hay que elegir:
+// exacto por nombre ("empresa/app" o "app"), y si no coincide, se devuelven todos para preguntar.
+export function findRepo(project, query) {
+  const repos = project.repos?.length ? project.repos : (project.repo ? [{ name: project.repo, url: project.repo }] : []);
+  if (repos.length <= 1) return { repo: repos[0] || null };
+  if (!query) return { choices: repos };
+  const buscado = projectKey(query);
+  const exacto = repos.filter((r) => projectKey(r.name) === buscado || projectKey(r.name.split('/').pop()) === buscado);
+  const parecido = repos.filter((r) => projectKey(r.name).includes(buscado));
+  const lista = exacto.length ? exacto : parecido;
+  return lista.length === 1 ? { repo: lista[0] } : { choices: lista.length ? lista : repos };
 }

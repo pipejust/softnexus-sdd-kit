@@ -24,8 +24,8 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileS
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NotRetryable } from './sync/altum.mjs';
-import { backlogMarkdown, checkProjectRepo, leadText, listProjects, projectLead, pullAltum, readBacklog, repoReminder, setProjectRepo, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
-import { alreadyThere, cloneProject, findProject, targetDir } from './sync/altum-clone.mjs';
+import { addProjectRepo, backlogMarkdown, checkProjectRepo, leadText, listProjects, listRepos, projectLead, pullAltum, readBacklog, repoReminder, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
+import { alreadyThere, cloneProject, findProject, findRepo, targetDir } from './sync/altum-clone.mjs';
 import { clearInbox, describe, isWatching, readInbox, stopWatch, watch } from './sync/altum-watch.mjs';
 import { deliver, fetchExternal } from './sync/connectors.mjs';
 import { readItems, setExternalId, writeImportedItem } from './sync/items.mjs';
@@ -272,12 +272,31 @@ function anyAltum(config) {
   return config?.connectors.find((c) => c.kind === 'altum') || { name: 'altum', kind: 'altum' };
 }
 
+// repos [<clave o nombre>]: los repositorios que tiene ese proyecto en Altum (pueden ser varios).
+async function repos(config) {
+  const connector = anyAltum(config);
+  const query = args.slice(1).filter((a) => !a.startsWith('--')).join(' ').trim();
+  const todos = await listProjects(connector);
+  const { match, candidates } = query ? findProject(todos, query) : { match: todos.find((p) => p.id === connector.project_id) };
+  if (candidates) throw new Error(`hay ${candidates.length} proyectos parecidos a "${query}": ${candidates.map((p) => p.key).join(', ')}`);
+  if (!match) throw new Error('uso: repos <clave o nombre del proyecto> (o conecta este repositorio con /sn-connect)');
+  const lista = (await listRepos(connector, match.id)) || match.repos;
+  if (!lista.length) {
+    console.log(`"${match.name}" no tiene repositorios registrados en Altum. Regístralo con: set-repo ${match.key} <url>`);
+    return;
+  }
+  console.log(`"${match.name}" — ${lista.length} repositorio${lista.length > 1 ? 's' : ''}:`);
+  lista.forEach((r) => console.log(`  ${r.name.padEnd(30)} ${r.url}`));
+  if (lista.length > 1) console.log(`\nPara traer uno: clone ${match.key} --repo <nombre> --in <carpeta>`);
+}
+
 async function projects(config) {
   const list = await listProjects(anyAltum(config));
   if (!list.length) return console.log('La clave no ve proyectos. Revisa que sea la clave correcta.');
   if (flag('--json')) return process.stdout.write(`${JSON.stringify(list, null, 2)}\n`);
   console.log('clave                  proyecto');
-  list.forEach((p) => console.log(`${p.key.padEnd(22)} ${p.name || '(sin nombre)'}${p.client ? `  · cliente: ${p.client}` : ''}${p.repo ? '' : '  (sin repositorio en Altum)'}  ${p.id}`));
+  list.forEach((p) => console.log(`${p.key.padEnd(22)} ${p.name || '(sin nombre)'}${p.client ? `  · cliente: ${p.client}` : ''}`
+    + `${p.repos.length > 1 ? `  (${p.repos.length} repositorios)` : p.repos.length ? '' : '  (sin repositorio en Altum)'}  ${p.id}`));
   console.log('\nPara empezar a trabajar en uno: clone <clave o nombre>');
 }
 
@@ -298,16 +317,20 @@ async function setRepo(config) {
     return;
   }
   if (!match) throw new Error(`ninguno de tus proyectos se parece a "${query}".`);
-  if (match.repo && match.repo !== url) console.log(`Ojo: ya tenía registrado ${match.repo}`);
+  let resultado;
   try {
-    await setProjectRepo(connector, match.id, url);
+    resultado = await addProjectRepo(connector, match.id, url);
   } catch (error) {
     if (/HTTP 403/.test(error.message)) {
       throw new Error('tu clave no tiene el permiso "projects:write" (es anterior a ese cambio): regenérala en Altum → Mi perfil → Mis datos y vuelve a guardarla.');
     }
     throw error;
   }
-  console.log(`Listo: "${match.name}" se clona desde ${url}. Ahora cualquiera del equipo puede pedir "clóname ${match.key}".`);
+  if (resultado.modo === 'ya-estaba') return console.log(`"${match.name}" ya tenía registrado ${resultado.repo}. No cambié nada.`);
+  if (resultado.modo === 'uno-solo' && match.repo && match.repo !== url) console.log(`Ojo: reemplacé el que tenía (${match.repo}); esta versión de Altum solo guarda uno por proyecto.`);
+  const otros = match.repos.filter((r) => r.url !== url).map((r) => r.name);
+  console.log(`Listo: "${match.name}" se clona desde ${url}.${otros.length ? ` Ese proyecto ya tenía: ${otros.join(', ')}.` : ''}`);
+  console.log(`Ahora cualquiera del equipo puede pedir "clóname ${match.key}".`);
 }
 
 // clone <clave o nombre> [--in <carpeta>] [--dry-run]: busca el proyecto en Altum y lo clona desde repo_url.
@@ -323,22 +346,30 @@ async function clone(config) {
     return;
   }
   if (!match) throw new Error(`ninguno de tus proyectos se parece a "${query}". Mira la lista con "projects"; si falta uno, pide que te asignen a él en Altum.`);
-  if (!match.repo) throw new Error(`"${match.name}" no tiene repositorio registrado en Altum. Regístralo en su ficha ("Repositorio" → Registrar) y vuelve a intentar.`);
+  if (!match.repo) throw new Error(`"${match.name}" no tiene repositorio registrado en Altum. Regístralo en su ficha ("Repositorios") y vuelve a intentar.`);
+  // Un proyecto puede tener varios repositorios (app, web, consola...). Cuál se trae lo elige la persona.
+  const { repo, choices } = findRepo(match, option('--repo', ''));
+  if (choices) {
+    console.log(`"${match.name}" tiene ${choices.length} repositorios. Pregúntale a la persona cuál quiere y vuelve a llamarme con --repo <nombre>:`);
+    choices.forEach((r) => console.log(`  --repo ${r.name.split('/').pop().padEnd(20)} ${r.url}`));
+    process.exitCode = 1;
+    return;
+  }
   // La carpeta NUNCA se decide sola: la elige la persona.
   //   --in <carpeta madre> → <carpeta>/<clave>   ·   --into <ruta> o --here → el contenido va ahí mismo.
   if (!flag('--here') && !args.includes('--in') && !args.includes('--into')) {
     throw new Error(`no clono sin saber dónde. Pregúntale a la persona en qué carpeta lo quiere y vuelve a llamarme:\n`
-      + `  --in <carpeta madre>   → queda en <carpeta>/${match.key}\n`
+      + `  --in <carpeta madre>   → queda en <carpeta>/${path.basename(targetDir(match, '.', { repo }))}\n`
       + `  --into <ruta exacta>   → el contenido del repositorio queda ahí mismo\n`
       + `  --here                 → en la carpeta actual (solo si está vacía)`);
   }
   const exact = flag('--here') || args.includes('--into');
   const parent = flag('--here') ? '.' : option('--into', option('--in'));
-  const dir = targetDir(match, parent, { exact });
+  const dir = targetDir(match, parent, { exact, repo });
   if (alreadyThere(dir)) return console.log(`"${match.name}" ya está en ${dir}. Ábrelo ahí; no se clona de nuevo.`);
-  if (flag('--dry-run')) return console.log(`git clone ${match.repo} ${dir}`);
-  cloneProject(match, parent, { exact });
-  console.log(`Clonado: ${match.name} → ${dir}`);
+  if (flag('--dry-run')) return console.log(`git clone ${repo?.url || match.repo} ${dir}`);
+  cloneProject(match, parent, { exact, repo });
+  console.log(`Clonado: ${match.name}${match.repos.length > 1 ? ` (${repo.name})` : ''} → ${dir}`);
   console.log(`Ábrelo con Claude Code. Si todavía no tiene la metodología, usa /sn-setup (proyecto de Altum: ${match.id}).`);
 }
 
@@ -424,6 +455,7 @@ else if (command === 'lead') {
   if (!connector?.project_id) throw new Error('uso: lead [conector altum] — este repositorio todavía no está unido a un proyecto de Altum (/sn-connect)');
   process.stdout.write(leadText(await projectLead(connector)));
 }
+else if (command === 'repos') await repos(config);
 else if (command === 'mensaje') await mensaje(config);
 else if (command === 'clone') await clone(config);
 else if (command === 'set-repo') await setRepo(config);
@@ -456,6 +488,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|whoami|lead|mensaje|clone|set-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|whoami|lead|mensaje|clone|set-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }

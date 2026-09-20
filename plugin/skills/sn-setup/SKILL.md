@@ -18,6 +18,7 @@ Si dice "no lo tengo", "clóname el proyecto X" o abrió una carpeta vacía, tr�
 - Carpeta madre → `… clone <nombre> --in ~/Proyectos` → queda en `~/Proyectos/<clave-del-proyecto>`.
 - Ruta exacta → `… clone <nombre> --into ~/Proyectos/cursos` → el contenido del repositorio queda ahí, **sin otra carpeta dentro**.
 - Aquí mismo → `… clone <nombre> --here` (solo si la carpeta actual está vacía).
+- **Si el proyecto tiene varios repositorios**, el comando los lista y exige `--repo <nombre>`: pregúntale a la persona cuál quiere antes de seguir.
 Si la carpeta madre ya se llama como el proyecto, no se crea otra igual adentro. Si la carpeta elegida ya tiene archivos, no se clona encima: se avisa y se elige otra. Luego abre esa carpeta y sigue desde el paso 1.
 
 ## 1. Revisar sin tocar
