@@ -11,7 +11,14 @@ Las plantillas están en `${CLAUDE_PLUGIN_ROOT}/plantillas/` (dentro del plugin 
 Antes de nada, comprueba si ya la tiene: `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" whoami`. Si falta, ofrécele guardarla siguiendo `${CLAUDE_PLUGIN_ROOT}/references/clave-altum.md` (la genera en su perfil de Altum y la pega en la terminal, nunca en el chat). Con la clave lista, el agente ya sabe quién es y qué proyectos tiene asignados. Si dice que no, sigue sin Altum.
 
 ## 0b. ¿La persona ya tiene el proyecto en su computador?
-Si dice "no lo tengo", "clóname el proyecto X" o abrió una carpeta vacía: `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" clone <nombre o clave>`. Busca el proyecto en Altum por su nombre (sin importar tildes ni mayúsculas), lee el repositorio que tiene registrado y lo clona en una carpeta al lado de la actual. Si hay varios parecidos, te los muestra para que la persona elija; si no tiene repositorio registrado en Altum, dilo tal cual: hay que registrarlo en la ficha del proyecto ("Repositorio" → Registrar). Para ver todos: `… projects`. Luego abre esa carpeta y sigue desde el paso 1.
+Si dice "no lo tengo", "clóname el proyecto X" o abrió una carpeta vacía, tráelo con `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" clone <nombre o clave>`: lo busca en Altum por su nombre (sin importar tildes ni mayúsculas) y lo clona desde el repositorio que ese proyecto tiene registrado. Si hay varios parecidos, los muestra para elegir; si no tiene repositorio registrado, hay que registrarlo antes (`… set-repo <clave>`). Para ver todos: `… projects`.
+
+**Antes de clonar, pregunta SIEMPRE dónde ponerlo**, en una sola pregunta con ejemplo:
+"¿En qué carpeta lo dejo? Puedes darme una carpeta madre (ej. `~/Proyectos`) y yo creo adentro la del proyecto, o la ruta exacta donde quieres que quede el contenido (ej. `~/Proyectos/cursos`)."
+- Carpeta madre → `… clone <nombre> --in ~/Proyectos` → queda en `~/Proyectos/<clave-del-proyecto>`.
+- Ruta exacta → `… clone <nombre> --into ~/Proyectos/cursos` → el contenido del repositorio queda ahí, **sin otra carpeta dentro**.
+- Aquí mismo → `… clone <nombre> --here` (solo si la carpeta actual está vacía).
+Si la carpeta madre ya se llama como el proyecto, no se crea otra igual adentro. Si la carpeta elegida ya tiene archivos, no se clona encima: se avisa y se elige otra. Luego abre esa carpeta y sigue desde el paso 1.
 
 ## 1. Revisar sin tocar
 - ¿Es repo git? ¿Rama actual? ¿Hay cambios sin guardar? (si hay, detente y pregunta).
