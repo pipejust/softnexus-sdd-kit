@@ -28,8 +28,8 @@ function altumConnector(root) {
 }
 
 // Un recordatorio cada 12 h como máximo: no se le insiste a quien todavía no quiere conectar Altum.
-function shouldRemind(root) {
-  const file = path.join(root, '.sn/state/altum-key-remind.json');
+function shouldRemind(root, name = 'altum-key-remind.json') {
+  const file = path.join(root, '.sn/state', name);
   try {
     if (existsSync(file) && Date.now() - JSON.parse(readFileSync(file, 'utf8')).at < REMIND_EVERY_MS) return false;
     mkdirSync(path.dirname(file), { recursive: true });
@@ -59,17 +59,27 @@ try {
     const tieneClave = hasKey(connector || {});
     if (event === 'SessionStart' && !tieneClave) {
       if (shouldRemind(root)) context(FALTA_CLAVE, 'SessionStart');
-    } else if (event === 'SessionStart' && connector?.project_id && connector.watch !== false) {
-      spawn(process.execPath, [script, 'watch', connector.name, '--background'], { cwd: root, detached: true, stdio: 'ignore' }).unref();
+    } else if (event === 'SessionStart' && connector?.project_id) {
+      // En segundo plano: el vigilante y la comprobación de si el proyecto ya tiene repositorio registrado.
+      if (connector.watch !== false) spawn(process.execPath, [script, 'watch', connector.name, '--background'], { cwd: root, detached: true, stdio: 'ignore' }).unref();
+      spawn(process.execPath, [script, 'repo-check'], { cwd: root, detached: true, stdio: 'ignore' }).unref();
     } else if (event === 'SessionEnd') {
       execFileSync(process.execPath, [script, 'watch-stop'], { cwd: root, stdio: 'ignore', timeout: 5000 });
     } else if (event === 'UserPromptSubmit' && !tieneClave) {
       if (shouldRemind(root)) context(FALTA_CLAVE);
     } else if (event === 'UserPromptSubmit' && connector?.project_id) {
+      const avisos = [];
+      // Falta registrar de dónde se clona el proyecto: es lo primero que hay que resolver.
+      const { repoReminder } = await import(pathToFileURL(path.join(root, 'scripts/sn/sync/altum-backlog.mjs')).href);
+      const falta = repoReminder(root);
+      if (falta && shouldRemind(root, 'altum-repo-remind.json')) {
+        avisos.push(`[Altum] ${falta}\nDíselo a la persona ANTES de seguir con lo suyo, en una línea, y ofrécele hacerlo tú.`);
+      }
       const notes = execFileSync(process.execPath, [script, 'inbox'], { cwd: root, encoding: 'utf8', timeout: 5000 }).trim();
       if (notes && !notes.startsWith('Sin avisos')) {
-        context(`[Altum] Novedades desde el último mensaje (menciónalas en una línea a la persona):\n${notes}`);
+        avisos.push(`[Altum] Novedades desde el último mensaje (menciónalas en una línea a la persona):\n${notes}`);
       }
+      if (avisos.length) context(avisos.join('\n\n'));
     }
   }
 } catch {

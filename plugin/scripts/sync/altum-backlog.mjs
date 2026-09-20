@@ -4,6 +4,9 @@ import { findMark } from './body.mjs';
 import { api, KIND_TO_TYPE, listTasks, projectStates } from './altum.mjs';
 import { projectKey } from './altum-clone.mjs';
 import { readItems } from './items.mjs';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { writeState } from './store.mjs';
 
 // Proyectos que ve la clave: id, clave corta (para escribirla), nombre, cliente, estado, integrantes
 // y el repositorio registrado en Altum (repo_url), que es de donde se clona.
@@ -30,6 +33,31 @@ export async function listProjects(connector) {
 // las claves generadas antes de ese permiso dan 403 hasta que la persona la regenere.
 export async function setProjectRepo(connector, projectId, repoUrl) {
   return api(connector, 'PUT', `/projects/${projectId}/repo`, { repo_url: repoUrl || null });
+}
+
+// ¿Este proyecto ya tiene registrado de dónde se clona? La respuesta se guarda en .sn/state/ para que
+// el aviso al abrir la sesión no cueste una petición por mensaje.
+const REPO_FILE = 'altum-repo.json';
+
+export async function checkProjectRepo(connector, root = '.') {
+  const proyecto = (await listProjects(connector)).find((p) => p.id === connector.project_id);
+  const estado = { at: Date.now(), name: proyecto?.name || '', key: proyecto?.key || '', missing: Boolean(proyecto) && !proyecto.repo, repo: proyecto?.repo || '' };
+  writeState(REPO_FILE, estado);
+  return estado;
+}
+
+// Se lee con la raíz explícita porque el hook puede correr desde otra carpeta.
+export function repoReminder(root = '.') {
+  let estado = null;
+  try {
+    const file = path.join(root, '.sn/state', REPO_FILE);
+    estado = existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) : null;
+  } catch {
+    estado = null;
+  }
+  if (!estado?.missing) return '';
+  return `El proyecto "${estado.name}" no tiene registrado en Altum de dónde se clona, así que nadie más puede traerlo por su nombre.`
+    + ` Regístralo con: node scripts/sn/sn-sync.mjs set-repo ${estado.key || estado.name}`;
 }
 
 // Quién es la clave (GET /me): persona o empresa, a qué empresa pertenece y qué proyectos tiene asignados.
