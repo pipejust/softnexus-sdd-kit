@@ -33,7 +33,7 @@ Si la carpeta madre ya se llama como el proyecto, no se crea otra igual adentro.
 
 ## 4. Generar archivos desde el código
 - `AGENTS.md`: usa la plantilla y llena §1 (qué es: deduce del README/código y pregunta lo que no esté). **Dos cosas que NO se preguntan:**
-  - **Quién es el líder técnico:** lo dice Altum. Corre `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" lead` (o el del repo) y copia su respuesta tal cual en §1. Si Altum aún no devuelve nombre y correo, escribe lo que sí da (el `employee_id`) y sigue. Solo si Altum dice que el proyecto **no tiene líder marcado**, pregúntale a la persona y avísale que hay que marcarlo en Altum.
+  - **Quién es el líder técnico:** lo dice Altum. Corre `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" lead` (o el del repo) y copia su respuesta tal cual en §1. Trae nombre, correo y, si está registrado, su usuario de GitHub (útil para pedirle la revisión del PR). Solo si Altum dice que el proyecto **no tiene líder marcado**, pregúntale a la persona y avísale que hay que marcarlo en Altum.
   - **El riesgo del proyecto:** no existe. El riesgo es de cada ítem y se decide al recibirlo (`/sn`, paso 3). No preguntes "qué tan sensible es este proyecto" ni pongas un riesgo por defecto en `AGENTS.md`.
   Sigue con §2 stack aprobado (lo detectado), §3 comandos reales, §7 convenciones observadas (estructura de carpetas, patrón de fetch/estado, nombres) con **un archivo de ejemplo real** por convención. Deja §8 vacío.
 - `CLAUDE.md`: solo `@AGENTS.md` y `@DESIGN.md`.
