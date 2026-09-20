@@ -89,9 +89,8 @@ export function whoAmIText(me, projectId) {
 }
 
 // Quién es el líder técnico del proyecto SEGÚN ALTUM: nadie tiene que escribirlo a mano.
-// Altum marca al líder con is_lead en los integrantes del proyecto, pero hoy solo da su employee_id
-// (name y email vienen en null, pedido H). Si la persona de la clave ES la líder, /me sí trae su nombre
-// y su correo, así que ese caso queda resuelto del todo.
+// Altum marca al líder con is_lead en los integrantes y da su nombre, su correo y, cuando está
+// registrado, su usuario de GitHub. Si la persona de la clave ES la líder, /me también lo dice.
 export async function projectLead(connector, projectId = connector.project_id) {
   const [raw, me] = await Promise.all([
     api(connector, 'GET', `/projects?page=1&limit=200`),
@@ -103,16 +102,20 @@ export async function projectLead(connector, projectId = connector.project_id) {
   const lead = (proyecto.members || []).find((m) => m.is_lead) || null;
   const yo = (me?.projects || []).find((p) => p.id === projectId);
   if (yo?.is_lead && me?.user) {
-    return { project: proyecto.name, role: yo.role || lead?.role || 'Líder técnico', soyYo: true, name: me.user.name || '', email: me.user.email || '', employee_id: lead?.employee_id || '' };
+    return { project: proyecto.name, role: yo.role || lead?.role || 'Líder técnico', soyYo: true, name: me.user.name || '', email: me.user.email || '', github: lead?.github_username || '', employee_id: lead?.employee_id || '' };
   }
   if (!lead) return { project: proyecto.name, falta: 'sin-lider' };
-  return { project: proyecto.name, role: lead.role || 'Líder técnico', soyYo: false, name: lead.name || '', email: lead.email || '', employee_id: lead.employee_id || '' };
+  return { project: proyecto.name, role: lead.role || 'Líder técnico', soyYo: false, name: lead.name || '', email: lead.email || '', github: lead.github_username || '', employee_id: lead.employee_id || '' };
 }
 
 export function leadText(lead) {
   if (!lead) return 'No encuentro el proyecto en Altum: revisa el project_id del conector.\n';
   if (lead.falta === 'sin-lider') return `"${lead.project}" no tiene líder marcado en Altum. Pídele a quien administra Altum que marque al líder del proyecto; mientras tanto, pregúntale a la persona quién firma.\n`;
-  if (lead.name || lead.email) return `${lead.role} de "${lead.project}": ${lead.name || '(sin nombre en Altum)'} <${lead.email || '?'}>${lead.soyYo ? ' — eres tú' : ''}\n`;
+  if (lead.name || lead.email) {
+    // El usuario de GitHub sirve para pedirle la revisión del PR; Altum lo devuelve cuando está registrado.
+    return `${lead.role} de "${lead.project}": ${lead.name || '(sin nombre en Altum)'} <${lead.email || '?'}>`
+      + `${lead.github ? ` · GitHub @${lead.github}` : ''}${lead.soyYo ? ' — eres tú' : ''}\n`;
+  }
   return `${lead.role} de "${lead.project}": está registrado en Altum (employee_id ${lead.employee_id}), pero Altum todavía no devuelve su nombre ni su correo (pedido H).\n`
     + 'Escribe eso mismo en AGENTS.md y sigue: no le preguntes a la persona quién es el líder.\n';
 }
