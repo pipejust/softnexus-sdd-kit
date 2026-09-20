@@ -76,11 +76,16 @@ export function whoAmIText(me, projectId) {
   const who = me.user ? `Clave personal de ${me.user.name || ''} <${me.user.email || '?'}>` : `Clave de la empresa (${me.key?.name || 'CI / servidores'})`;
   const projects = me.projects || [];
   const lines = projects.map((p) => `  ${projectKey(p.name).padEnd(22)} ${p.name || ''}${p.client_name ? `  · cliente: ${p.client_name}` : ''}${p.is_lead ? '  [líder]' : ''}${p.repo_url ? '' : '  (sin repositorio en Altum)'}`);
+  // Las claves anteriores a "projects:write" no pueden registrar el repositorio: se avisa antes del 403.
+  const scopes = me.key?.scopes;
+  const faltaEscritura = Array.isArray(scopes) && !scopes.includes('projects:write')
+    ? '\nTu clave es anterior al permiso "projects:write": no podrás registrar de dónde se clona un proyecto. Regenérala en Altum → Mi perfil → Mis datos y vuelve a guardarla.'
+    : '';
   const here = !projectId ? 'Este repositorio todavía no está unido a un proyecto: dile "conecta este proyecto con Altum" (/sn-connect).' : projects.some((p) => p.id === projectId)
     ? `Este repositorio: proyecto ${projectId} — asignado.`
     : `Este repositorio: proyecto ${projectId} — NO estás asignado. Pide al líder del proyecto en Altum que te agregue.`;
   return `${who}\nEmpresa: ${me.company?.name || '?'}${me.company?.slug ? ` (${me.company.slug})` : ''}\n`
-    + `${me.user ? 'Proyectos asignados' : 'Proyectos de la empresa'} (${projects.length}) — escribe la clave de la izquierda:\n${lines.join('\n')}\n${here ? `\n${here}\n` : ''}`;
+    + `${me.user ? 'Proyectos asignados' : 'Proyectos de la empresa'} (${projects.length}) — escribe la clave de la izquierda:\n${lines.join('\n')}\n${here ? `\n${here}\n` : ''}${faltaEscritura}`;
 }
 
 function linkedIndex(connector, root) {
