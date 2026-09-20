@@ -45,16 +45,26 @@ Para el sello `entrega`, "cambió después" significa cualquier commit en la ram
 - Si hay GitHub: PR (borrador si el sello es `plano`) con la etiqueta `sn:needs-validation`. Al validar se quita la etiqueta y se deja una review (`approve` o `request-changes`) con las mismas notas.
 - Sin GitHub: el archivo basta; `sn-validate` sin argumentos busca solicitudes pendientes en las ramas remotas.
 
-## Mensaje para el mensajero institucional
-`sn-request` genera este texto (la persona lo pega en Teams, Slack, Google Chat o el canal que use la empresa):
+## Mensaje para el líder (mientras no haya mensajería conectada)
+Lo arma el motor, no el agente: `node scripts/sn/sn-sync.mjs mensaje [<change>] [--sello …] [--riesgo …] [--titulo …] [--que …] [--pr …]`.
+Saca de Altum el proyecto y **quién es el líder** (nombre y correo), y de git la rama, el commit de la solicitud y el PR.
+La persona lo copia de la pantalla y lo manda por donde hable con el líder (Teams, WhatsApp, correo). Formato:
 
 ```
-[Validación Softnexus] <proyecto> · <sello> · riesgo <RN>
+[Validación Softnexus] <proyecto> · sello de <plano|entrega> · riesgo <RN>
+Para: <Líder> <correo>            ← lo dice Altum
 <Nombre> necesita tu validación: <título del change>
 Qué validar: <1 línea>
-En tu computador, dentro del proyecto <repo>, abre Claude Code y escribe:
-  /sn-validate <rama>
-(No necesitas nada más: el comando trae la rama y todo el contexto.)
+
+En tu computador:
+  1. Si todavía no tienes el proyecto: abre Claude Code en una carpeta vacía y escribe:
+       /sn clóname el proyecto <proyecto>
+  2. Ya dentro del proyecto, escribe:
+       /sn-validate <rama>
+Eso trae la rama y todo el contexto: no necesitas nada de mi sesión ni que yo te explique nada.
+Si quieres ver primero en qué va, escribe /sn-status.
+
+Rama: <rama> · Commit: <el de la solicitud>
 PR: <enlace, si existe>
 ```
 Si el proyecto tiene la variable `SN_NOTIFY_WEBHOOK` (webhook entrante del canal del equipo), `sn-request` ofrece enviarlo directamente, **siempre con confirmación de la persona**.

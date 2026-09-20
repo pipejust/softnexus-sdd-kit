@@ -20,7 +20,7 @@
 //   node sn-sync.mjs githooks                                            activa la sync en commit/merge/pull (agrega, no reemplaza)
 // Se ejecuta en la raíz del repositorio. Sin .sn/connectors.json no hace nada (proyecto no conectado).
 import { execFileSync, spawn } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NotRetryable } from './sync/altum.mjs';
@@ -32,6 +32,8 @@ import { readItems, setExternalId, writeImportedItem } from './sync/items.mjs';
 import { diffSnapshots, matches } from './sync/events.mjs';
 import { itemMarkdown, listMarkdown } from './sync/report.mjs';
 import { takeSnapshot } from './sync/snapshot.mjs';
+import { mensajeValidacion } from './sync/validacion-mensaje.mjs';
+import { parseLog } from './validation-state.mjs';
 import {
   acquireLock, appendOutbox, loadConfig, loadSnapshot, readOutbox, releaseLock, saveSnapshot, writeOutbox,
 } from './sync/store.mjs';
@@ -192,6 +194,71 @@ async function pull(config) {
   console.log(`${result.checked} tareas revisadas · ${result.created.length} abiertas sin traer · ${result.changed.length} enlazadas`
     + `${result.skippedClosed ? ` · ${result.skippedClosed} terminadas omitidas` : ''}`
     + `${result.deActen ? ` · ${result.deActen} nacidas en reuniones (Acten)` : ''}`);
+}
+
+function gitOut(argumentos) {
+  try {
+    return execFileSync('git', argumentos, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {
+    return '';
+  }
+}
+
+// El change activo: el único que haya, o el que pidan por nombre.
+function changeActivo(nombre) {
+  const dir = 'openspec/changes';
+  if (nombre) return nombre;
+  if (!existsSync(dir)) return '';
+  const activos = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name !== 'archive').map((d) => d.name);
+  if (activos.length > 1) throw new Error(`hay ${activos.length} cambios abiertos (${activos.join(', ')}): dime cuál con "mensaje <change>"`);
+  return activos[0] || '';
+}
+
+function urlDelPr(rama) {
+  if (process.env.SN_SYNC_NO_GH) return '';
+  try {
+    return JSON.parse(execFileSync('gh', ['pr', 'view', rama, '--json', 'url'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })).url || '';
+  } catch {
+    return '';
+  }
+}
+
+// Mensaje listo para copiarle al líder. Mientras no haya mensajería conectada, esto ES el canal:
+// lo arma el motor (no el agente) para que siempre lleve rama, commit, quién firma y cómo empezar.
+async function mensaje(config) {
+  const change = changeActivo(args[1] && !args[1].startsWith('--') ? args[1] : '');
+  const rama = gitOut(['rev-parse', '--abbrev-ref', 'HEAD']);
+  const archivo = change ? path.join('openspec/changes', change, 'validacion.md') : '';
+  const entradas = archivo && existsSync(archivo) ? parseLog(readFileSync(archivo, 'utf8')) : [];
+  const solicitud = [...entradas].reverse().find((e) => e.type === 'SOLICITUD');
+  const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
+  // El líder y el nombre del proyecto salen de Altum; si Altum no responde, el mensaje se arma igual.
+  let lider = null;
+  let proyecto = '';
+  if (connector) {
+    try {
+      lider = await projectLead(connector);
+      proyecto = lider?.project || '';
+    } catch {
+      lider = null;
+    }
+  }
+  process.stdout.write(`${mensajeValidacion({
+    proyecto: proyecto || config?.project || path.basename(process.cwd()),
+    sello: option('--sello', solicitud?.seal || 'plano'),
+    riesgo: option('--riesgo', (solicitud?.fields?.Riesgo || '').split(' · ')[0]),
+    pide: localActor().replace(/\s*<[^>]*>$/, '') || '',
+    titulo: option('--titulo', change || ''),
+    queValidar: option('--que', solicitud?.fields?.['Qué validar'] || ''),
+    rama,
+    // El commit de la solicitud: es exactamente lo que el líder tiene que mirar, no lo último que haya.
+    commit: (solicitud?.raw.match(/Commit:\s*([0-9a-f]{7,40})/)?.[1]) || gitOut(['rev-parse', '--short', 'HEAD']),
+    pr: option('--pr', urlDelPr(rama)),
+    lider: lider?.falta ? null : lider,
+    clonar: proyecto || config?.project || path.basename(process.cwd()),
+  })}\n`);
+  if (!lider) console.log('(Altum no dijo quién es el líder: pregúntale a la persona a quién se lo manda.)');
+  if (!rama || rama === 'main' || rama === 'master') console.log('(Ojo: no estás en una rama de trabajo, así que el líder no tendría qué validar.)');
 }
 
 function altumConnector(config, name) {
@@ -357,6 +424,7 @@ else if (command === 'lead') {
   if (!connector?.project_id) throw new Error('uso: lead [conector altum] — este repositorio todavía no está unido a un proyecto de Altum (/sn-connect)');
   process.stdout.write(leadText(await projectLead(connector)));
 }
+else if (command === 'mensaje') await mensaje(config);
 else if (command === 'clone') await clone(config);
 else if (command === 'set-repo') await setRepo(config);
 // repo-check: mira si el proyecto ya tiene repositorio registrado y lo deja anotado para el aviso.
@@ -388,6 +456,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|whoami|lead|clone|set-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|whoami|lead|mensaje|clone|set-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }

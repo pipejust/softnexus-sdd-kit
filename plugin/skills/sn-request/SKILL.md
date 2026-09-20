@@ -26,8 +26,10 @@ El líder solo va a ver lo que esté **en la rama remota**. Antes de pedir:
 - Agrega la etiqueta `sn:needs-validation` (créala si no existe, con permiso de la persona) y pide como revisor al líder técnico que figure en `AGENTS.md`. Si ahí no hay un nombre utilizable, pregúntaselo a Altum: `node scripts/sn/sn-sync.mjs lead` (nadie tiene que recordarlo).
 **Muestra a la persona lo que vas a publicar y pide confirmación antes** (es visible para otros).
 
-## 4. Mensaje para el líder
-Genera el mensaje del formato de la referencia, con la rama exacta y el comando `/sn-validate <rama>`. Muéstralo en un bloque para copiar.
+## 4. Mensaje para el líder (SIEMPRE, es el último paso visible)
+**No lo redactes tú.** Córrelo: `node scripts/sn/sn-sync.mjs mensaje` (o el del plugin si el repo no tiene el motor). Lo arma el motor con el proyecto y **el líder que dice Altum**, la rama, el commit exacto que hay que validar, el sello, el riesgo y el enlace del PR.
+**Muéstraselo a la persona en un bloque de código, tal cual, y dile en una línea:** "Cópialo y mándaselo a <líder> por donde hablen (Teams, WhatsApp, correo). Con eso él ya puede validar desde su computador; no necesita nada más."
+Todavía no hay mensajería conectada, así que **ese texto es el canal**: si no se lo muestras, nadie se entera de que hay algo esperando. Si Altum no dice quién es el líder, el comando lo avisa: pregúntale a la persona a quién mandárselo.
 Si existe `SN_NOTIFY_WEBHOOK`, pregunta: "¿Lo envío al canal del equipo?". Solo con un "sí" explícito, envíalo:
 `curl -sS -X POST -H 'Content-Type: application/json' -d '{"text": "<mensaje>"}' "$SN_NOTIFY_WEBHOOK"`
 y confirma si respondió bien. Nunca imprimas el valor del webhook.
