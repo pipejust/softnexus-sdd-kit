@@ -10,6 +10,7 @@
 //   node sn-sync.mjs projects [--json]                                   proyectos que ve la clave, con su clave corta
 //   node sn-sync.mjs clone <clave o nombre> [--in <carpeta>]             clona ese proyecto desde el repo_url de Altum
 //   node sn-sync.mjs set-repo <clave o nombre> [url]                     registra en Altum de dónde se clona (por defecto, el remoto)
+//   node sn-sync.mjs repo-check                                          ¿este proyecto tiene repositorio registrado en Altum?
 //   node sn-sync.mjs backlog <altum> [--all] [--json]                    tareas del proyecto: pendientes y si ya están en el repo
 //   node sn-sync.mjs pull <altum> [--apply] [--include-closed]           Altum -> repo: tareas abiertas sin traer (--apply las crea)
 //   node sn-sync.mjs link <ITEM> <altum> <id-tarea>                      enlaza un ítem con una tarea que ya existe en Altum
@@ -23,7 +24,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'n
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NotRetryable } from './sync/altum.mjs';
-import { backlogMarkdown, listProjects, pullAltum, readBacklog, setProjectRepo, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
+import { backlogMarkdown, checkProjectRepo, listProjects, pullAltum, readBacklog, repoReminder, setProjectRepo, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
 import { alreadyThere, cloneProject, findProject, targetDir } from './sync/altum-clone.mjs';
 import { clearInbox, describe, isWatching, readInbox, stopWatch, watch } from './sync/altum-watch.mjs';
 import { deliver, fetchExternal } from './sync/connectors.mjs';
@@ -339,6 +340,14 @@ else if (command === 'githooks') githooks();
 // clone y whoami funcionan aunque el repositorio todavía no esté conectado: basta la clave de Altum.
 else if (command === 'clone') await clone(config);
 else if (command === 'set-repo') await setRepo(config);
+// repo-check: mira si el proyecto ya tiene repositorio registrado y lo deja anotado para el aviso.
+else if (command === 'repo-check') {
+  const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
+  if (connector) {
+    const estado = await checkProjectRepo(connector);
+    console.log(estado.missing ? repoReminder() : `"${estado.name}" se clona desde ${estado.repo}`);
+  }
+}
 else if (command === 'whoami') {
   const connector = config?.connectors.find((c) => c.kind === 'altum' && (!args[1] || c.name === args[1]))
     || { name: 'altum', kind: 'altum' };
@@ -361,6 +370,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|whoami|clone|set-repo|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|whoami|clone|set-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }
