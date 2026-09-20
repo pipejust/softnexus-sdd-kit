@@ -50,10 +50,21 @@ GET /projects?page=1&limit=50
 ```
 
 ```json
-{"items": [{"id": "...", "name": "...", "client_name": "...", "status": "...", "repo_url": "... o null", "members": [...]}], "total": 24, "page": 1, "limit": 50}
+{"items": [{"id": "...", "name": "...", "client_name": "...", "status": "...", "repo_url": "... o null", "repos": [{"provider": "github", "repo": "empresa/el-repo", "url": "https://github.com/empresa/el-repo"}], "members": [...]}], "total": 24, "page": 1, "limit": 50}
 ```
 
-Devuelve, por proyecto: `id`, `name`, `client_name`, `status`, `repo_url` (de dónde se clona, `null` si nadie lo registró — ver más abajo) y los integrantes (`employee_id`, `role`, `is_lead`, `allocation_pct`). Paginado igual que `GET /tasks` (`page`/`limit`, máximo 200).
+Devuelve, por proyecto: `id`, `name`, `client_name`, `status`, `repo_url`/`repos` (de dónde se clona — ver más abajo, son dos campos distintos, no uno redundante) y los integrantes. Paginado igual que `GET /tasks` (`page`/`limit`, máximo 200).
+
+Cada integrante trae:
+
+```json
+{"employee_id": "uuid", "name": "Felipe Cortés", "role": "...", "is_lead": true, "email": "...", "github_username": "... o null", "allocation_pct": 100}
+```
+
+- `name`: por la que se le reconoce (con primer apellido si hace falta para distinguirla), no la de la cédula.
+- `email`: el de ESTE proyecto si tiene uno propio; si no, el de la empresa; si tampoco, el personal. `null` solo si no hay ninguno registrado — hoy la empresa tiene pocas fichas con correo cargado, así que es normal ver `null` seguido.
+- `is_lead`: quién manda en el proyecto. Úsenlo para decidir a quién pedirle la revisión de un PR — no siempre hay uno marcado (un proyecto recién creado puede no tenerlo todavía).
+- `github_username`: viene de `git_identities` — ya hay pantalla para cargarla a mano (ficha del empleado → pestaña Git), y ya está poblada para el equipo. Sigue pudiendo salir `null` para alguien que todavía no la registró — no asuman que siempre viene.
 
 Con clave personal, solo trae los proyectos donde esa persona está asignada — no todos los de la empresa. Con clave de empresa, todos. Lo mismo aplica a `GET/POST/PATCH /tasks` y `/tasks/{id}/dependencies`: tocar un proyecto ajeno con clave personal da `403`:
 
@@ -63,7 +74,11 @@ Con clave personal, solo trae los proyectos donde esa persona está asignada —
 
 **Nota sobre la envoltura de las respuestas — no es uniforme, y no lo va a ser:** `GET /projects` y `GET /tasks` devuelven `{"items": [...], "total": ...}`. `GET /projects/{id}/config/estados` y `GET /projects/{id}/config/campos` devuelven una lista suelta, sin envoltura. Es así por cómo se fue construyendo cada uno, y no se homologa para no romper a quien ya se adaptó a la forma actual — lean el tipo de cada respuesta antes de asumir `items`.
 
-### Registrar el repositorio de un proyecto (para "clóname el proyecto X")
+### El repositorio de un proyecto (para "clóname el proyecto X") — un proyecto puede tener varios
+
+Un proyecto real casi nunca es un solo repositorio: app, web, consola de administración, backend aparte... `repo_url` (un campo, texto libre) alcanzaba para el caso simple, pero no para eso. Por eso hay dos formas, y las dos siguen vivas:
+
+**`repo_url` — uno solo, el de siempre, se mantiene por compatibilidad:**
 
 ```
 PUT /projects/{project_id}/repo
@@ -72,7 +87,27 @@ Content-Type: application/json
 {"repo_url": "https://github.com/empresa/el-repo"}
 ```
 
-Cualquiera cuya clave alcance a ese proyecto puede registrarlo o cambiarlo — con clave personal, si el proyecto está entre los asignados; con clave de empresa, cualquiera. `repo_url` es texto libre: Altum no valida que exista de verdad ni se conecta con GitHub. `null` lo borra. No hay endpoint en lote — hay que llamarlo una vez por proyecto.
+Cualquiera cuya clave alcance a ese proyecto puede registrarlo o cambiarlo — con clave personal, si el proyecto está entre los asignados; con clave de empresa, cualquiera. Texto libre: Altum no valida que exista de verdad ni se conecta con GitHub. `null` lo borra.
+
+**`repos` — la lista completa, para cuando hay más de uno:**
+
+```
+GET /projects/{project_id}/repos
+```
+```json
+[{"provider": "github", "repo": "empresa/app", "url": "https://github.com/empresa/app"}, {"provider": "github", "repo": "empresa/web", "url": "https://github.com/empresa/web"}]
+```
+
+```
+POST /projects/{project_id}/repos
+Content-Type: application/json
+
+{"provider": "github", "repo": "empresa/el-repo"}
+```
+
+`repo` se escribe como `"organizacion/repositorio"` (no la URL completa — Altum arma la URL sola). `provider` uno de `github`, `gitlab`, `bitbucket` (hoy solo GitHub tiene detrás con qué construir la URL pública; los otros dos guardan el dato pero sin url armada todavía). Repetir el mismo `provider`+`repo` en el mismo proyecto da `409`. No hay `DELETE` por esta API — para quitar uno, por ahora, desde la sesión de Altum (Configuración del proyecto → Repositorios). Este endpoint nunca acepta ni devuelve un token: si un repositorio es privado y necesitan que Altum lo audite (no que lo clonen ustedes), eso se configura aparte, por sesión interna, con credencial cifrada que no vuelve a salir.
+
+`GET /projects` ya trae `repos` embebido en cada proyecto (ver el ejemplo más arriba) — no hace falta llamar este endpoint aparte salvo que quieran solo eso.
 
 ### Los campos propios de un proyecto (para `custom_fields`)
 

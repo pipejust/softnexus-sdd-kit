@@ -8,13 +8,61 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { writeState } from './store.mjs';
 
-// Proyectos que ve la clave: id, clave corta (para escribirla), nombre, cliente, estado, integrantes
-// y el repositorio registrado en Altum (repo_url), que es de donde se clona.
+// Un proyecto casi nunca es un solo repositorio (app, web, consola, backend...). Altum lo dice de
+// dos formas que conviven: "repo_url" (uno solo, el de siempre) y "repos" (la lista completa).
+// Aquí se unifican en "repos"; "repo" queda como el principal, para lo que solo necesita uno.
+export function repoList(p) {
+  const lista = (p.repos || []).map((r) => ({
+    provider: r.provider || 'github',
+    name: r.repo || '',
+    url: r.url || (r.repo ? `https://github.com/${r.repo}` : ''),
+  })).filter((r) => r.url);
+  if (p.repo_url && !lista.some((r) => r.url.replace(/\/+$/, '') === String(p.repo_url).replace(/\/+$/, ''))) {
+    lista.unshift({ provider: 'github', name: nombreDeRepo(p.repo_url), url: p.repo_url });
+  }
+  return lista;
+}
+
+// "https://github.com/empresa/app.git" -> "empresa/app"
+export function nombreDeRepo(url) {
+  return String(url || '').replace(/\.git$/, '').replace(/\/+$/, '').split('/').slice(-2).join('/');
+}
+
 export function toProject(p) {
+  const repos = repoList(p);
   return {
     id: p.id, key: projectKey(p.name), name: p.name || '', client: p.client_name || '',
-    status: p.status || '', members: p.members?.length ?? null, repo: p.repo_url || '',
+    status: p.status || '', members: p.members?.length ?? null, repo: repos[0]?.url || '', repos,
   };
+}
+
+// Lista de repositorios de un proyecto. Altum todavía puede no tener este endpoint: si responde 404
+// se trabaja con lo que traiga "repos"/"repo_url" en el propio proyecto.
+export async function listRepos(connector, projectId) {
+  try {
+    const raw = await api(connector, 'GET', `/projects/${projectId}/repos`);
+    return repoList({ repos: Array.isArray(raw) ? raw : raw?.items || [] });
+  } catch (error) {
+    if (/HTTP 404/.test(error.message)) return null;
+    throw error;
+  }
+}
+
+// Agrega un repositorio a la lista del proyecto (varios por proyecto). Si Altum todavía no tiene
+// el endpoint, cae al campo de siempre (repo_url), que solo guarda uno.
+export async function addProjectRepo(connector, projectId, url, provider = 'github') {
+  const repo = nombreDeRepo(url);
+  try {
+    await api(connector, 'POST', `/projects/${projectId}/repos`, { provider, repo });
+    return { modo: 'lista', repo };
+  } catch (error) {
+    if (/HTTP 409/.test(error.message)) return { modo: 'ya-estaba', repo };
+    if (/HTTP 404|HTTP 405/.test(error.message)) {
+      await setProjectRepo(connector, projectId, url);
+      return { modo: 'uno-solo', repo };
+    }
+    throw error;
+  }
 }
 
 // /projects viene paginado y envuelto en { items, total } (las rutas /config/* no: son listas sueltas).
@@ -41,7 +89,7 @@ const REPO_FILE = 'altum-repo.json';
 
 export async function checkProjectRepo(connector, root = '.') {
   const proyecto = (await listProjects(connector)).find((p) => p.id === connector.project_id);
-  const estado = { at: Date.now(), name: proyecto?.name || '', key: proyecto?.key || '', missing: Boolean(proyecto) && !proyecto.repo, repo: proyecto?.repo || '' };
+  const estado = { at: Date.now(), name: proyecto?.name || '', key: proyecto?.key || '', missing: Boolean(proyecto) && !proyecto.repos?.length, repo: proyecto?.repo || '', repos: proyecto?.repos?.length || 0 };
   writeState(REPO_FILE, estado);
   return estado;
 }
