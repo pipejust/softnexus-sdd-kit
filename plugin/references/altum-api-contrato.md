@@ -23,7 +23,7 @@ Todas las llamadas van con una clave de API en el header `X-API-Key`. Hay dos fo
 Con cualquiera de las dos alcanza para todo lo de este documento — incluido leer los estados de un proyecto (`/config/estados`), que antes exigía sesión de usuario y ya no.
 
 ```
-X-API-Key: sk_user_<tu-clave-personal>
+X-API-Key: sk_user_<clave-personal>
 ```
 
 ```
@@ -153,7 +153,27 @@ Se distinguen por `"source"`, que aparece en TODAS las tareas del listado:
 
 `"source": "altum"` en las nativas, `"source": "acten"` en estas. Una tarea de Acten trae `id` con prefijo `acten:` (no es un UUID de Altum, no intenten tratarlo como tal), y los campos que no le aplican viajan en `null` — mismo shape que una tarea nativa, para no obligarlos a ramificar el parseo por `source` salvo que les importe el origen.
 
-**Límite real, a propósito:** las tareas de Acten no tienen `updated_at` ni bitácora de cambios de su lado. Si la llamada trae `updated_since`, esas tareas simplemente NO aparecen (ni en `items` ni sumadas a `total`) — es mejor eso que inventarles una fecha que no existe. Sin `updated_since`, aparecen todas, con los mismos filtros de `project_id`/`state` que las nativas. `include_deleted` no les aplica: una tarea de Acten borrada allá simplemente deja de aparecer, no genera entrada en `deleted`.
+**`updated_since` ya las incluye.** Acten expone `updated_at` en cada tarea (con backfill de las que no lo tenían), así que se filtran igual que las nativas — ya no quedan fuera de un sondeo periódico. `include_deleted` no les aplica: una tarea de Acten borrada allá simplemente deja de aparecer, no genera entrada en `deleted`.
+
+### Actualizar una tarea de Acten
+
+```
+PATCH /tasks/acten:<id>
+Content-Type: application/json
+
+{ "state": "done", "assignee_id": "uuid del empleado en Altum" }
+```
+
+Mismo endpoint que las nativas, mismo verbo — el `id` con prefijo `acten:` es lo que lo distingue. Solo estos campos tienen equivalente limpio del lado de Acten y son los únicos que se dejan cambiar; cualquier otro (`priority`, `tags`, `custom_fields`, `external_ref`, `kind`) responde `422` en vez de ignorarse en silencio:
+
+| Campo | Nota |
+|---|---|
+| `state` | uno de `pending`, `blocked`, `done`, `cancelled` — no son los mismos que `/config/estados` de un proyecto nativo, son fijos y de Acten. `422` si no es uno de esos cuatro. La transición en sí (p. ej. que `cancelled` no admite volver atrás) la valida Acten: su `409` se reenvía tal cual. |
+| `assignee_id` | UUID de un empleado de Altum — se traduce al dueño de la tarea del lado de Acten. `null` desasigna. |
+| `assignee_email` | alternativa si no tienen el UUID — se manda tal cual a Acten, que la resuelve de su lado (no pasa por el directorio de empleados de Altum). Se ignora si además mandan `assignee_id`. |
+| `title`, `description` | tal cual. |
+
+No hay `dependencies` para una tarea de Acten (no hay bloqueadores de reuniones) — `GET /tasks/{id}/dependencies` no aplica a un `id` con prefijo `acten:`.
 
 ### Tareas borradas de verdad
 

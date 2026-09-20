@@ -41,7 +41,28 @@ const DEFAULT_STATUS = {
 };
 // Tipo de ítem -> kind de Altum (epica|feature|historia|requerimiento|tarea|bug|pendiente).
 const DEFAULT_KIND = { feature: 'historia', improvement: 'requerimiento', bug: 'bug', incident: 'bug', content: 'tarea', chore: 'tarea' };
-export const KIND_TO_TYPE = { epica: 'feature', feature: 'feature', historia: 'feature', requerimiento: 'improvement', tarea: 'chore', bug: 'bug', pendiente: 'chore' };
+export const KIND_TO_TYPE = { epica: 'feature', feature: 'feature', historia: 'feature', requerimiento: 'improvement', tarea: 'chore', bug: 'bug', pendiente: 'chore', 'acten-tarea': 'chore' };
+
+// Tareas que nacen en reuniones gestionadas por Acten: llegan mezcladas en GET /tasks con id "acten:…".
+// Se leen igual que las nativas, pero Altum solo deja cambiarles estado, responsable, título y descripción,
+// y sus estados son fijos (los de Acten, no los del proyecto). Cualquier otro campo responde 422.
+export function esDeActen(task) {
+  return task?.source === 'acten' || String(task?.id || '').startsWith('acten:');
+}
+export const ACTEN_STATES = ['pending', 'blocked', 'done', 'cancelled'];
+export const ACTEN_DONE = ['done', 'cancelled'];
+const ACTEN_STATUS = {
+  triaged: 'pending', ready: 'pending', planning: 'pending', plan_written: 'pending', plan_approved: 'pending',
+  building: 'pending', built: 'pending', verified: 'pending', in_review: 'pending', merged: 'done', done: 'done',
+};
+
+// Altum promete UTC, pero las fechas de Acten viajan sin zona ("2026-08-20T17:07:23.569141"):
+// sin esto, JavaScript las leería como hora local y se irían varias horas.
+export function fechaUtc(value) {
+  if (!value) return null;
+  const text = String(value);
+  return new Date(/[zZ]|[+-]\d{2}:?\d{2}$/.test(text) ? text : `${text}Z`);
+}
 
 // Error que no se debe reintentar (reglas de negocio de Altum: 409 bloqueadores o duplicado, 422 dato no válido).
 export class NotRetryable extends Error {
@@ -227,9 +248,16 @@ export async function deliverAltum(connector, evt) {
   const assignee = connector.assignee_map?.[email || item.assignee];
   const ours = customFieldsFor(connector, item, fields);
   let taskId = item.external?.[connector.name] || byRef.get(item.id);
-  // Las tareas de reuniones (Acten) no se escriben desde aquí: Altum solo las muestra.
-  if (String(taskId || '').startsWith('acten:')) {
-    throw new NotRetryable(`"${item.id}" está enlazado a una tarea de Acten (${taskId}), que es de solo lectura. Quita "ext.${connector.name}" del ítem o enlázalo con una tarea de Altum.`);
+  // Tarea de una reunión (Acten): mismo endpoint, pero solo estado, responsable, título y descripción.
+  // Prioridad, campos propios, etiquetas o external_ref responderían 422, así que ni se envían.
+  if (esDeActen({ id: taskId })) {
+    const estado = connector.acten_status_map?.[item.stage] || ACTEN_STATUS[item.stage];
+    const actualizada = await api(connector, 'PATCH', `/tasks/${encodeURIComponent(taskId)}`, {
+      title: taskTitle(item), description,
+      ...(ACTEN_STATES.includes(estado) ? { state: estado } : {}), ...(assignee ? { assignee_id: assignee } : {}),
+    });
+    recordPush(connector, { ...actualizada, id: taskId });
+    return;
   }
   if (!taskId) {
     const created = await createTask(connector, item, description, { assignee, email, customFields: ours });
