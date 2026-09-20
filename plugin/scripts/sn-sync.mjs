@@ -8,7 +8,7 @@
 //   node sn-sync.mjs show <ID>                                           ficha completa + commits, firmas, evidencia
 //   node sn-sync.mjs whoami                                              de quién es la clave y qué proyectos tiene
 //   node sn-sync.mjs projects [--json]                                   proyectos que ve la clave, con su clave corta
-//   node sn-sync.mjs clone <clave o nombre> [--in <carpeta>]             clona ese proyecto desde el repo_url de Altum
+//   node sn-sync.mjs clone <clave o nombre> [--in <carpeta>|--into <ruta>] clona ese proyecto desde el repo_url de Altum
 //   node sn-sync.mjs set-repo <clave o nombre> [url]                     registra en Altum de dónde se clona (por defecto, el remoto)
 //   node sn-sync.mjs repo-check                                          ¿este proyecto tiene repositorio registrado en Altum?
 //   node sn-sync.mjs backlog <altum> [--all] [--json]                    tareas del proyecto: pendientes y si ya están en el repo
@@ -244,8 +244,8 @@ async function setRepo(config) {
 // clone <clave o nombre> [--in <carpeta>] [--dry-run]: busca el proyecto en Altum y lo clona desde repo_url.
 // Sirve aunque este repositorio no tenga nada configurado: solo hace falta la clave de Altum.
 async function clone(config) {
-  const query = args.slice(1).filter((a, i) => !a.startsWith('--') && args[i] !== '--in').join(' ').trim();
-  if (!query) throw new Error('uso: clone <clave o nombre del proyecto> [--in <carpeta>] [--dry-run]');
+  const query = args.slice(1).filter((a, i) => !a.startsWith('--') && !['--in', '--into'].includes(args[i])).join(' ').trim();
+  if (!query) throw new Error('uso: clone <clave o nombre> [--in <carpeta madre> | --into <ruta exacta> | --here] [--dry-run]');
   const { match, candidates } = findProject(await listProjects(anyAltum(config)), query);
   if (candidates) {
     console.log(`Hay ${candidates.length} proyectos parecidos a "${query}". ¿Cuál es?`);
@@ -255,11 +255,13 @@ async function clone(config) {
   }
   if (!match) throw new Error(`ninguno de tus proyectos se parece a "${query}". Mira la lista con "projects"; si falta uno, pide que te asignen a él en Altum.`);
   if (!match.repo) throw new Error(`"${match.name}" no tiene repositorio registrado en Altum. Regístralo en su ficha ("Repositorio" → Registrar) y vuelve a intentar.`);
-  const parent = option('--in', '..');
-  const dir = targetDir(match, parent);
+  // --in <carpeta>: se crea dentro la carpeta del proyecto. --into <ruta> (o --here): el contenido va ahí mismo.
+  const exact = flag('--here') || args.includes('--into');
+  const parent = flag('--here') ? '.' : option('--into', option('--in', '..'));
+  const dir = targetDir(match, parent, { exact });
   if (alreadyThere(dir)) return console.log(`"${match.name}" ya está en ${dir}. Ábrelo ahí; no se clona de nuevo.`);
   if (flag('--dry-run')) return console.log(`git clone ${match.repo} ${dir}`);
-  cloneProject(match, parent);
+  cloneProject(match, parent, { exact });
   console.log(`Clonado: ${match.name} → ${dir}`);
   console.log(`Ábrelo con Claude Code. Si todavía no tiene la metodología, usa /sn-setup (proyecto de Altum: ${match.id}).`);
 }
