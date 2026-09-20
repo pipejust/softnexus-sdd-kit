@@ -155,6 +155,8 @@ Se distinguen por `"source"`, que aparece en TODAS las tareas del listado:
 
 **`updated_since` ya las incluye.** Acten expone `updated_at` en cada tarea (con backfill de las que no lo tenían), así que se filtran igual que las nativas — ya no quedan fuera de un sondeo periódico. `include_deleted` no les aplica: una tarea de Acten borrada allá simplemente deja de aparecer, no genera entrada en `deleted`.
 
+**Ojo con la zona horaria de este `updated_at` en particular:** es UTC, igual que el de las nativas, pero Acten lo manda SIN `Z` ni offset (`2026-09-20T06:38:42.102639`, no `...102639Z`). Quien lo lea al pie de la letra y asuma hora local se equivoca de zona. Altum ya lo interpreta como UTC de todos modos al filtrar por `updated_since`; si ustedes lo parsean directo, traten cualquier `updated_at` de una tarea con `"source": "acten"` sin sufijo de zona como UTC, no como hora local.
+
 ### Actualizar una tarea de Acten
 
 ```
