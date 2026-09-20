@@ -7,9 +7,8 @@
 ## 1. Qué es este proyecto
 - Producto: <una frase: quién lo usa y para qué>
 - Cliente / contrato: <entidad, número de contrato si aplica>
-- Líder técnico (valida sellos a distancia con `/sn-validate`): <Nombre> <correo> · usuario GitHub: <@usuario>
+- Líder técnico (valida sellos a distancia con `/sn-validate`): <lo dice Altum — `sn-sync lead`; nadie lo escribe a mano>
 - Prefijo de ítems: <CLI>  (historias y bugs en `docs/items/`, ids tipo CLI-260919-a3f2)
-- Riesgo por defecto del repo: <R1 | R2 | R3> (ver `Matriz de riesgo` abajo)
 
 ## 2. Stack aprobado (no agregar dependencias fuera de esta lista sin aprobación)
 - Frontend: <ej. Next.js 15 + React 19 + Tailwind 4 + shadcn/ui>
@@ -47,7 +46,7 @@ Ninguna línea de código de producto sin un change aprobado en `openspec/change
 - "Funciona" no es evidencia. Evidencia = salida de comandos + screenshot + test.
 - El agente que escribió el código no aprueba el código.
 
-## 6. Matriz de riesgo
+## 6. Matriz de riesgo (se aplica ÍTEM POR ÍTEM, no al proyecto entero)
 | Nivel | Ejemplos | Revisión mínima |
 |---|---|---|
 | R0 | texto, CSS, contenido | agente + screenshot |
@@ -55,6 +54,8 @@ Ninguna línea de código de producto sin un change aprobado en `openspec/change
 | R2 | API, lógica de negocio, tabla nueva | reviewer + tests + humano |
 | R3 | auth, permisos, pagos, datos personales, migraciones | tech lead + security review |
 | R4 | producción, infraestructura, borrado masivo | aprobación explícita del tech lead antes de empezar |
+
+Un proyecto no tiene un nivel de riesgo: lo tiene cada cambio. Un texto es R0 aunque el sistema maneje pagos, y una migración es R3 aunque el proyecto sea pequeño. El riesgo se decide al recibir el ítem (`/sn`, paso 3).
 
 ## 7. Convenciones del código
 - <estructura de carpetas y dónde va cada cosa>

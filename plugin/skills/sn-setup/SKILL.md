@@ -32,7 +32,10 @@ Si la carpeta madre ya se llama como el proyecto, no se crea otra igual adentro.
 `openspec init --tools claude` (añade más herramientas si el equipo usa Codex/Cursor). Si el CLI no existe: `npm install -g @fission-ai/openspec@latest`.
 
 ## 4. Generar archivos desde el código
-- `AGENTS.md`: usa la plantilla y llena §1 (qué es: deduce del README/código y pregunta lo que no esté), §2 stack aprobado (lo detectado), §3 comandos reales, §7 convenciones observadas (estructura de carpetas, patrón de fetch/estado, nombres) con **un archivo de ejemplo real** por convención. Deja §8 vacío.
+- `AGENTS.md`: usa la plantilla y llena §1 (qué es: deduce del README/código y pregunta lo que no esté). **Dos cosas que NO se preguntan:**
+  - **Quién es el líder técnico:** lo dice Altum. Corre `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" lead` (o el del repo) y copia su respuesta tal cual en §1. Si Altum aún no devuelve nombre y correo, escribe lo que sí da (el `employee_id`) y sigue. Solo si Altum dice que el proyecto **no tiene líder marcado**, pregúntale a la persona y avísale que hay que marcarlo en Altum.
+  - **El riesgo del proyecto:** no existe. El riesgo es de cada ítem y se decide al recibirlo (`/sn`, paso 3). No preguntes "qué tan sensible es este proyecto" ni pongas un riesgo por defecto en `AGENTS.md`.
+  Sigue con §2 stack aprobado (lo detectado), §3 comandos reales, §7 convenciones observadas (estructura de carpetas, patrón de fetch/estado, nombres) con **un archivo de ejemplo real** por convención. Deja §8 vacío.
 - `CLAUDE.md`: solo `@AGENTS.md` y `@DESIGN.md`.
 - `openspec/config.yaml`: plantilla + `context` con stack y usuarios del sistema.
 - `DESIGN.md` (solo si hay UI): extrae colores, tipografías, espaciados, radios, sombras y componentes del código (tailwind config, CSS variables, componentes). Estructura: tema visual · paleta con roles · tipografía · componentes · layout · profundidad · reglas de sí/no · responsive. Si la marca del cliente está en una web, ofrece extraerla (Firecrawl) o partir de un `DESIGN.md` de referencia (colección awesome-design-md).
@@ -50,4 +53,4 @@ No documentes todo el sistema. Pregunta: "¿Cuál es la parte más importante o 
 ## 6. Verificar y entregar
 - Corre los comandos detectados (lint, typecheck, test, build) y reporta cuáles funcionan hoy. Los que fallan antes de empezar son **deuda existente**: anótalos en `AGENTS.md` §8, no los arregles en este cambio.
 - Commit con `sn-ship` (modo commit): `chore(repo): adoptar metodología spec driven`.
-- Resumen final para el líder técnico: qué se detectó, qué quedó pendiente de su revisión (sobre todo §5 reglas y §6 riesgo por defecto de `AGENTS.md`).
+- Resumen final para el líder técnico (el que dijo Altum): qué se detectó y qué quedó pendiente de su revisión, sobre todo §5 reglas de `AGENTS.md`.
