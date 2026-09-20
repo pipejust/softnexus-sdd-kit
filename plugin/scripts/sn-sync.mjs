@@ -24,7 +24,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'n
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NotRetryable } from './sync/altum.mjs';
-import { backlogMarkdown, checkProjectRepo, listProjects, pullAltum, readBacklog, repoReminder, setProjectRepo, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
+import { backlogMarkdown, checkProjectRepo, leadText, listProjects, projectLead, pullAltum, readBacklog, repoReminder, setProjectRepo, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
 import { alreadyThere, cloneProject, findProject, targetDir } from './sync/altum-clone.mjs';
 import { clearInbox, describe, isWatching, readInbox, stopWatch, watch } from './sync/altum-watch.mjs';
 import { deliver, fetchExternal } from './sync/connectors.mjs';
@@ -352,6 +352,11 @@ else if (command === 'show') {
 else if (command === 'githooks') githooks();
 // projects, clone y whoami funcionan aunque el repositorio todavía no esté conectado (incluso en una carpeta vacía): basta la clave de Altum.
 else if (command === 'projects') await projects(config);
+else if (command === 'lead') {
+  const connector = config?.connectors.find((c) => c.kind === 'altum' && (!args[1] || c.name === args[1]));
+  if (!connector?.project_id) throw new Error('uso: lead [conector altum] — este repositorio todavía no está unido a un proyecto de Altum (/sn-connect)');
+  process.stdout.write(leadText(await projectLead(connector)));
+}
 else if (command === 'clone') await clone(config);
 else if (command === 'set-repo') await setRepo(config);
 // repo-check: mira si el proyecto ya tiene repositorio registrado y lo deja anotado para el aviso.
@@ -383,6 +388,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|whoami|clone|set-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|whoami|lead|clone|set-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }
