@@ -14,10 +14,22 @@ export function toProject(p) {
   };
 }
 
-// Altum devuelve { items, total }; se acepta también una lista suelta por si cambia.
+// /projects viene paginado y envuelto en { items, total } (las rutas /config/* no: son listas sueltas).
 export async function listProjects(connector) {
-  const raw = await api(connector, 'GET', '/projects');
-  return (Array.isArray(raw) ? raw : raw?.items || []).map(toProject);
+  const proyectos = [];
+  for (let page = 1; ; page += 1) {
+    const raw = await api(connector, 'GET', `/projects?page=${page}&limit=200`);
+    const items = Array.isArray(raw) ? raw : raw?.items || [];
+    proyectos.push(...items);
+    if (!items.length || proyectos.length >= (raw?.total ?? proyectos.length)) break;
+  }
+  return proyectos.map(toProject);
+}
+
+// Registra en Altum de dónde se clona el proyecto. Necesita una clave con "projects:write":
+// las claves generadas antes de ese permiso dan 403 hasta que la persona la regenere.
+export async function setProjectRepo(connector, projectId, repoUrl) {
+  return api(connector, 'PUT', `/projects/${projectId}/repo`, { repo_url: repoUrl || null });
 }
 
 // Quién es la clave (GET /me): persona o empresa, a qué empresa pertenece y qué proyectos tiene asignados.

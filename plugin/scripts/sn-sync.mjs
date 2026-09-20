@@ -9,6 +9,7 @@
 //   node sn-sync.mjs whoami                                              de quién es la clave y qué proyectos tiene
 //   node sn-sync.mjs projects [--json]                                   proyectos que ve la clave, con su clave corta
 //   node sn-sync.mjs clone <clave o nombre> [--in <carpeta>]             clona ese proyecto desde el repo_url de Altum
+//   node sn-sync.mjs set-repo <clave o nombre> [url]                     registra en Altum de dónde se clona (por defecto, el remoto)
 //   node sn-sync.mjs backlog <altum> [--all] [--json]                    tareas del proyecto: pendientes y si ya están en el repo
 //   node sn-sync.mjs pull <altum> [--apply] [--include-closed]           Altum -> repo: tareas abiertas sin traer (--apply las crea)
 //   node sn-sync.mjs link <ITEM> <altum> <id-tarea>                      enlaza un ítem con una tarea que ya existe en Altum
@@ -22,7 +23,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'n
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NotRetryable } from './sync/altum.mjs';
-import { backlogMarkdown, listProjects, pullAltum, readBacklog, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
+import { backlogMarkdown, listProjects, pullAltum, readBacklog, setProjectRepo, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
 import { alreadyThere, cloneProject, findProject, targetDir } from './sync/altum-clone.mjs';
 import { clearInbox, describe, isWatching, readInbox, stopWatch, watch } from './sync/altum-watch.mjs';
 import { deliver, fetchExternal } from './sync/connectors.mjs';
@@ -39,6 +40,15 @@ const DEBOUNCE_MS = 3000;
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(name);
 const option = (name, fallback) => (args.includes(name) ? args[args.indexOf(name) + 1] : fallback);
+
+// Remoto "origin" de este repositorio, para registrarlo en Altum sin escribirlo a mano.
+function remoteUrl() {
+  try {
+    return execFileSync('git', ['config', '--get', 'remote.origin.url'], { encoding: 'utf8' }).trim();
+  } catch {
+    return '';
+  }
+}
 
 function localActor() {
   try {
@@ -201,6 +211,35 @@ async function projects(config) {
   console.log('\nPara empezar a trabajar en uno: clone <clave o nombre>');
 }
 
+// set-repo <clave o nombre> [url]: registra en Altum de dónde se clona ese proyecto.
+// Sin url, usa el remoto "origin" de este repositorio.
+async function setRepo(config) {
+  const libres = args.slice(1).filter((a) => !a.startsWith('--'));
+  const url = libres.find((a) => /^(https?:|git@)/.test(a)) || remoteUrl();
+  const query = libres.filter((a) => a !== url).join(' ').trim();
+  if (!query) throw new Error('uso: set-repo <clave o nombre del proyecto> [url del repositorio]');
+  if (!url) throw new Error('este repositorio no tiene remoto "origin": pasa la dirección como segundo argumento');
+  const connector = anyAltum(config);
+  const { match, candidates } = findProject(await listProjects(connector), query);
+  if (candidates) {
+    console.log(`Hay ${candidates.length} proyectos parecidos a "${query}". ¿Cuál es?`);
+    candidates.forEach((p) => console.log(`  ${p.key.padEnd(22)} ${p.name}`));
+    process.exitCode = 1;
+    return;
+  }
+  if (!match) throw new Error(`ninguno de tus proyectos se parece a "${query}".`);
+  if (match.repo && match.repo !== url) console.log(`Ojo: ya tenía registrado ${match.repo}`);
+  try {
+    await setProjectRepo(connector, match.id, url);
+  } catch (error) {
+    if (/HTTP 403/.test(error.message)) {
+      throw new Error('tu clave no tiene el permiso "projects:write" (es anterior a ese cambio): regenérala en Altum → Mi perfil → Mis datos y vuelve a guardarla.');
+    }
+    throw error;
+  }
+  console.log(`Listo: "${match.name}" se clona desde ${url}. Ahora cualquiera del equipo puede pedir "clóname ${match.key}".`);
+}
+
 // clone <clave o nombre> [--in <carpeta>] [--dry-run]: busca el proyecto en Altum y lo clona desde repo_url.
 // Sirve aunque este repositorio no tenga nada configurado: solo hace falta la clave de Altum.
 async function clone(config) {
@@ -299,6 +338,7 @@ else if (command === 'show') {
 else if (command === 'githooks') githooks();
 // clone y whoami funcionan aunque el repositorio todavía no esté conectado: basta la clave de Altum.
 else if (command === 'clone') await clone(config);
+else if (command === 'set-repo') await setRepo(config);
 else if (command === 'whoami') {
   const connector = config?.connectors.find((c) => c.kind === 'altum' && (!args[1] || c.name === args[1]))
     || { name: 'altum', kind: 'altum' };
@@ -321,6 +361,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|whoami|clone|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|whoami|clone|set-repo|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }
