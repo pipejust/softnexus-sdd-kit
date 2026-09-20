@@ -58,7 +58,7 @@ claude plugin marketplace add DietrichGebert/ponytail
 claude plugin install ponytail@ponytail
 ```
 
-**Último paso: tu clave de Altum.** Al terminar la instalación, el agente la pide: la generas en Altum (**Mi perfil → Mis datos → "Tu clave personal de API" → Regenerar**) y la guardas con `bash "${CLAUDE_PLUGIN_ROOT}/scripts/sn-clave-altum.sh"`, que la pide en la terminal **sin mostrarla** (nunca se pega en el chat). Es **una sola clave para todos tus proyectos**: después, el agente sabe quién eres y lista los proyectos que tienes asignados. Si no la guardas ahora, te la vuelve a ofrecer cuando uses cualquier comando. Detalle: `plugin/references/clave-altum.md`.
+**Último paso: tu clave de Altum.** Al terminar la instalación, el agente la pide: la generas en Altum (**Mi perfil → Mis datos → "Tu clave personal de API" → Regenerar**) y la guardas con `source "${CLAUDE_PLUGIN_ROOT}/scripts/sn-clave-altum.sh"`, que la pide en la terminal **sin mostrarla** (nunca se pega en el chat). Es **una sola clave para todos tus proyectos**: después, el agente sabe quién eres y lista los proyectos que tienes asignados. Si no la guardas ahora, te la vuelve a ofrecer cuando uses cualquier comando. Detalle: `plugin/references/clave-altum.md`.
 
 ## Preparar un proyecto (una vez por repo)
 En Claude Code, dentro del repo: `/sn-setup`. Lee el código, instala OpenSpec y escribe `AGENTS.md`, `DESIGN.md`, config y plantillas. El líder técnico revisa el PR.

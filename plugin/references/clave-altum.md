@@ -14,7 +14,7 @@
 1. **Comprobar si ya la tiene:** `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" whoami` (o `node scripts/sn/sn-sync.mjs whoami` si el repo ya tiene el motor). Si responde con su nombre y sus proyectos, ya está: pasa al paso 3.
 2. **Que la genere y la guarde:**
    - En Altum: **Mi perfil → Mis datos → "Tu clave personal de API" → Regenerar**. Empieza por `sk_user_` y Altum la muestra una sola vez.
-   - Dile: "no la pegues en el chat". Abre una pestaña de terminal y corre ahí `bash "${CLAUDE_PLUGIN_ROOT}/scripts/sn-clave-altum.sh"`. El comando la pide sin mostrarla, la guarda en el Llavero y agrega a `~/.zshrc` la línea que la carga.
+   - Dile: "no la pegues en el chat". Abre una pestaña de terminal y corre ahí **`source "${CLAUDE_PLUGIN_ROOT}/scripts/sn-clave-altum.sh"`** (con `source`, no con `bash`: así la variable queda lista también en esa terminal). El comando la pide sin mostrarla, la guarda en el Llavero, la exporta en esa terminal y agrega a `~/.zshrc` la línea que la carga en las siguientes. La clave nunca queda escrita en el archivo: la línea la lee del Llavero.
    - No hace falta reiniciar nada: si la variable no está en el entorno (las apps de escritorio no leen `~/.zshrc`), el plugin busca la clave en el Llavero él mismo.
 3. **Comprobar y seguir:** `… whoami` muestra nombre, empresa y **proyectos asignados**. Si este repositorio corresponde a uno de ellos y no está unido, ofrécele conectarlo con `sn-connect`. Si el proyecto no aparece, no está asignada a él: que el líder del proyecto la agregue en Altum (el acceso cambia al instante, sin regenerar la clave).
 

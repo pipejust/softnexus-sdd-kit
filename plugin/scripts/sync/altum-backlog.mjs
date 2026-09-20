@@ -14,8 +14,10 @@ export function toProject(p) {
   };
 }
 
+// Altum devuelve { items, total }; se acepta también una lista suelta por si cambia.
 export async function listProjects(connector) {
-  return (await api(connector, 'GET', '/projects')).map(toProject);
+  const raw = await api(connector, 'GET', '/projects');
+  return (Array.isArray(raw) ? raw : raw?.items || []).map(toProject);
 }
 
 // Quién es la clave (GET /me): persona o empresa, a qué empresa pertenece y qué proyectos tiene asignados.
