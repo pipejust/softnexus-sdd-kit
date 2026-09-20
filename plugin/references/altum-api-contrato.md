@@ -141,6 +141,20 @@ GET /tasks?project_id=<uuid opcional>&state=<opcional>&external_ref=<opcional>&u
 
 `updated_by` dice quién hizo el ÚLTIMO cambio. Con clave personal: `{"type": "user", "id": "uuid", "name": "..."}` — la persona misma, con su nombre. Con clave de empresa: `{"type": "api_key", "id": "uuid"}`. `null` si el último cambio fue a mano dentro de Altum sin ninguna clave de por medio. Sirve para lo que hace falta en un sondeo periódico: no avisarle a nadie de sus propios cambios.
 
+### Tareas que vienen de reuniones de Acten
+
+Un proyecto puede tener tareas que nunca se crean en Altum directamente: nacen de reuniones gestionadas por Acten (otra plataforma, conectada por proyecto) y se ven mezcladas con las nativas en la pantalla del proyecto dentro de Altum. `GET /tasks` ahora las incluye también, para que el conteo que ven por API coincida con el que ven en pantalla.
+
+Se distinguen por `"source"`, que aparece en TODAS las tareas del listado:
+
+```json
+{"id": "acten:abc123", "project_id": "uuid", "source": "acten", "title": "...", "state": "...", "assignee_id": "uuid o null", "due_date": "... o null", "number": null, "description": null, "priority": null, "tags": null, "external_ref": null, "custom_fields": {}, "updated_by": null, "created_at": null, "updated_at": null}
+```
+
+`"source": "altum"` en las nativas, `"source": "acten"` en estas. Una tarea de Acten trae `id` con prefijo `acten:` (no es un UUID de Altum, no intenten tratarlo como tal), y los campos que no le aplican viajan en `null` — mismo shape que una tarea nativa, para no obligarlos a ramificar el parseo por `source` salvo que les importe el origen.
+
+**Límite real, a propósito:** las tareas de Acten no tienen `updated_at` ni bitácora de cambios de su lado. Si la llamada trae `updated_since`, esas tareas simplemente NO aparecen (ni en `items` ni sumadas a `total`) — es mejor eso que inventarles una fecha que no existe. Sin `updated_since`, aparecen todas, con los mismos filtros de `project_id`/`state` que las nativas. `include_deleted` no les aplica: una tarea de Acten borrada allá simplemente deja de aparecer, no genera entrada en `deleted`.
+
 ### Tareas borradas de verdad
 
 ```

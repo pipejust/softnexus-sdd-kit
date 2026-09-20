@@ -227,6 +227,10 @@ export async function deliverAltum(connector, evt) {
   const assignee = connector.assignee_map?.[email || item.assignee];
   const ours = customFieldsFor(connector, item, fields);
   let taskId = item.external?.[connector.name] || byRef.get(item.id);
+  // Las tareas de reuniones (Acten) no se escriben desde aquí: Altum solo las muestra.
+  if (String(taskId || '').startsWith('acten:')) {
+    throw new NotRetryable(`"${item.id}" está enlazado a una tarea de Acten (${taskId}), que es de solo lectura. Quita "ext.${connector.name}" del ítem o enlázalo con una tarea de Altum.`);
+  }
   if (!taskId) {
     const created = await createTask(connector, item, description, { assignee, email, customFields: ours });
     taskId = created.id;
