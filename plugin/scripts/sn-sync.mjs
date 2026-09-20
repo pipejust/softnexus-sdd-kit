@@ -255,9 +255,16 @@ async function clone(config) {
   }
   if (!match) throw new Error(`ninguno de tus proyectos se parece a "${query}". Mira la lista con "projects"; si falta uno, pide que te asignen a él en Altum.`);
   if (!match.repo) throw new Error(`"${match.name}" no tiene repositorio registrado en Altum. Regístralo en su ficha ("Repositorio" → Registrar) y vuelve a intentar.`);
-  // --in <carpeta>: se crea dentro la carpeta del proyecto. --into <ruta> (o --here): el contenido va ahí mismo.
+  // La carpeta NUNCA se decide sola: la elige la persona.
+  //   --in <carpeta madre> → <carpeta>/<clave>   ·   --into <ruta> o --here → el contenido va ahí mismo.
+  if (!flag('--here') && !args.includes('--in') && !args.includes('--into')) {
+    throw new Error(`no clono sin saber dónde. Pregúntale a la persona en qué carpeta lo quiere y vuelve a llamarme:\n`
+      + `  --in <carpeta madre>   → queda en <carpeta>/${match.key}\n`
+      + `  --into <ruta exacta>   → el contenido del repositorio queda ahí mismo\n`
+      + `  --here                 → en la carpeta actual (solo si está vacía)`);
+  }
   const exact = flag('--here') || args.includes('--into');
-  const parent = flag('--here') ? '.' : option('--into', option('--in', '..'));
+  const parent = flag('--here') ? '.' : option('--into', option('--in'));
   const dir = targetDir(match, parent, { exact });
   if (alreadyThere(dir)) return console.log(`"${match.name}" ya está en ${dir}. Ábrelo ahí; no se clona de nuevo.`);
   if (flag('--dry-run')) return console.log(`git clone ${match.repo} ${dir}`);
