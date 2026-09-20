@@ -349,7 +349,8 @@ else if (command === 'show') {
   else { console.log(`No existe el ítem ${args[1]}. Usa "list" para ver los ids.`); process.exitCode = 1; }
 }
 else if (command === 'githooks') githooks();
-// clone y whoami funcionan aunque el repositorio todavía no esté conectado: basta la clave de Altum.
+// projects, clone y whoami funcionan aunque el repositorio todavía no esté conectado (incluso en una carpeta vacía): basta la clave de Altum.
+else if (command === 'projects') await projects(config);
 else if (command === 'clone') await clone(config);
 else if (command === 'set-repo') await setRepo(config);
 // repo-check: mira si el proyecto ya tiene repositorio registrado y lo deja anotado para el aviso.
@@ -371,7 +372,6 @@ else if (!config || !config.connectors.length) {
 else if (command === 'test') await test(config);
 else if (command === 'status') status(config);
 else if (command === 'pull') await pull(config);
-else if (command === 'projects') await projects(config);
 else if (command === 'backlog') await backlog(config);
 else if (command === 'link') link(config);
 else if (command === 'watch') await startWatch(config);
