@@ -15,13 +15,23 @@ Cada fila de esa tabla, en su lado, guarda también los `project_id` de esa empr
 
 ## Autenticación
 
-Todas las llamadas van con la clave de API de esa empresa en el header `X-API-Key`. Se pide al administrador de esa empresa en Altum (Configuración → Claves de API) con los alcances `tasks:read` y `tasks:write`. Con esos dos alcances alcanza para TODO lo de este documento — incluido leer los estados de un proyecto (`/config/estados`), que antes exigía sesión de usuario y ya no.
+Todas las llamadas van con una clave de API en el header `X-API-Key`. Hay dos formas de conseguirla, y **la normal es la primera**:
+
+- **Clave personal (la que usa cada empleado, siempre que se pueda).** Cada persona la genera ella misma, sin pedirle nada a nadie: Mi perfil → Mis datos → "Tu clave personal de API" → Regenerar. Nace con `tasks:read`, `tasks:write`, `projects:read` y `projects:write`, y alcanza SOLO a los proyectos donde esa persona está asignada en Altum — si la asignan o la quitan de un proyecto, su acceso cambia al instante, sin tocar la clave. Prefijo `sk_user_...`. **Regenerar revoca la anterior de inmediato** — solo hay una vigente por persona; si la regeneraron sin querer o alguien más lo hizo por ustedes, esa misma pantalla ahora dice "tu clave 'X' fue revocada el ..." en vez de "nunca tuviste una", justo para que esto se detecte rápido.
+- **Clave de empresa (opcional — para CI, servidores, o integraciones que no son de una persona).** La crea un administrador en Configuración → Claves de API, eligiendo sus alcances ahí mismo. Ve TODOS los proyectos de la empresa, sin excepción. Prefijo `sk_live_...`.
+
+Con cualquiera de las dos alcanza para todo lo de este documento — incluido leer los estados de un proyecto (`/config/estados`), que antes exigía sesión de usuario y ya no.
 
 ```
-X-API-Key: sk_live_<clave-de-la-empresa-A>
+X-API-Key: sk_user_<tu-clave-personal>
 ```
 
-Límite: 120 peticiones por minuto por clave (configurable por el administrador). Si se supera, responde `429` con `Retry-After`.
+```
+GET /api/v1/api/me
+```
+Con cualquier clave, dice de quién es: tipo (`user` o `company`), la empresa, la persona (si es personal) y sus proyectos con su rol — así el plugin no tiene que preguntar ni mapear nada a mano.
+
+Límite: 120 peticiones por minuto **por clave** (no por IP ni por empresa), configurable por el administrador. Si se supera, responde `429` con `Retry-After`.
 
 ## Endpoint base
 
@@ -36,10 +46,45 @@ https://servicios.softnexus.io/api/v1/api
 ### Listar proyectos
 
 ```
-GET /projects
+GET /projects?page=1&limit=50
 ```
 
-Devuelve `id`, `name`, `client_name`, `status` y los integrantes de cada proyecto (`employee_id`, `role`, `is_lead`, `allocation_pct`). Cada repositorio de código corresponde a uno de estos proyectos.
+```json
+{"items": [{"id": "...", "name": "...", "client_name": "...", "status": "...", "repo_url": "... o null", "members": [...]}], "total": 24, "page": 1, "limit": 50}
+```
+
+Devuelve, por proyecto: `id`, `name`, `client_name`, `status`, `repo_url` (de dónde se clona, `null` si nadie lo registró — ver más abajo) y los integrantes (`employee_id`, `role`, `is_lead`, `allocation_pct`). Paginado igual que `GET /tasks` (`page`/`limit`, máximo 200).
+
+Con clave personal, solo trae los proyectos donde esa persona está asignada — no todos los de la empresa. Con clave de empresa, todos. Lo mismo aplica a `GET/POST/PATCH /tasks` y `/tasks/{id}/dependencies`: tocar un proyecto ajeno con clave personal da `403`:
+
+```json
+{"error": "No estás asignado a este proyecto"}
+```
+
+**Nota sobre la envoltura de las respuestas — no es uniforme, y no lo va a ser:** `GET /projects` y `GET /tasks` devuelven `{"items": [...], "total": ...}`. `GET /projects/{id}/config/estados` y `GET /projects/{id}/config/campos` devuelven una lista suelta, sin envoltura. Es así por cómo se fue construyendo cada uno, y no se homologa para no romper a quien ya se adaptó a la forma actual — lean el tipo de cada respuesta antes de asumir `items`.
+
+### Registrar el repositorio de un proyecto (para "clóname el proyecto X")
+
+```
+PUT /projects/{project_id}/repo
+Content-Type: application/json
+
+{"repo_url": "https://github.com/empresa/el-repo"}
+```
+
+Cualquiera cuya clave alcance a ese proyecto puede registrarlo o cambiarlo — con clave personal, si el proyecto está entre los asignados; con clave de empresa, cualquiera. `repo_url` es texto libre: Altum no valida que exista de verdad ni se conecta con GitHub. `null` lo borra. No hay endpoint en lote — hay que llamarlo una vez por proyecto.
+
+### Los campos propios de un proyecto (para `custom_fields`)
+
+```
+GET /projects/{project_id}/config/campos
+```
+
+```json
+[{"key": "riesgo", "label": "Riesgo", "field_type": "select", "options": ["R0","R1","R2","R3","R4"], "required": false, "position": 0}]
+```
+
+`field_type` es uno de `text | number | date | select | checkbox`. Lo que se mande en `custom_fields` de una tarea se valida contra esto: si una llave tiene definición aquí, el tipo tiene que cumplirla, y si es `select`, el valor tiene que estar en `options`. Al **crear** (no al editar), además, los campos marcados `required` tienen que venir con valor o Altum responde `422`.
 
 ### Los estados válidos de un proyecto
 
@@ -58,18 +103,6 @@ GET /projects/{project_id}/config/estados
 ```
 
 Siempre objetos, nunca solo texto. `kind` es lo que importa para decidir qué hacer con un estado — vale `open`, `in_progress`, `done` o `cancelled`. Un proyecto que nunca definió workflow propio devuelve exactamente esos cinco; uno con workflow propio devuelve el suyo, con sus propias llaves (`key`) y sus propios `kind`. **Consulten esto antes de escribir un `state`**: mandar `"resolved"` a un proyecto que ya no lo tiene entre sus estados da `422`.
-
-### Los campos propios de un proyecto (para `custom_fields`)
-
-```
-GET /projects/{project_id}/config/campos
-```
-
-```json
-[{"key": "riesgo", "label": "Riesgo", "field_type": "select", "options": ["R0","R1","R2","R3","R4"], "required": false, "position": 0}]
-```
-
-`field_type` es uno de `text | number | date | select | checkbox`. Lo que se mande en `custom_fields` de una tarea se valida contra esto: si una llave tiene definición aquí, el tipo tiene que cumplirla, y si es `select`, el valor tiene que estar en `options`. Al **crear** (no al editar), además, los campos marcados `required` tienen que venir con valor o Altum responde `422`.
 
 ### Listar tareas
 
@@ -93,7 +126,7 @@ GET /tasks?project_id=<uuid opcional>&state=<opcional>&external_ref=<opcional>&u
       "tags": ["..."],
       "external_ref": "el id que ustedes le pusieron, o null",
       "custom_fields": {"riesgo": "R2"},
-      "updated_by": {"type": "api_key", "id": "uuid"},
+      "updated_by": {"type": "user", "id": "uuid", "name": "..."},
       "created_at": "...",
       "updated_at": "..."
     }
@@ -106,7 +139,7 @@ GET /tasks?project_id=<uuid opcional>&state=<opcional>&external_ref=<opcional>&u
 
 `total` es cuántas hay EN TOTAL, no cuántas trae esta página — para pedir la siguiente, suban `page`. `limit` máximo: 200. `updated_since` se filtra en el servidor (Altum no descarga todo para comparar del otro lado), compara con `>=`, acepta ISO 8601 con zona (`2026-09-19T14:05:00Z` o con offset), y `updated_at` siempre viaja en UTC. Detecta cualquier cambio (título, descripción, estado, responsable, prioridad, campos propios...) porque `updated_at` se actualiza ante cualquier edición, sin excepción, y el orden de la lista es por `updated_at`.
 
-`updated_by` dice qué clave de API hizo el ÚLTIMO cambio (`{"type": "api_key", "id": "uuid"}`), o `null` si el último cambio fue a mano dentro de Altum. Sirve exactamente para lo que hace falta en un sondeo periódico: no avisarle a nadie de sus propios cambios. Hoy solo distingue "fue esta integración" de "no fue esta integración" — no dice cuál persona de Altum hizo un cambio a mano, si es que no fue la API.
+`updated_by` dice quién hizo el ÚLTIMO cambio. Con clave personal: `{"type": "user", "id": "uuid", "name": "..."}` — la persona misma, con su nombre. Con clave de empresa: `{"type": "api_key", "id": "uuid"}`. `null` si el último cambio fue a mano dentro de Altum sin ninguna clave de por medio. Sirve para lo que hace falta en un sondeo periódico: no avisarle a nadie de sus propios cambios.
 
 ### Tareas borradas de verdad
 
@@ -122,9 +155,9 @@ La respuesta trae, además de `items`, una lista `deleted`:
 
 Una tarea borrada en Altum simplemente deja de aparecer en `items` — esta lista aparte es la única forma de enterarse de que se borró de verdad (y no que se movió de estado o de proyecto), para poder desenlazar el ítem de su lado.
 
-### El límite de peticiones, y varias claves por empresa
+### El límite de peticiones, con varias personas trabajando a la vez
 
-El límite de 120/min es **por clave**, no por IP ni por empresa — una oficina entera detrás de la misma salida a internet no lo comparte. No hay otro límite además de ese (ni diario ni por hora). Si van a tener varias personas o computadores trabajando a la vez, **pueden pedirle al administrador de la empresa varias claves** (Configuración → Claves de API → crear una por persona/equipo) — cada una se revoca por separado sin afectar a las demás, y reparte el límite entre varias en vez de compartir una sola ventana de 120/min.
+El límite de 120/min es por clave, no por IP ni por empresa. No hay otro límite además de ese (ni diario ni por hora). Como cada persona ya tiene su propia clave personal, esto prácticamente se resuelve solo: diez personas trabajando a la vez son diez ventanas de 120/min, no una compartida.
 
 ### Leer una tarea
 
@@ -165,7 +198,7 @@ Idempotency-Key: un-id-que-ustedes-generen   ← opcional, pero recomendado
 }
 ```
 
-`assignee_email` es la alternativa cuando no tienen el UUID a mano (el caso normal: un correo de git no trae el identificador de Altum) — si no hay nadie con ese correo en la empresa, `404`. Si mandan `Idempotency-Key` y la llamada se reintenta con la MISMA clave (por un corte de red, por ejemplo), Altum devuelve la respuesta que ya dio la primera vez, sin crear una segunda tarea. Si `external_ref` ya existe en ese proyecto, `409`.
+`assignee_email` es la alternativa cuando no tienen el UUID a mano (el caso normal: un correo de git no trae el identificador de Altum) — si no hay nadie con ese correo en la empresa, `404`. Si no mandan ni `assignee_id` ni `assignee_email` y están usando una clave PERSONAL, el responsable por defecto queda siendo la persona dueña de la clave. Si mandan `Idempotency-Key` y la llamada se reintenta con la MISMA clave (por un corte de red, por ejemplo), Altum devuelve la respuesta que ya dio la primera vez, sin crear una segunda tarea. Si `external_ref` ya existe en ese proyecto, `409`.
 
 ### Actualizar una tarea
 
