@@ -112,7 +112,7 @@ export async function api(connector, method, route, body, headers = {}) {
   }
   if (response.status === 429) throw new Error(`Altum: límite de peticiones (reintentar en ${response.headers.get('retry-after') || '?'} s)`);
   const reasons = {
-    401: 'clave de API inválida (revisa la variable de la clave)',
+    401: 'clave de API inválida o revocada: si la regeneraste en Altum, la anterior dejó de servir — vuelve a guardarla con "bash scripts/sn/sn-clave-altum.sh"',
     403: 'la clave no tiene permiso: revisa que tenga tasks:read / tasks:write y, si es personal, que estés asignado a ese proyecto',
     404: 'no existe, o tu clave personal no alcanza ese proyecto: revisa el project_id y que estés asignado a él en Altum',
   };
