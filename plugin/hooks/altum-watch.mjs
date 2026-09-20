@@ -8,7 +8,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const REMIND_EVERY_MS = 12 * 60 * 60 * 1000;
 
@@ -44,6 +44,21 @@ function context(text, hookEventName = 'UserPromptSubmit') {
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext: text } }));
 }
 
+// Carpeta que todavía no es un proyecto preparado (recién creada, o repo sin la metodología):
+// el agente no tiene forma de saber que este equipo trabaja con Spec Driven, así que se lo decimos al abrir la sesión.
+const MOTOR_DEL_PLUGIN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'sn-sync.mjs');
+
+function orientacion(tieneClave) {
+  const lineas = [
+    '[Softnexus] Esta carpeta todavía no es un proyecto preparado con la metodología Spec Driven de Softnexus, pero la persona sí trabaja con ella.',
+    'Si pide traer un proyecto ("clóname X", "bájame el repositorio", "no tengo el proyecto"): NO busques repositorios a mano en GitHub ni en el disco. Usa la skill `sn` — Altum sabe de dónde se clona cada proyecto.',
+    `Motor del plugin (sirve aunque la carpeta esté vacía): \`node "${MOTOR_DEL_PLUGIN}" projects\` lista sus proyectos y \`… clone <nombre> --in <carpeta>\` lo trae. Antes de clonar, pregúntale SIEMPRE en qué carpeta lo quiere.`,
+    'Para preparar esta carpeta: skill `sn-setup`. Si no sabe qué hacer: skill `sn-help`.',
+  ];
+  if (!tieneClave) lineas.push(FALTA_CLAVE);
+  return lineas.join('\n');
+}
+
 const FALTA_CLAVE = '[Altum] Esta persona todavía no tiene guardada su clave personal de Altum, así que no verá sus proyectos ni sus tareas. '
   + 'En una línea, ofrécele guardarla ahora (un solo paso, siguiendo references/clave-altum.md del plugin; la clave nunca se escribe en el chat). Si dice que no, sigue con lo suyo.';
 
@@ -52,7 +67,13 @@ try {
   const root = payload.cwd || process.cwd();
   const script = path.join(root, 'scripts/sn/sn-sync.mjs');
   const event = payload.hook_event_name;
-  if (existsSync(script)) {
+  if (!existsSync(script)) {
+    // Sin proyecto preparado no hay vigilante ni bandeja: solo la orientación de apertura.
+    if (event === 'SessionStart') {
+      const { hasKey } = await import(pathToFileURL(path.join(path.dirname(MOTOR_DEL_PLUGIN), 'sync/altum.mjs')).href);
+      context(orientacion(hasKey({})), 'SessionStart');
+    }
+  } else {
     const connector = altumConnector(root);
     // La clave puede estar en el entorno o, en macOS, en el Llavero: se pregunta al motor.
     const { hasKey } = await import(pathToFileURL(path.join(root, 'scripts/sn/sync/altum.mjs')).href);
