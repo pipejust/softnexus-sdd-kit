@@ -24,7 +24,7 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileS
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { NotRetryable } from './sync/altum.mjs';
-import { addProjectRepo, backlogMarkdown, checkProjectRepo, leadText, listProjects, listRepos, projectLead, pullAltum, readBacklog, repoReminder, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
+import { addProjectRepo, backlogMarkdown, checkProjectRepo, leadText, listProjects, listRepos, projectLead, pullAltum, readBacklog, removeProjectRepo, repoReminder, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
 import { alreadyThere, cloneProject, findProject, findRepo, targetDir } from './sync/altum-clone.mjs';
 import { clearInbox, describe, isWatching, readInbox, stopWatch, watch } from './sync/altum-watch.mjs';
 import { deliver, fetchExternal } from './sync/connectors.mjs';
@@ -196,6 +196,17 @@ async function pull(config) {
     + `${result.deActen ? ` · ${result.deActen} nacidas en reuniones (Acten)` : ''}`);
 }
 
+// Lo que escribió la persona, sin las opciones ni sus valores ("--repo APP SIPAR" no es parte del nombre).
+const CON_VALOR = ['--in', '--into', '--repo', '--sello', '--riesgo', '--titulo', '--que', '--pr', '--format', '--out', '--every'];
+function textoLibre(lista) {
+  const libres = [];
+  for (let i = 0; i < lista.length; i += 1) {
+    if (CON_VALOR.includes(lista[i])) { i += 1; continue; }
+    if (!lista[i].startsWith('--')) libres.push(lista[i]);
+  }
+  return libres;
+}
+
 function gitOut(argumentos) {
   try {
     return execFileSync('git', argumentos, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -275,7 +286,7 @@ function anyAltum(config) {
 // repos [<clave o nombre>]: los repositorios que tiene ese proyecto en Altum (pueden ser varios).
 async function repos(config) {
   const connector = anyAltum(config);
-  const query = args.slice(1).filter((a) => !a.startsWith('--')).join(' ').trim();
+  const query = textoLibre(args.slice(1)).join(' ').trim();
   const todos = await listProjects(connector);
   const { match, candidates } = query ? findProject(todos, query) : { match: todos.find((p) => p.id === connector.project_id) };
   if (candidates) throw new Error(`hay ${candidates.length} proyectos parecidos a "${query}": ${candidates.map((p) => p.key).join(', ')}`);
@@ -286,8 +297,9 @@ async function repos(config) {
     return;
   }
   console.log(`"${match.name}" — ${lista.length} repositorio${lista.length > 1 ? 's' : ''}:`);
-  lista.forEach((r) => console.log(`  ${r.name.padEnd(30)} ${r.url}`));
+  lista.forEach((r) => console.log(`  ${r.name.padEnd(38)} ${r.provider === 'github' ? '' : `[${r.provider}] `}${r.url}`));
   if (lista.length > 1) console.log(`\nPara traer uno: clone ${match.key} --repo <nombre> --in <carpeta>`);
+  console.log(`Para quitar uno mal registrado: quitar-repo ${match.key} <nombre o dirección> --si`);
 }
 
 async function projects(config) {
@@ -303,7 +315,7 @@ async function projects(config) {
 // set-repo <clave o nombre> [url]: registra en Altum de dónde se clona ese proyecto.
 // Sin url, usa el remoto "origin" de este repositorio.
 async function setRepo(config) {
-  const libres = args.slice(1).filter((a) => !a.startsWith('--'));
+  const libres = textoLibre(args.slice(1));
   const url = libres.find((a) => /^(https?:|git@)/.test(a)) || remoteUrl();
   const query = libres.filter((a) => a !== url).join(' ').trim();
   if (!query) throw new Error('uso: set-repo <clave o nombre del proyecto> [url del repositorio]');
@@ -328,16 +340,48 @@ async function setRepo(config) {
   }
   if (resultado.modo === 'ya-estaba') return console.log(`"${match.name}" ya tenía registrado ${resultado.repo}. No cambié nada.`);
   if (resultado.modo === 'uno-solo' && match.repo && match.repo !== url) console.log(`Ojo: reemplacé el que tenía (${match.repo}); esta versión de Altum solo guarda uno por proyecto.`);
-  const otros = match.repos.filter((r) => r.url !== url).map((r) => r.name);
-  console.log(`Listo: "${match.name}" se clona desde ${url}.${otros.length ? ` Ese proyecto ya tenía: ${otros.join(', ')}.` : ''}`);
+  const otros = match.repos.filter((r) => r.name !== resultado.repo).map((r) => r.name);
+  console.log(`Listo: "${match.name}" se clona desde ${url}${resultado.provider === 'github' ? '' : ` (${resultado.provider})`}.`
+    + `${otros.length ? ` Ese proyecto ya tenía: ${otros.join(', ')}.` : ''}`);
   console.log(`Ahora cualquiera del equipo puede pedir "clóname ${match.key}".`);
+}
+
+// quitar-repo <proyecto> <nombre o dirección> --si: saca un repositorio mal registrado del proyecto.
+// Pide confirmación explícita porque lo ve todo el equipo: sin --si solo dice qué haría.
+async function quitarRepo(config) {
+  const libres = textoLibre(args.slice(1));
+  const [query, ...resto] = libres;
+  const cual = resto.join(' ').trim();
+  if (!query || !cual) throw new Error('uso: quitar-repo <clave o nombre del proyecto> <nombre o dirección del repositorio> --si');
+  const connector = anyAltum(config);
+  const { match, candidates } = findProject(await listProjects(connector), query);
+  if (candidates) throw new Error(`hay ${candidates.length} proyectos parecidos a "${query}": ${candidates.map((p) => p.key).join(', ')}`);
+  if (!match) throw new Error(`ninguno de tus proyectos se parece a "${query}".`);
+  const lista = (await listRepos(connector, match.id)) || match.repos;
+  const { repo, choices } = findRepo({ ...match, repos: lista }, cual);
+  if (!repo || choices) {
+    console.log(`No sé cuál quitar de "${match.name}". Sus repositorios son:`);
+    (choices || lista).forEach((r) => console.log(`  ${r.name}`));
+    process.exitCode = 1;
+    return;
+  }
+  if (!flag('--si')) {
+    console.log(`Quitaría "${repo.name}" de "${match.name}" (${repo.url}).`);
+    console.log('Pregúntale a la persona si es ese y vuelve a llamarme con --si. Lo ve todo el equipo; el código no se borra, solo el registro en Altum.');
+    process.exitCode = 1;
+    return;
+  }
+  const { quitado, motivo } = await removeProjectRepo(connector, match.id, repo);
+  console.log(quitado
+    ? `Listo: "${repo.name}" ya no figura en "${match.name}". El repositorio sigue existiendo; solo se quitó de Altum.`
+    : `"${repo.name}" no estaba registrado en "${match.name}"${motivo ? '' : ''}. No cambié nada.`);
 }
 
 // clone <clave o nombre> [--in <carpeta>] [--dry-run]: busca el proyecto en Altum y lo clona desde repo_url.
 // Sirve aunque este repositorio no tenga nada configurado: solo hace falta la clave de Altum.
 async function clone(config) {
-  const query = args.slice(1).filter((a, i) => !a.startsWith('--') && !['--in', '--into'].includes(args[i])).join(' ').trim();
-  if (!query) throw new Error('uso: clone <clave o nombre> [--in <carpeta madre> | --into <ruta exacta> | --here] [--dry-run]');
+  const query = textoLibre(args.slice(1)).join(' ').trim();
+  if (!query) throw new Error('uso: clone <clave o nombre> [--repo <cuál>] [--in <carpeta madre> | --into <ruta exacta> | --here] [--dry-run]');
   const { match, candidates } = findProject(await listProjects(anyAltum(config)), query);
   if (candidates) {
     console.log(`Hay ${candidates.length} proyectos parecidos a "${query}". ¿Cuál es?`);
@@ -456,6 +500,7 @@ else if (command === 'lead') {
   process.stdout.write(leadText(await projectLead(connector)));
 }
 else if (command === 'repos') await repos(config);
+else if (command === 'quitar-repo') await quitarRepo(config);
 else if (command === 'mensaje') await mensaje(config);
 else if (command === 'clone') await clone(config);
 else if (command === 'set-repo') await setRepo(config);
@@ -488,6 +533,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|whoami|lead|mensaje|clone|set-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|whoami|lead|mensaje|clone|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }

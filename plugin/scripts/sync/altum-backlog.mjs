@@ -15,17 +15,52 @@ export function repoList(p) {
   const lista = (p.repos || []).map((r) => ({
     provider: r.provider || 'github',
     name: r.repo || '',
-    url: r.url || (r.repo ? `https://github.com/${r.repo}` : ''),
+    url: r.url || urlDeRepo(r.provider || 'github', r.repo || ''),
   })).filter((r) => r.url);
-  if (p.repo_url && !lista.some((r) => r.url.replace(/\/+$/, '') === String(p.repo_url).replace(/\/+$/, ''))) {
-    lista.unshift({ provider: 'github', name: nombreDeRepo(p.repo_url), url: p.repo_url });
+  if (p.repo_url && !lista.some((r) => mismaUrl(r.url, p.repo_url))) {
+    lista.unshift({ ...identificarRepo(p.repo_url), url: p.repo_url });
   }
   return lista;
 }
 
-// "https://github.com/empresa/app.git" -> "empresa/app"
+const mismaUrl = (a, b) => String(a).replace(/\/+$/, '') === String(b).replace(/\/+$/, '');
+
+// De la dirección del repositorio a como lo guarda Altum: proveedor + nombre.
+// GitHub/GitLab/Bitbucket usan "organizacion/repositorio"; Azure DevOps mete un nivel más
+// ("organizacion/proyecto/repositorio"), porque el proyecto es parte real de su URL.
+export function identificarRepo(url, provider = '') {
+  const limpia = decodeURIComponent(String(url || '').trim())
+    .replace(/^git@([^:]+):/, 'https://$1/').replace(/\.git$/, '').replace(/\/+$/, '');
+  const host = limpia.match(/^[a-z+]+:\/\/([^/]+)/i)?.[1]?.toLowerCase() || '';
+  const partes = limpia.replace(/^[a-z+]+:\/\/[^/]+\//i, '').split('/').filter(Boolean);
+  if (host.includes('dev.azure.com') || host.endsWith('visualstudio.com')) {
+    // dev.azure.com/<org>/<proyecto>/_git/<repo>   ·   <org>.visualstudio.com/<proyecto>/_git/<repo>
+    const org = host.endsWith('visualstudio.com') ? host.split('.')[0] : partes.shift();
+    const git = partes.indexOf('_git');
+    const proyecto = git > 0 ? partes.slice(0, git).join('/') : partes[0];
+    const repo = git >= 0 ? partes[git + 1] : partes[partes.length - 1];
+    return { provider: 'azure_devops', name: [org, proyecto, repo].filter(Boolean).join('/') };
+  }
+  const porHost = host.includes('gitlab') ? 'gitlab' : host.includes('bitbucket') ? 'bitbucket' : 'github';
+  return { provider: provider || porHost, name: partes.slice(-2).join('/') };
+}
+
+// Solo para cuando Altum no manda "url" armada (hoy la manda para github y azure_devops).
+export function urlDeRepo(provider, repo) {
+  const partes = String(repo || '').split('/').filter(Boolean);
+  if (!partes.length) return '';
+  if (provider === 'azure_devops') {
+    const [org, ...resto] = partes;
+    const nombre = resto.pop();
+    return `https://dev.azure.com/${encodeURIComponent(org)}/${resto.map(encodeURIComponent).join('/')}/_git/${encodeURIComponent(nombre)}`;
+  }
+  const dominio = { gitlab: 'gitlab.com', bitbucket: 'bitbucket.org' }[provider] || 'github.com';
+  return `https://${dominio}/${partes.join('/')}`;
+}
+
+// Compatibilidad: el nombre que Altum guarda para esa dirección.
 export function nombreDeRepo(url) {
-  return String(url || '').replace(/\.git$/, '').replace(/\/+$/, '').split('/').slice(-2).join('/');
+  return identificarRepo(url).name;
 }
 
 export function toProject(p) {
@@ -50,16 +85,16 @@ export async function listRepos(connector, projectId) {
 
 // Agrega un repositorio a la lista del proyecto (varios por proyecto). Si Altum todavía no tiene
 // el endpoint, cae al campo de siempre (repo_url), que solo guarda uno.
-export async function addProjectRepo(connector, projectId, url, provider = 'github') {
-  const repo = nombreDeRepo(url);
+export async function addProjectRepo(connector, projectId, url, providerPedido = '') {
+  const { provider, name: repo } = identificarRepo(url, providerPedido);
   try {
     await api(connector, 'POST', `/projects/${projectId}/repos`, { provider, repo });
-    return { modo: 'lista', repo };
+    return { modo: 'lista', repo, provider };
   } catch (error) {
-    if (/HTTP 409/.test(error.message)) return { modo: 'ya-estaba', repo };
+    if (/HTTP 409/.test(error.message)) return { modo: 'ya-estaba', repo, provider };
     if (/HTTP 404|HTTP 405/.test(error.message)) {
       await setProjectRepo(connector, projectId, url);
-      return { modo: 'uno-solo', repo };
+      return { modo: 'uno-solo', repo, provider };
     }
     throw error;
   }
@@ -81,6 +116,18 @@ export async function listProjects(connector) {
 // las claves generadas antes de ese permiso dan 403 hasta que la persona la regenere.
 export async function setProjectRepo(connector, projectId, repoUrl) {
   return api(connector, 'PUT', `/projects/${projectId}/repo`, { repo_url: repoUrl || null });
+}
+
+// Quitar un repositorio mal registrado. Se identifica por proveedor + nombre, igual que al agregarlo.
+// 404 = ese repositorio no estaba en el proyecto (no es un error que deba asustar a nadie).
+export async function removeProjectRepo(connector, projectId, repo) {
+  try {
+    await api(connector, 'DELETE', `/projects/${projectId}/repos`, { provider: repo.provider, repo: repo.name });
+    return { quitado: true };
+  } catch (error) {
+    if (/HTTP 404/.test(error.message)) return { quitado: false, motivo: 'no-estaba' };
+    throw error;
+  }
 }
 
 // ¿Este proyecto ya tiene registrado de dónde se clona? La respuesta se guarda en .sn/state/ para que

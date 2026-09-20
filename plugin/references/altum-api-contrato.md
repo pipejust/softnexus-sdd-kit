@@ -105,7 +105,20 @@ Content-Type: application/json
 {"provider": "github", "repo": "empresa/el-repo"}
 ```
 
-`repo` se escribe como `"organizacion/repositorio"` (no la URL completa — Altum arma la URL sola). `provider` uno de `github`, `gitlab`, `bitbucket` (hoy solo GitHub tiene detrás con qué construir la URL pública; los otros dos guardan el dato pero sin url armada todavía). Repetir el mismo `provider`+`repo` en el mismo proyecto da `409`. No hay `DELETE` por esta API — para quitar uno, por ahora, desde la sesión de Altum (Configuración del proyecto → Repositorios). Este endpoint nunca acepta ni devuelve un token: si un repositorio es privado y necesitan que Altum lo audite (no que lo clonen ustedes), eso se configura aparte, por sesión interna, con credencial cifrada que no vuelve a salir.
+`repo` se escribe como `"organizacion/repositorio"` — salvo en Azure DevOps, que mete un nivel más (ver abajo). `provider` uno de `github`, `gitlab`, `bitbucket`, `azure_devops` (con `url` ya armada para `github` y `azure_devops`; los otros dos guardan el dato pero sin url pública construida todavía). Repetir el mismo `provider`+`repo` en el mismo proyecto da `409`. Este endpoint nunca acepta ni devuelve un token: si un repositorio es privado y necesitan que Altum lo audite (no que lo clonen ustedes), eso se configura aparte, por sesión interna, con credencial cifrada que no vuelve a salir.
+
+**Para quitar uno mal registrado:**
+
+```
+DELETE /projects/{project_id}/repos
+Content-Type: application/json
+
+{"provider": "github", "repo": "empresa/el-repo-que-sobra"}
+```
+
+Se identifica igual que al agregarlo — por `provider`+`repo`, no por un id interno que esta API nunca expuso. `204` si lo borró, `404` si ese `provider`+`repo` no estaba registrado en ese proyecto.
+
+**Azure DevOps es distinto: `repo` lleva tres partes, no dos.** `"organizacion/proyecto/repositorio"` — el proyecto de Azure DevOps es un nivel real de su URL, no se puede omitir. Ejemplo: `{"provider": "azure_devops", "repo": "miorg/Mi Proyecto/mi-repo"}` arma `https://dev.azure.com/miorg/Mi%20Proyecto/_git/mi-repo`. Mandar solo dos partes con `azure_devops` da `422`.
 
 `GET /projects` ya trae `repos` embebido en cada proyecto (ver el ejemplo más arriba) — no hace falta llamar este endpoint aparte salvo que quieran solo eso.
 
