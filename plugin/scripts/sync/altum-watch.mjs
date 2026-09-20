@@ -4,7 +4,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { lastPush, selfKeyId } from './altum.mjs';
+import { fechaUtc, lastPush, selfKeyId } from './altum.mjs';
 import { readBacklog } from './altum-backlog.mjs';
 import { readState, stateFile, writeState } from './store.mjs';
 
@@ -39,7 +39,7 @@ function isOwnChange(connector, entry) {
   if (by?.id && self && by.id !== self) return false;
   const pushed = lastPush(entry.altum_id);
   if (!pushed || !entry.task.updated_at) return false;
-  return new Date(entry.task.updated_at) - new Date(pushed) <= OWN_CHANGE_WINDOW_MS;
+  return fechaUtc(entry.task.updated_at) - fechaUtc(pushed) <= OWN_CHANGE_WINDOW_MS;
 }
 
 // Una ronda: devuelve los avisos nuevos y avanza la marca de tiempo. Cada consulta se solapa
@@ -66,6 +66,8 @@ export async function checkOnce(connector, root = '.') {
 }
 
 export function describe(note) {
+  // Las de reuniones (Acten) no tienen número ni prioridad: se nombran por lo que son.
+  if (note.kind === 'new' && !note.number) return `Nueva tarea en Altum, nacida en una reunión: ${note.title}. Tráela con /sn.`;
   if (note.kind === 'new') return `Nueva tarea en Altum #${note.number}: ${note.title} (prioridad ${note.priority ?? '—'}). Tráela con /sn.`;
   if (note.kind === 'deleted') return `${note.item}: su tarea #${note.number} se borró en Altum. Pregunta si se descarta el ítem o se vuelve a crear.`;
   return `${note.item} cambió en Altum: estado ${note.state}${note.priority ? `, prioridad ${note.priority}` : ''}.`;

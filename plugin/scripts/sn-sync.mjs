@@ -191,7 +191,7 @@ async function pull(config) {
   }
   console.log(`${result.checked} tareas revisadas · ${result.created.length} abiertas sin traer · ${result.changed.length} enlazadas`
     + `${result.skippedClosed ? ` · ${result.skippedClosed} terminadas omitidas` : ''}`
-    + `${result.deActen ? ` · ${result.deActen} de reuniones (Acten): se ven, no se traen` : ''}`);
+    + `${result.deActen ? ` · ${result.deActen} nacidas en reuniones (Acten)` : ''}`);
 }
 
 function altumConnector(config, name) {
@@ -286,9 +286,10 @@ function link(config) {
   altumConnector(config, name);
   const item = readItems().find((i) => i.id.toLowerCase() === String(itemId).toLowerCase());
   if (!item || !taskId) throw new Error('uso: link <ITEM> <conector altum> <id de la tarea en Altum>');
-  if (String(taskId).startsWith('acten:')) throw new Error('esa tarea viene de una reunión de Acten y es de solo lectura: no se puede enlazar ni actualizar desde el repositorio.');
   setExternalId(item.file, name, taskId);
-  console.log(`${item.id} quedó enlazado con la tarea ${taskId} de Altum (${item.file}).`);
+  const deReunion = String(taskId).startsWith('acten:')
+    ? ' Viene de una reunión: solo se le pueden cambiar estado, responsable, título y descripción.' : '';
+  console.log(`${item.id} quedó enlazado con la tarea ${taskId} de Altum (${item.file}).${deReunion}`);
 }
 
 async function startWatch(config) {
