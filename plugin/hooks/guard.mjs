@@ -12,6 +12,12 @@ const BLOCKED_COMMANDS = [
   { pattern: /\b(cat|less|more|head|tail|source)\s+[^|;]*\.env(\.|\s|$)/i, reason: 'Leer .env expone secretos al contexto del agente.' },
   { pattern: /\bvercel\s+(--prod|deploy\s+.*--prod)\b/i, reason: 'Deploy a producción manual. Producción sale solo por pipeline.' },
   { pattern: /\bnpm\s+publish\b/i, reason: 'Publicar paquetes requiere aprobación humana.' },
+  { pattern: /\bgit\s+clone\s+(?:-[^\s]+\s+)*(?:https?:\/\/|git@|ssh:\/\/|file:\/\/)[^\s]+\s*(?:&&|;|\||$)/i,
+    reason: 'git clone sin carpeta de destino: la deja donde estés. Pregúntale a la persona DÓNDE la quiere '
+      + '(carpeta madre o ruta exacta) y clona con "node scripts/sn/sn-sync.mjs clone <proyecto> --in <carpeta> | --into <ruta>", '
+      + 'o con "git clone <url> <ruta>" si el repositorio no está en Altum.' },
+  { pattern: /\bgh\s+repo\s+clone\s+[^\s]+\s*(?:&&|;|\||$)/i,
+    reason: 'gh repo clone sin carpeta de destino: la deja donde estés. Pregunta primero dónde la quiere la persona.' },
   { pattern: /\b(echo|printf|printenv|env)\b[^\n]*\bSN_[A-Z0-9_]*(TOKEN|SECRET|KEY)\b/, reason: 'Imprimir un token o secreto lo expone en la conversación.' },
 ];
 

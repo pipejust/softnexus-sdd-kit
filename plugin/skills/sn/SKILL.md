@@ -1,6 +1,6 @@
 ---
 name: sn
-description: La puerta única de Softnexus. Úsala para CUALQUIER cosa que alguien traiga para un proyecto - una idea, una mejora, un bug, un error con captura, un correo o acta del cliente, un ticket, "hazme", "agrega", "arregla", "no funciona", "el cliente pide". Clasifica el ítem, decide tamaño y riesgo, y conduce paso a paso todo el camino Spec Driven (historia → spec → construcción → evidencia → commit → PR → archivo) deteniéndose en cada checkpoint humano.
+description: La puerta única de Softnexus. Úsala también cuando alguien diga "clóname el proyecto X", "bájame el repositorio", "no tengo el proyecto" o "tráeme ese proyecto" - antes de clonar hay que preguntarle DÓNDE quiere la carpeta. Y para CUALQUIER cosa que alguien traiga para un proyecto - una idea, una mejora, un bug, un error con captura, un correo o acta del cliente, un ticket, "hazme", "agrega", "arregla", "no funciona", "el cliente pide". Clasifica el ítem, decide tamaño y riesgo, y conduce paso a paso todo el camino Spec Driven (historia → spec → construcción → evidencia → commit → PR → archivo) deteniéndose en cada checkpoint humano.
 ---
 
 # /sn — la puerta única
