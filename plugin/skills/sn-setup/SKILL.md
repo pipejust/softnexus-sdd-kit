@@ -13,7 +13,7 @@ Antes de nada, comprueba si ya la tiene: `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn
 ## 0b. ¿La persona ya tiene el proyecto en su computador?
 Si dice "no lo tengo", "clóname el proyecto X" o abrió una carpeta vacía, tráelo con `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" clone <nombre o clave>`: lo busca en Altum por su nombre (sin importar tildes ni mayúsculas) y lo clona desde el repositorio que ese proyecto tiene registrado. Si hay varios parecidos, los muestra para elegir; si no tiene repositorio registrado, hay que registrarlo antes (`… set-repo <clave>`). Para ver todos: `… projects`.
 
-**Antes de clonar, pregunta SIEMPRE dónde ponerlo**, en una sola pregunta con ejemplo:
+**Antes de clonar, pregunta SIEMPRE dónde ponerlo.** El comando **se niega a clonar si no le das ruta** (no hay carpeta por defecto) y el guard bloquea `git clone` sin destino, así que no hay forma de saltarse este paso. Pregunta en una sola línea, con ejemplo:
 "¿En qué carpeta lo dejo? Puedes darme una carpeta madre (ej. `~/Proyectos`) y yo creo adentro la del proyecto, o la ruta exacta donde quieres que quede el contenido (ej. `~/Proyectos/cursos`)."
 - Carpeta madre → `… clone <nombre> --in ~/Proyectos` → queda en `~/Proyectos/<clave-del-proyecto>`.
 - Ruta exacta → `… clone <nombre> --into ~/Proyectos/cursos` → el contenido del repositorio queda ahí, **sin otra carpeta dentro**.

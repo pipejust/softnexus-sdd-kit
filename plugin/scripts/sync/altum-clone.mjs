@@ -32,7 +32,7 @@ export function findProject(projects, query) {
 //   dentro de una carpeta madre  → <carpeta>/<clave del proyecto>   (crea la carpeta del proyecto)
 //   en una ruta exacta           → esa misma ruta, con el contenido del repositorio adentro
 // Si la carpeta madre YA se llama como el proyecto, no se anida otra igual dentro.
-export function targetDir(project, parent = '..', { exact = false } = {}) {
+export function targetDir(project, parent, { exact = false } = {}) {
   const clave = project.key || projectKey(project.name);
   const destino = path.resolve(parent);
   if (exact || path.basename(destino) === clave) return destino;
@@ -43,7 +43,7 @@ export function alreadyThere(dir) {
   return existsSync(dir) && readdirSync(dir).length > 0;
 }
 
-export function cloneProject(project, parent = '..', opciones = {}) {
+export function cloneProject(project, parent, opciones = {}) {
   const dir = targetDir(project, parent, opciones);
   if (!project.repo) throw new Error(`el proyecto "${project.name}" no tiene repositorio registrado en Altum: regístralo en su ficha ("Repositorio" → Registrar) y vuelve a intentar`);
   if (alreadyThere(dir)) return { dir, cloned: false };
