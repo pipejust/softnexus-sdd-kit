@@ -97,6 +97,12 @@ function linkedIndex(connector, root) {
   return index;
 }
 
+// Tareas que nacen en reuniones de Acten: llegan mezcladas en GET /tasks, con id "acten:…" y casi todo
+// en null. Se leen y se muestran, pero NO se traen al repo ni se les escribe: Altum no las gobierna.
+export function esDeActen(task) {
+  return task?.source === 'acten' || String(task?.id || '').startsWith('acten:');
+}
+
 function importable(connector, task) {
   return {
     id: `ALT-${task.number ?? task.id.slice(0, 8)}`,
@@ -121,7 +127,7 @@ export async function readBacklog(connector, root = '.', since = '') {
   const rows = items.map((task) => ({
     altum_id: task.id, number: task.number, kind: task.kind, title: task.title, state: task.state,
     priority: task.priority, assignee_id: task.assignee_id, target_date: task.target_date || null,
-    open: !done.includes(task.state), deleted: false, item: itemFor(task)?.id || '', task,
+    open: !done.includes(task.state), deleted: false, external: esDeActen(task), item: itemFor(task)?.id || '', task,
   }));
   const gone = deleted.filter((d) => d.project_id === connector.project_id).map((d) => ({
     altum_id: d.id, number: d.number, kind: '', title: d.title, state: 'borrada', priority: null, assignee_id: null,
@@ -135,10 +141,12 @@ export async function readBacklog(connector, root = '.', since = '') {
 export async function pullAltum(connector, since, root = '.', { includeClosed = false } = {}) {
   const backlog = await readBacklog(connector, root, since);
   const live = backlog.filter((b) => !b.deleted);
-  const created = live.filter((b) => !b.item && (b.open || includeClosed)).map((b) => importable(connector, b.task));
-  const changed = live.filter((b) => b.item).map((b) => ({ id: b.item, altum_id: b.altum_id, state: b.state, title: b.title, priority: b.priority }));
+  const propias = live.filter((b) => !b.external);
+  const created = propias.filter((b) => !b.item && (b.open || includeClosed)).map((b) => importable(connector, b.task));
+  const changed = propias.filter((b) => b.item).map((b) => ({ id: b.item, altum_id: b.altum_id, state: b.state, title: b.title, priority: b.priority }));
+  const deActen = live.filter((b) => b.external).length;
   const deleted = backlog.filter((b) => b.deleted && b.item).map((b) => ({ id: b.item, altum_id: b.altum_id, number: b.number, title: b.title }));
-  return { created, changed, deleted, checked: live.length, skippedClosed: live.filter((b) => !b.item && !b.open && !includeClosed).length };
+  return { created, changed, deleted, deActen, checked: live.length, skippedClosed: propias.filter((b) => !b.item && !b.open && !includeClosed).length };
 }
 
 export function fetchAltumTask(connector, taskId) {
@@ -150,7 +158,7 @@ export function backlogMarkdown(backlog, { all = false } = {}) {
   if (!rows.length) return 'No hay tareas pendientes en el proyecto de Altum.\n';
   const open = backlog.filter((b) => b.open).length;
   const unlinked = backlog.filter((b) => b.open && !b.item).length;
-  const lines = rows.map((b) => `| ${b.number ?? '—'} | ${b.kind} | ${b.title.replace(/\|/g, '\\|')} | ${b.state} | ${b.priority ?? '—'} | ${b.target_date || '—'} | ${b.item || 'sin traer'} |`);
+  const lines = rows.map((b) => `| ${b.number ?? '—'} | ${b.kind || (b.external ? 'reunión' : '')} | ${b.title.replace(/\|/g, '\\|')} | ${b.state} | ${b.priority ?? '—'} | ${b.target_date || '—'} | ${b.external ? 'de Acten (solo lectura)' : b.item || 'sin traer'} |`);
   return `# Tareas en Altum (${open} pendientes · ${unlinked} sin traer al proyecto)\n\n`
     + '| # | Tipo | Título | Estado | Prioridad | Fecha objetivo | Ítem en el repo |\n|---|---|---|---|---|---|---|\n'
     + `${lines.join('\n')}\n`;
