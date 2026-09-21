@@ -272,10 +272,30 @@ function stateFor(connector, item, estados) {
   return estadoPara(item.stage, estados, connector.status_map);
 }
 
+// Criterios de aceptación: en el repositorio son la sección "Criterios de aceptación" del ítem y a
+// Altum van como texto plano. Si alguien los edita a mano en Altum, llegan con HTML simple
+// (<strong>, <ul>...): para comparar se quitan etiquetas y viñetas, así un cambio solo de formato
+// no provoca otro PATCH (ni ensucia el historial).
+export function textoPlano(valor) {
+  return String(valor || '')
+    .replace(/<\s*br\s*\/?>/gi, '\n').replace(/<\/(p|li|div|h\d)>/gi, '\n').replace(/<li[^>]*>/gi, '- ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+const comparable = (valor) => textoPlano(valor).replace(/^\s*([-*•]|\d+[.)])\s*/gm, '').replace(/\*\*|`/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+function criteriosDe(item) {
+  return String(item.criteria || '').replace(/\*\*|`/g, '').trim();
+}
+
 // Solo los campos que de verdad cambian. Altum guarda en el historial cada PATCH con el antes y el
 // después completos, así que mandar lo mismo otra vez solo ensucia ese historial.
 function soloCambios(actual = {}, deseado) {
-  return Object.fromEntries(Object.entries(deseado).filter(([k, v]) => JSON.stringify(actual[k] ?? null) !== JSON.stringify(v ?? null)));
+  return Object.fromEntries(Object.entries(deseado).filter(([k, v]) => (k === 'acceptance_criteria'
+    ? comparable(actual[k]) !== comparable(v)
+    : JSON.stringify(actual[k] ?? null) !== JSON.stringify(v ?? null))));
 }
 
 export async function deliverAltum(connector, evt) {
@@ -317,8 +337,10 @@ export async function deliverAltum(connector, evt) {
   }
   const state = stateFor(connector, item, estados);
   const customFields = Object.keys(ours).length ? { custom_fields: { ...(currentFields.get(taskId) || {}), ...ours } } : {};
+  const criterios = criteriosDe(item);
   const cambios = soloCambios(current.get(taskId), {
     title: taskTitle(item), description, priority: priorityOf(item),
+    ...(criterios ? { acceptance_criteria: criterios } : {}),
     ...(state ? { state } : {}), ...(assignee ? { assignee_id: assignee } : {}), ...customFields,
   });
   if (!Object.keys(cambios).length) return; // nada cambió: la tarea no se toca
@@ -338,6 +360,7 @@ async function createTask(connector, item, description, { assignee, email, custo
     title: taskTitle(item),
     kind: connector.kind_map?.[item.type] || DEFAULT_KIND[item.type],
     description,
+    ...(criteriosDe(item) ? { acceptance_criteria: criteriosDe(item) } : {}),
     priority: priorityOf(item),
     external_ref: item.id,
     ...(Object.keys(customFields).length ? { custom_fields: customFields } : {}),

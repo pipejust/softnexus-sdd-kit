@@ -1,7 +1,7 @@
 // Lectura de Altum: proyectos de la empresa, tareas que ya existen en el proyecto elegido e importación.
 // Un repositorio de código = un proyecto de Altum de una empresa (la clave X-API-Key dice cuál empresa).
 import { findMark } from './body.mjs';
-import { ACTEN_DONE, api, esDeActen, KIND_TO_TYPE, listTasks, projectStates } from './altum.mjs';
+import { ACTEN_DONE, api, esDeActen, KIND_TO_TYPE, listTasks, projectStates, textoPlano } from './altum.mjs';
 import { projectKey } from './altum-clone.mjs';
 import { readItems } from './items.mjs';
 import { existsSync, readFileSync } from 'node:fs';
@@ -239,6 +239,7 @@ function importable(connector, task) {
     type: KIND_TO_TYPE[task.kind] || 'feature',
     title: String(task.title || '').replace(/^(\[[^\]]+\]\s*)+/, ''),
     story: task.description || '',
+    criteria: textoPlano(task.acceptance_criteria),
     origin: 'altum',
     created: task.created_at || new Date().toISOString(),
     external: { [connector.name]: task.id },

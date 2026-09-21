@@ -168,6 +168,7 @@ GET /tasks?project_id=<uuid opcional>&state=<opcional>&external_ref=<opcional>&u
       "kind": "tarea",
       "title": "...",
       "description": "...",
+      "acceptance_criteria": "... o null",
       "state": "new",
       "assignee_id": "uuid o null",
       "priority": 1,
@@ -273,6 +274,7 @@ Idempotency-Key: un-id-que-ustedes-generen   ← opcional, pero recomendado
   "title": "...",             // obligatorio
   "kind": "tarea",            // epica|feature|historia|requerimiento|tarea|bug|pendiente
   "description": "...",
+  "acceptance_criteria": "...",   // opcional — qué tiene que cumplirse para dar la tarea por hecha
   "assignee_id": "uuid",      // o, si no lo tienen, assignee_email
   "assignee_email": "correo@empresa.com",
   "priority": 1,              // 1 (más urgente) a 4
@@ -292,6 +294,8 @@ Content-Type: application/json
 
 { "state": "resolved", "priority": 2, "custom_fields": {"riesgo": "R3"}, ... }  // solo los campos que cambian
 ```
+
+`acceptance_criteria`: texto libre, igual que `description`. Quien lo edite a mano dentro de Altum usa un editor de texto enriquecido, así que por `GET /tasks` puede llegar HTML simple (`<strong>`, `<em>`, `<ul>`...). Si se manda texto plano, se guarda y se ve tal cual.
 
 `custom_fields` en un `PATCH` REEMPLAZA el objeto completo, no lo mezcla con lo que ya había — manden el objeto entero si solo quieren cambiar una llave.
 

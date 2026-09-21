@@ -2,7 +2,8 @@
 // así los sistemas externos pueden descartar duplicados si dos computadores reportan lo mismo.
 import { createHash } from 'node:crypto';
 
-const TRACKED_FIELDS = ['title', 'type', 'risk', 'size', 'assignee', 'branch', 'change', 'pr_url', 'tasks_done', 'tasks_total', 'commit_count'];
+// story y criteria: cambiar la historia o los criterios de aceptación también se lleva a Altum.
+const TRACKED_FIELDS = ['title', 'type', 'risk', 'size', 'assignee', 'branch', 'change', 'pr_url', 'tasks_done', 'tasks_total', 'commit_count', 'story', 'criteria'];
 
 function eventId(parts) {
   return createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 24);

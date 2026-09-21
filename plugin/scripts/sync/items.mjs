@@ -59,6 +59,7 @@ export function readItems(root = '.') {
         external: externalIds(data),
         ready: /dado|given/i.test(criteria) && !/\?\s*$/m.test(section(body, 'Preguntas abiertas')),
         story: section(body, 'Historia'),
+        criteria,
         body,
       };
     });
@@ -75,13 +76,13 @@ export function setExternalId(file, connectorName, externalId) {
 }
 
 // Crea un ítem nuevo a partir de una tarea que nació en un sistema externo.
-export function writeImportedItem(root, { id, type, title, story, origin, created, external }) {
+export function writeImportedItem(root, { id, type, title, story, criteria = '', origin, created, external }) {
   const dir = path.join(root, ITEMS_DIR);
   mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${id}.md`);
   if (existsSync(file)) return '';
   const ext = Object.entries(external).map(([k, v]) => `ext.${k}: ${v}`).join('\n');
   writeFileSync(file, `---\nid: ${id}\ntype: ${type}\ntitle: ${title.replace(/\n/g, ' ')}\nrisk:\nsize:\nchange:\nbranch:\nassignee:\n`
-    + `origin: ${origin}\ncreated: ${created}\n${ext}\n---\n## Historia\n${story || ''}\n\n## Criterios de aceptación\n\n## Preguntas abiertas\n- Falta refinar: usar /sn con este ítem.\n`);
+    + `origin: ${origin}\ncreated: ${created}\n${ext}\n---\n## Historia\n${story || ''}\n\n## Criterios de aceptación\n${criteria || ''}\n\n## Preguntas abiertas\n- Falta refinar: usar /sn con este ítem.\n`);
   return file;
 }
