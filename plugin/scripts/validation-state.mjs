@@ -58,11 +58,27 @@ function changedSince(commit, change, seal) {
   return log.length > 0;
 }
 
-export function statusOf(entries, change) {
+// El líder según Altum, guardado por "sn-sync lead" / "asegurar" (.sn/state/altum-lider.json).
+function liderGuardado(root = '.') {
+  try {
+    return JSON.parse(readFileSync(path.join(root, '.sn/state/altum-lider.json'), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+const correoDe = (texto) => String(texto || '').match(/<([^>]+@[^>]+)>/)?.[1]?.toLowerCase() || '';
+
+export function statusOf(entries, change, lider = liderGuardado()) {
   if (!entries.length) return { status: 'sin validación' };
   const last = entries[entries.length - 1];
   const base = { seal: last.seal, by: last.fields.Pide || last.fields.Valida || '', date: last.date, notes: last.fields.Notas || '' };
   if (last.type === 'SOLICITUD') return { ...base, status: 'esperando validación', commit: commitOf(last) };
+  // Solo el líder que dice Altum puede aprobar, pedir cambios o detener. Una decisión escrita por
+  // cualquier otra persona no cuenta: el plano sigue esperando la firma.
+  if (lider?.email && correoDe(last.fields.Valida) && correoDe(last.fields.Valida) !== lider.email.toLowerCase()) {
+    return { ...base, status: 'firma inválida', detail: `la firmó ${last.fields.Valida}, pero el líder es ${lider.name} <${lider.email}>` };
+  }
   if (last.type === 'CAMBIOS PEDIDOS') return { ...base, status: 'con correcciones' };
   if (last.type === 'RECHAZADO') return { ...base, status: 'detenido' };
   const commit = commitOf(last);

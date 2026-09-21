@@ -6,6 +6,7 @@ import path from 'node:path';
 import { readItems } from './items.mjs';
 import { validationFor } from '../validation-state.mjs';
 import { commitsFor } from './trace.mjs';
+import { prDeRama } from './pr.mjs';
 
 const RECENT_COMMITS = 20;
 
@@ -19,6 +20,7 @@ export const STAGES = {
 };
 export const FLAGS = {
   awaiting_validation: 'Esperando validación', changes_requested: 'Con correcciones', blocked: 'Detenido', validation_expired: 'Validación vencida',
+  invalid_signature: 'Firmado por alguien que no es el líder',
 };
 
 function git(args) {
@@ -44,19 +46,10 @@ function archivedChanges() {
   return readdirSync(dir).map((name) => name.replace(/^\d{4}-\d{2}-\d{2}-/, ''));
 }
 
-// Estado del PR vía GitHub CLI (local con sesión de gh, o en CI con GH_TOKEN).
-// Sin gh no se adivina: el ítem avanza hasta "Con evidencia" y pasa a "Terminado" al archivar.
+// Estado del PR (GitHub con gh, Azure DevOps con su API). Sin forma de leerlo no se adivina:
+// el ítem avanza hasta "Con evidencia" y pasa a "Terminado" al archivar.
 function prInfo(branch) {
-  if (!branch || process.env.SN_SYNC_NO_GH === '1') return {};
-  try {
-    const out = execFileSync('gh', ['pr', 'view', branch, '--json', 'state,number,url'], {
-      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000,
-    });
-    const pr = JSON.parse(out);
-    return { pr_state: pr.state, pr_number: pr.number, pr_url: pr.url };
-  } catch {
-    return {};
-  }
+  return prDeRama(branch);
 }
 
 function deriveStage(item, archived, pr) {
@@ -81,7 +74,7 @@ function flagOf(item) {
   const { status } = validationFor(item.change);
   return {
     'esperando validación': 'awaiting_validation', 'con correcciones': 'changes_requested',
-    detenido: 'blocked', 'validación vencida': 'validation_expired',
+    detenido: 'blocked', 'validación vencida': 'validation_expired', 'firma inválida': 'invalid_signature',
   }[status] || '';
 }
 

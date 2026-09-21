@@ -41,7 +41,8 @@ Resume para el líder en lenguaje claro, máximo 10 líneas: qué problema resue
 Presenta los hallazgos ordenados por gravedad y propone una decisión: **APROBADO**, **CAMBIOS PEDIDOS** (con lista concreta) o **RECHAZADO** (con motivo).
 
 ## 4. Registrar la decisión (la toma el líder, no tú)
-Antes: `node scripts/sn/sn-sync.mjs lead` dice quién es el líder según Altum. Si quien está validando (`git config user.email`) es **la misma persona que pidió** la validación (línea `Pide:` de la solicitud), no registres APROBADO: quien escribió el código no se aprueba a sí mismo; dile que se lo mande al líder que dice Altum. Si no es el líder de Altum pero tampoco quien pidió, avísale en una línea y deja que decida.
+Antes: `node scripts/sn/sn-sync.mjs lead` dice quién es el líder según Altum. **Solo el líder puede registrar la decisión.** Si quien está validando (`git config user.email`) no es el correo del líder que dice Altum, **no registres nada**: dile que esa firma no vale y que se lo mande al líder. Tampoco si el líder es quien pidió la validación (nadie aprueba su propio trabajo). Aunque alguien escribiera la decisión a mano, no cuenta: el sistema solo acepta decisiones firmadas por el correo del líder de Altum y el plano sigue esperando.
+En GitHub/Azure, además, la verificación "Firma del líder" del PR (`verificar-firma`) solo pasa con la aprobación del líder: las de otras personas no desbloquean el merge.
 Pregunta al líder la decisión y sus notas. Luego, en la carpeta aparte:
 - Agrega la entrada al final de `validacion.md` (formato de la referencia; commit validado = `git rev-parse --short HEAD` de la rama antes de tu commit).
 - Commit `docs(<change>): <aprobado|cambios pedidos|rechazado> <sello>` y `git push origin HEAD:<rama>`.

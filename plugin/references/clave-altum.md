@@ -36,3 +36,10 @@ Con la clave lista, la persona no necesita buscar URLs: `node scripts/sn/sn-sync
 | Ve menos proyectos de los esperados | Solo ve los asignados | Igual que arriba |
 
 **Si alguien pega una clave en el chat:** que la regenere en Altum de inmediato (la expuesta deja de servir) y repitan el paso 2.
+
+## Token de Azure DevOps (solo si el proyecto vive en Azure DevOps)
+Para que el robot lea el estado de los PR de Azure DevOps en tu computador, guarda un token personal (Azure DevOps → User settings → Personal access tokens → alcance **Code: Read**). Igual que la clave de Altum: se pega en la terminal, nunca en el chat.
+```bash
+security add-generic-password -U -a "$USER" -s SN_AZURE_PAT -w
+```
+Pide el token y lo guarda en el Llavero; el robot lo lee de ahí. En Azure Pipelines no hace falta: usa `$(System.AccessToken)`.

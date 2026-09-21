@@ -33,6 +33,7 @@ import { diffSnapshots, matches } from './sync/events.mjs';
 import { itemMarkdown, listMarkdown } from './sync/report.mjs';
 import { takeSnapshot } from './sync/snapshot.mjs';
 import { mensajeValidacion } from './sync/validacion-mensaje.mjs';
+import { aprobacionesPr, firmaDelLider, origenRepo, prDeRama } from './sync/pr.mjs';
 import { parseLog } from './validation-state.mjs';
 import {
   acquireLock, appendOutbox, loadConfig, loadSnapshot, readOutbox, releaseLock, saveSnapshot, writeOutbox,
@@ -327,6 +328,53 @@ async function lead(config) {
   }
 }
 
+// verificar-firma [<número de PR>]: ¿lo aprobó el líder que dice Altum? Es lo que corre el CI
+// (GitHub Actions o Azure Pipelines) como verificación obligatoria: si no, el PR no se puede unir,
+// aunque otra persona lo haya aprobado.
+async function verificarFirma(config) {
+  const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
+  if (!connector) throw new Error('este repositorio no está unido a un proyecto de Altum: sin líder no hay firma que verificar (/sn-connect).');
+  const origen = origenRepo();
+  const numero = args[1] && /^\d+$/.test(args[1]) ? args[1] : process.env.SN_PR_NUMBER || prDeRama(gitOut(['rev-parse', '--abbrev-ref', 'HEAD']), origen).pr_number;
+  if (!numero) throw new Error('no encuentro el PR: pásame el número (verificar-firma <número>).');
+  const lider = await projectLead(connector);
+  const { valida, motivo } = firmaDelLider(aprobacionesPr(numero, origen), lider);
+  console.log(`${valida ? 'FIRMA VÁLIDA' : 'SIN FIRMA DEL LÍDER'} · PR ${numero} (${origen.provider || 'sin remoto'}): ${motivo}`);
+  if (!valida) process.exitCode = 1;
+}
+
+// proteger-rama [--si]: vuelve obligatoria la verificación "Firma del líder" en la rama principal de
+// GitHub, para que un PR no se pueda unir sin la aprobación del líder. Es un ajuste del repositorio
+// (lo ve todo el equipo y necesita permisos de administrador): sin --si solo dice qué haría.
+// No reemplaza la protección que ya tenga la rama: le AGREGA esta verificación.
+function proteger() {
+  const origen = origenRepo();
+  if (origen.provider === 'azure_devops') {
+    console.log('En Azure DevOps se hace desde la política de la rama: Project settings → Repos → Policies → rama principal → Build validation → el pipeline de azure-pipelines-sn.yml, marcado como "Required". Así el PR no se puede completar sin la firma del líder.');
+    return;
+  }
+  const ghJson = (a, input) => JSON.parse(execFileSync('gh', a, { encoding: 'utf8', input, stdio: [input ? 'pipe' : 'ignore', 'pipe', 'pipe'], timeout: 15000 }) || 'null');
+  const repo = ghJson(['repo', 'view', '--json', 'nameWithOwner,defaultBranchRef']);
+  const rama = repo.defaultBranchRef?.name || 'main';
+  if (!flag('--si')) {
+    console.log(`Haría obligatoria la verificación "Firma del líder" en ${repo.nameWithOwner} (rama ${rama}): ningún PR se podrá unir sin la aprobación del líder que dice Altum.`);
+    console.log('Es un ajuste del repositorio: confírmalo con el líder técnico y vuelve a llamarme con --si.');
+    process.exitCode = 1;
+    return;
+  }
+  const base = `repos/${repo.nameWithOwner}/branches/${rama}/protection`;
+  try {
+    ghJson(['api', '-X', 'POST', `${base}/required_status_checks/contexts`, '--input', '-'], JSON.stringify({ contexts: ['Firma del líder'] }));
+  } catch {
+    // La rama todavía no tenía protección: se crea solo con esta verificación (y sin saltársela nadie).
+    ghJson(['api', '-X', 'PUT', base, '--input', '-'], JSON.stringify({
+      required_status_checks: { strict: false, contexts: ['Firma del líder'] },
+      enforce_admins: true, required_pull_request_reviews: null, restrictions: null,
+    }));
+  }
+  console.log(`Listo: en ${repo.nameWithOwner} ya no se puede unir un PR a ${rama} sin la aprobación del líder según Altum.`);
+}
+
 // repos [<clave o nombre>]: los repositorios que tiene ese proyecto en Altum (pueden ser varios).
 async function repos(config) {
   const connector = anyAltum(config);
@@ -595,6 +643,8 @@ else if (command === 'githooks') githooks();
 else if (command === 'projects') await projects(config);
 else if (command === 'lead') await lead(config);
 else if (command === 'repos') await repos(config);
+else if (command === 'verificar-firma') await verificarFirma(config);
+else if (command === 'proteger-rama') proteger();
 else if (command === 'asegurar') await asegurar(config);
 else if (command === 'quitar-repo') await quitarRepo(config);
 else if (command === 'mensaje') await mensaje(config);
@@ -629,6 +679,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|asegurar|whoami|lead|mensaje|clone|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }
