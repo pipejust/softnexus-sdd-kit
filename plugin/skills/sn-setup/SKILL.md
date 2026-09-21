@@ -22,7 +22,9 @@ Si dice "no lo tengo", "clóname el proyecto X" o abrió una carpeta vacía, tr�
 Si la carpeta madre ya se llama como el proyecto, no se crea otra igual adentro. Si la carpeta elegida ya tiene archivos, no se clona encima: se avisa y se elige otra. Luego abre esa carpeta y sigue desde el paso 1.
 
 ## 1. Revisar sin tocar
-- ¿Es repo git? ¿Rama actual? ¿Hay cambios sin guardar? (si hay, detente y pregunta).
+- **Si el repositorio ya estaba clonado** (lo normal), se prepara aquí mismo: nunca se vuelve a clonar.
+- Antes de preparar nada: `git fetch` y mira si la rama principal remota ya tiene `AGENTS.md` (alguien del equipo pudo prepararlo ya). Si lo tiene, no prepares otra vez: `git pull` en la rama principal y listo.
+- ¿Es repo git? ¿Rama actual? ¿Hay cambios sin guardar? Si la persona está a mitad de un desarrollo, **no se pierde nada**: guarda sus cambios con un commit en su propia rama (o pregúntale), prepara el proyecto en la rama `chore/adoptar-spec-driven` salida de la principal, y después ella vuelve a su rama; su trabajo se adopta como ítem con `/sn` (paso 0d).
 - Detecta el stack **leyendo el código**: `package.json` (scripts, dependencias), `pnpm-lock`/`yarn.lock`/`package-lock`, `tsconfig`, carpetas `supabase/`, `prisma/`, `app/`, `src/`, configuración de tests (vitest, jest, playwright), CI existente (`.github/workflows`), estilos (tailwind, tokens, fuentes).
 - Identifica los comandos reales: instalar, dev, lint, typecheck, test, e2e, build. Si falta alguno (p. ej. no hay typecheck), anótalo como pendiente, no lo inventes.
 
