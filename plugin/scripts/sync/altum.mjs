@@ -95,7 +95,7 @@ function blockersMessage(detail) {
 // Llavero, donde la dejó sn-clave-altum.sh. El valor se queda en memoria: nunca se imprime ni se guarda.
 const keyCache = new Map();
 
-function fromKeychain(name) {
+export function fromKeychain(name) {
   if (process.platform !== 'darwin') return '';
   if (keyCache.has(name)) return keyCache.get(name);
   let value = '';

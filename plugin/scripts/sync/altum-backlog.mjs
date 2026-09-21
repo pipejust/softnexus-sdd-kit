@@ -187,6 +187,13 @@ export function whoAmIText(me, projectId) {
 // Altum marca al líder con is_lead en los integrantes y da su nombre, su correo y, cuando está
 // registrado, su usuario de GitHub. Si la persona de la clave ES la líder, /me también lo dice.
 export async function projectLead(connector, projectId = connector.project_id) {
+  const lider = await leerLider(connector, projectId);
+  // Copia local: validation-state la usa para no aceptar firmas de quien no es el líder (sin red).
+  if (lider?.name) writeState('altum-lider.json', { at: Date.now(), name: lider.name, email: lider.email || '', github: lider.github || '' });
+  return lider;
+}
+
+async function leerLider(connector, projectId) {
   const [raw, me] = await Promise.all([
     api(connector, 'GET', `/projects?page=1&limit=200`),
     whoAmI(connector).catch(() => null),

@@ -1,0 +1,35 @@
+# Softnexus para repositorios de Azure DevOps (equivale a los dos workflows de GitHub):
+#  - en cada PR: "Firma del líder" — falla si no lo aprobó el líder que dice Altum. Para que bloquee,
+#    agrégalo como Build validation en la política de la rama principal (Project settings → Repos →
+#    Policies → rama principal → Build validation → este pipeline, "Required").
+#  - al unir a la rama principal: sincroniza con Altum (la tarea se cierra en ese momento).
+# Variables secretas del pipeline: SN_ALTUM_KEY (la clave de Altum de la empresa).
+trigger:
+  branches:
+    include: [main, master]
+pr:
+  branches:
+    include: ['*']
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+    persistCredentials: true
+  - task: NodeTool@0
+    inputs:
+      versionSpec: '22.x'
+  - script: node scripts/sn/sn-sync.mjs verificar-firma $(System.PullRequest.PullRequestId)
+    displayName: Firma del líder
+    condition: eq(variables['Build.Reason'], 'PullRequest')
+    env:
+      SN_AZURE_PAT: $(System.AccessToken)
+      SN_ALTUM_KEY: $(SN_ALTUM_KEY)
+  - script: node scripts/sn/sn-sync.mjs sync --upsert-only
+    displayName: Sincronizar con Altum
+    condition: ne(variables['Build.Reason'], 'PullRequest')
+    env:
+      SN_AZURE_PAT: $(System.AccessToken)
+      SN_ALTUM_KEY: $(SN_ALTUM_KEY)
