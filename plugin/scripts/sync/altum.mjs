@@ -291,7 +291,9 @@ async function createTask(connector, item, description, { assignee, email, custo
     ...(Object.keys(customFields).length ? { custom_fields: customFields } : {}),
     ...(assignee ? { assignee_id: assignee } : email ? { assignee_email: email } : {}),
   };
-  const headers = { 'Idempotency-Key': `sn-${connector.project_id}-${item.id}` };
+  // Si la tarea anterior se borró en Altum, la clave de idempotencia tiene que ser otra:
+  // con la misma, Altum devolvería la respuesta de la primera vez (la tarea borrada).
+  const headers = { 'Idempotency-Key': `sn-${connector.project_id}-${item.id}${item.recrear ? `-re-${String(item.recrear).slice(0, 8)}` : ''}` };
   try {
     return await api(connector, 'POST', '/tasks', body, headers);
   } catch (error) {
