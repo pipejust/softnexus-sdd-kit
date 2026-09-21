@@ -37,9 +37,14 @@ function logLines(extra) {
     });
 }
 
+// Commits de un ítem: los que lo declaran con "Refs: <ID>" (lo que escribe sn-ship) y los que tocan su
+// plano. NO cuenta los que solo mencionan el id en el texto ("se registra aparte GDC-…"): esos no
+// trabajaron en el ítem.
 export function commitsFor(item) {
-  const byId = logLines([`--grep=${item.id}`, '--fixed-strings']);
-  const paths = [item.file, changeDir(item.change)].filter(Boolean);
+  const id = String(item.id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // (sin \b: git usa expresiones POSIX, que no lo entienden en todos los sistemas)
+  const byId = logLines([`--grep=^Refs:(.*[^A-Za-z0-9-])?${id}([^A-Za-z0-9-]|$)`, '--extended-regexp']);
+  const paths = [changeDir(item.change)].filter(Boolean);
   const byPath = paths.length ? logLines(['--', ...paths]) : [];
   const seen = new Map([...byId, ...byPath].map((c) => [c.hash, c]));
   return [...seen.values()].sort((a, b) => b.date.localeCompare(a.date));

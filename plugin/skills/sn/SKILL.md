@@ -102,6 +102,10 @@ Si al entrar detectas un change cuyo PR ya está merged (`gh pr view --json stat
 **La tarea ya se cerró sola en Altum al unirse el PR** (lo hace el CI de GitHub, o el siguiente `git pull` si el proyecto no tiene el CI). Confírmalo: `node scripts/sn/sn-sync.mjs asegurar <ID del ítem>`. Debe decir "Cerrada en Altum"; díselo a la persona con el número ("La tarea #152 quedó cerrada en Altum"). Si dice que sigue abierta o Altum responde que la bloquea otra tarea, explica cuál y que se cerrará cuando esa termine: no lo des por terminado sin decirlo.
 Después, `sn-explain` (microlección de 5 min). Si hubo retrabajo o errores en el camino, sugiere `sn-learn`.
 
+## Descartar un ítem (se decidió no hacerlo)
+Si la persona decide que un ítem **no se va a hacer** (quedó obsoleto, lo cubre otra cosa, se reescribirá después): no lo borres. Escribe en la cabecera del ítem `descartado: <motivo en una frase>`, haz commit con `Refs: <ID>` y corre `node scripts/sn/sn-sync.mjs asegurar <ID>`: la tarea queda **cancelada en Altum con el motivo escrito** (si el proyecto no tiene estado de cancelado, queda cerrada). Pregunta siempre el motivo; es lo que verá quien lo encuentre después.
+Cuando un ítem lleva tiempo abierto sin plano ni rama, ofrece las dos salidas en una línea: "¿Lo arreglamos (sigue con /sn desde la spec) o lo descartamos dejando escrito por qué?".
+
 ## Reglas de conversación
 - Una pregunta a la vez cuando la persona es nueva; máximo 3 por ronda.
 - Siempre termina tu mensaje con **qué sigue** en una línea: `➡️ Siguiente: …`.

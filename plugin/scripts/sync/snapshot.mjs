@@ -15,7 +15,7 @@ const CHANGES = 'openspec/changes';
 export const STAGES = {
   triaged: 'Tarjeta', ready: 'Historia lista', planning: 'Plano en curso', plan_written: 'Plano escrito',
   plan_approved: 'Plano aprobado', building: 'Construyendo', built: 'Construido', verified: 'Con evidencia',
-  in_review: 'En revisión', merged: 'Unido', done: 'Terminado',
+  in_review: 'En revisión', merged: 'Unido', done: 'Terminado', discarded: 'Descartado',
 };
 export const FLAGS = {
   awaiting_validation: 'Esperando validación', changes_requested: 'Con correcciones', blocked: 'Detenido', validation_expired: 'Validación vencida',
@@ -60,6 +60,7 @@ function prInfo(branch) {
 }
 
 function deriveStage(item, archived, pr) {
+  if (item.discarded) return 'discarded';
   const dir = path.join(CHANGES, item.change);
   if (item.change && archived.includes(item.change)) return 'done';
   if (pr.pr_state === 'MERGED') return 'merged';

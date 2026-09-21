@@ -390,10 +390,11 @@ async function asegurar(config) {
   if (!tarea) throw new Error(`no pude confirmar la tarea de ${item.id} en Altum. Revisa "status" y vuelve a intentar antes de construir.`);
   const numero = tarea.number ? `#${tarea.number}` : tarea.id;
   console.log(`Tarea en Altum ${numero}: ${tarea.title} · estado ${tarea.state}`);
-  if (['merged', 'done'].includes(item.stage)) {
+  if (['merged', 'done', 'discarded'].includes(item.stage)) {
     const { done } = await projectStates(connector);
     const cerrada = [...done, 'done', 'cancelled'].includes(tarea.state);
-    console.log(cerrada ? `Cerrada en Altum: ${item.id} terminó.` : `OJO: el ítem terminó pero la tarea sigue en "${tarea.state}" en Altum.`);
+    const como = item.stage === 'discarded' ? `se descartó (${item.discarded})` : 'terminó';
+    console.log(cerrada ? `Cerrada en Altum: ${item.id} ${como}.` : `OJO: el ítem ${como} pero la tarea sigue en "${tarea.state}" en Altum.`);
     if (!cerrada) process.exitCode = 1;
   } else {
     console.log(`Ítem ${item.id} enlazado (ext.${connector.name}: ${tarea.id}). Ya se puede construir.`);
