@@ -78,7 +78,12 @@ Si la persona corrige algo, usa `openspec-update-change` y vuelve a mostrar.
 Cuando la persona apruebe (R0–R2), registra su aprobación al final de `openspec/changes/<nombre>/validacion.md` como entrada `APROBADO · sello: plano` con su nombre y el commit actual (formato en `${CLAUDE_PLUGIN_ROOT}/references/validacion.md`), y haz commit. Así la aprobación queda trazable y los sistemas conectados ven "Plano aprobado".
 
 ## Paso 7 — Construir
-Solo con aprobación explícita. Usa la skill `openspec-apply-change`.
+Solo con aprobación explícita.
+**Antes de escribir una sola línea: la tarea tiene que estar en Altum.** Corre `node scripts/sn/sn-sync.mjs asegurar <ID del ítem>` y **muéstrale a la persona el número** que devuelve ("Quedó la tarea #152 en Altum: …"). La sincronización normal ya la crea sola al guardar el ítem, pero corre en segundo plano y en silencio; este paso la confirma de verdad (y la vuelve a crear si alguien la borró).
+- Si dice que **el repositorio no está unido a Altum** y la persona tiene clave: conéctalo ahora con `sn-connect` (su proyecto sale de `whoami`) y vuelve a correr `asegurar`. **No construyas sin tarea.**
+- Si dice que **falta la clave**: ofrécele guardarla (`references/clave-altum.md`) y vuelve a intentar.
+- Solo se construye sin tarea en Altum si la persona **decidió explícitamente** trabajar sin Altum; dilo en una línea para que quede claro.
+Luego usa la skill `openspec-apply-change`.
 - Lógica nueva o bug → primero un test que falla, luego el código (skill `test-driven-development` si está disponible).
 - Bug difícil → skill `systematic-debugging`.
 - Si durante la construcción descubres que la spec estaba mal: para, explica, actualiza la spec, pide aprobación de nuevo.

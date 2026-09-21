@@ -23,8 +23,8 @@ import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { NotRetryable } from './sync/altum.mjs';
-import { addProjectRepo, backlogMarkdown, checkProjectRepo, leadText, listProjects, listRepos, projectLead, pullAltum, readBacklog, removeProjectRepo, repoReminder, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
+import { hasKey, keyName, NotRetryable } from './sync/altum.mjs';
+import { addProjectRepo, backlogMarkdown, checkProjectRepo, fetchAltumTask, leadText, listProjects, listRepos, projectLead, pullAltum, readBacklog, removeProjectRepo, repoReminder, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
 import { alreadyThere, cloneProject, findProject, findRepo, targetDir } from './sync/altum-clone.mjs';
 import { clearInbox, describe, isWatching, readInbox, stopWatch, watch } from './sync/altum-watch.mjs';
 import { deliver, fetchExternal } from './sync/connectors.mjs';
@@ -346,6 +346,44 @@ async function setRepo(config) {
   console.log(`Ahora cualquiera del equipo puede pedir "clóname ${match.key}".`);
 }
 
+// asegurar <ITEM>: garantiza que el ítem YA tiene su tarea en Altum antes de empezar a construir.
+// La sincronización normal corre sola y en segundo plano; esto la hace en primer plano, comprueba
+// que la tarea exista de verdad en Altum y, si algo falla, dice por qué en vez de callarse.
+async function asegurar(config) {
+  const id = args[1];
+  if (!id) throw new Error('uso: asegurar <ID del ítem>');
+  const connector = config?.connectors.find((c) => c.kind === 'altum' && c.enabled !== false);
+  if (!connector?.project_id) throw new Error('este repositorio no está unido a un proyecto de Altum: conéctalo con /sn-connect antes de construir (o sigue sin Altum si la persona así lo decidió).');
+  if (!hasKey(connector)) throw new Error(`falta la clave de Altum (${keyName(connector)}) en este computador: guárdala siguiendo references/clave-altum.md.`);
+  const buscar = () => takeSnapshot(config.project).items.find((i) => i.id.toLowerCase() === String(id).toLowerCase());
+  let item = buscar();
+  if (!item) throw new Error(`no existe el ítem ${id} en docs/items/.`);
+  // ¿La tarea que dice el ítem existe de verdad en Altum? (pudo borrarse o ser de otro proyecto)
+  const existente = async (taskId) => {
+    if (!taskId) return null;
+    try {
+      const tarea = await fetchAltumTask(connector, taskId);
+      return tarea?.id ? tarea : null;
+    } catch (error) {
+      if (/HTTP 404/.test(error.message)) return null;
+      throw error;
+    }
+  };
+  let tarea = await existente(item.external?.[connector.name]);
+  if (!tarea) {
+    // Si el ítem apuntaba a una tarea que ya no existe (se borró en Altum), se olvida ese enlace y se crea de nuevo.
+    const anterior = item.external?.[connector.name];
+    const sinEnlace = { ...item, external: { ...(item.external || {}), [connector.name]: undefined }, ...(anterior ? { recrear: anterior } : {}) };
+    await deliver(connector, { specversion: '1.0', id: `${item.id}:asegurar`, type: 'sn.item.upserted', project: config.project, time: new Date().toISOString(), actor: localActor(), item: sinEnlace });
+    item = buscar();
+    tarea = await existente(item.external?.[connector.name]);
+  }
+  if (!tarea) throw new Error(`no pude confirmar la tarea de ${item.id} en Altum. Revisa "status" y vuelve a intentar antes de construir.`);
+  const numero = tarea.number ? `#${tarea.number}` : tarea.id;
+  console.log(`Tarea en Altum ${numero}: ${tarea.title} · estado ${tarea.state}`);
+  console.log(`Ítem ${item.id} enlazado (ext.${connector.name}: ${tarea.id}). Ya se puede construir.`);
+}
+
 // quitar-repo <proyecto> <nombre o dirección> --si: saca un repositorio mal registrado del proyecto.
 // Pide confirmación explícita porque lo ve todo el equipo: sin --si solo dice qué haría.
 async function quitarRepo(config) {
@@ -500,6 +538,7 @@ else if (command === 'lead') {
   process.stdout.write(leadText(await projectLead(connector)));
 }
 else if (command === 'repos') await repos(config);
+else if (command === 'asegurar') await asegurar(config);
 else if (command === 'quitar-repo') await quitarRepo(config);
 else if (command === 'mensaje') await mensaje(config);
 else if (command === 'clone') await clone(config);
@@ -533,6 +572,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|whoami|lead|mensaje|clone|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|asegurar|whoami|lead|mensaje|clone|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }
