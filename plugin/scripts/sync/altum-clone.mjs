@@ -67,3 +67,12 @@ export function findRepo(project, query) {
   const lista = exacto.length ? exacto : parecido;
   return lista.length === 1 ? { repo: lista[0] } : { choices: lista.length ? lista : repos };
 }
+
+// ¿Qué proyectos de Altum usan este repositorio? Se compara proveedor + nombre ("org/repo"),
+// sin importar https/ssh, ".git" ni mayúsculas. Un mismo repositorio puede servir a varios proyectos.
+export function projectsForRepo(projects, remote, identificar) {
+  if (!remote) return [];
+  const clave = (url) => { const r = identificar(url); return `${r.provider}:${r.name.toLowerCase()}`; };
+  const mio = clave(remote);
+  return projects.filter((p) => (p.repos || []).some((r) => clave(r.url) === mio));
+}

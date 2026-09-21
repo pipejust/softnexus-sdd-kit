@@ -56,6 +56,7 @@ function orientacion(tieneClave, esRepo = false) {
       '[Softnexus] Este repositorio ya está en el computador de la persona pero todavía no tiene la metodología Spec Driven (no hay AGENTS.md ni motor en scripts/sn).',
       'NO le propongas clonarlo de nuevo ni crear otra carpeta: se trabaja aquí mismo. Usa la skill `sn`: primero `git pull` de la rama principal (puede que alguien ya lo haya preparado); si sigue sin preparar, `sn-setup` lo prepara en su propia rama sin tocar su trabajo.',
       'Si la persona estaba a mitad de un desarrollo (rama con cambios o commits), `sn` lo ADOPTA: crea su ficha y un plano con lo ya hecho y lo que falta, y sigue desde ahí. No se rehace nada.',
+      `El proyecto de Altum sale solo del repositorio: \`node "${MOTOR_DEL_PLUGIN}" conectar\`. Si varios proyectos usan este repositorio, el comando los nombra: pregunta en cuál va a trabajar POR EL NOMBRE y corre \`… conectar "<nombre>"\`. Nunca pidas una "clave del proyecto".`,
     ];
     if (!tieneClave) lineas.push(FALTA_CLAVE);
     return lineas.join('\n');
