@@ -8,9 +8,8 @@ description: Conecta el proyecto con sistemas de tareas y mensajería para que h
 Contrato completo: `${CLAUDE_PLUGIN_ROOT}/references/integraciones.md`. Léelo antes de escribir la configuración.
 
 ## Antes de todo: ¿quién está conectando?
-Corre `node scripts/sn/sn-sync.mjs lead`.
-- **Si la persona NO es el líder** (lo normal en el equipo): **lo único que necesita es su clave personal de Altum** (`references/clave-altum.md`). Con eso conectas su parte (el proyecto de Altum en `.sn/connectors.json`, registrar el repositorio) y **sigue con su trabajo**. **No le hables de nada más**: ni claves de empresa, ni secretos, ni workflows, ni CI, ni protección de ramas, ni tokens de GitHub o de Azure, ni mensajes para reenviar. Su sesión de GitHub (o de Azure) para subir su trabajo es asunto suyo y no es parte de este proceso.
-- **Si es el líder**: además de lo anterior, esta skill le hace la configuración del proyecto (CI, clave de empresa en los secretos, `proteger-rama`). Esa parte le aparece **a él** cuando abre el proyecto; nunca se le delega a alguien del equipo.
+- **Cualquier persona del equipo (incluido el líder del proyecto):** lo único que necesita es su clave personal de Altum (`references/clave-altum.md`). Con eso conectas su parte (el proyecto de Altum en `.sn/connectors.json`, registrar el repositorio) y **sigue con su trabajo**. No le hables de claves de empresa, secretos, workflows, CI, protección de ramas ni tokens. Su sesión de GitHub o de Azure para subir su trabajo es suya y no es parte de este proceso.
+- **La configuración del proyecto** (clave de Altum de la empresa en los secretos, las dos revisiones automáticas, `proteger-rama`) **solo la hace quien ADMINISTRA el repositorio**, porque GitHub solo deja poner secretos y proteger ramas a los administradores, y la clave de empresa solo la crea un administrador de Altum. Compruébalo con `node scripts/sn/sn-sync.mjs pedir-config`. Si la persona no es administradora, no hagas esa parte ni se la menciones.
 
 ## 0. Qué quiere la persona
 - "Conectar" / "agregar" → pasos 1 a 6.

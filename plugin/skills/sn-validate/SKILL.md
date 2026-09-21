@@ -48,6 +48,7 @@ Pregunta al líder la decisión y sus notas. Luego, en la carpeta aparte:
 - Commit `docs(<change>): <aprobado|cambios pedidos|rechazado> <sello>` y `git push origin HEAD:<rama>`.
 - Con GitHub: review en el PR (`gh pr review <n> --approve` o `--request-changes` con las mismas notas) y quita la etiqueta `sn:needs-validation`. Si es sello plano aprobado, el PR sigue en borrador (aún no hay código).
 - Confirma al líder antes de publicar la review (es visible para el equipo).
+- **Sello de entrega aprobado: el líder une el PR desde aquí** (no tiene que abrir GitHub): con su confirmación, `gh pr merge <n> --merge --delete-branch` (en Azure DevOps: `az repos pr update --id <n> --status completed`). Solo el líder puede hacerlo: el guard bloquea unir a cualquier otra persona. Luego `node scripts/sn/sn-sync.mjs asegurar <ID>`: la tarea queda **cerrada en Altum en ese momento** con la clave personal del líder, sin depender de ninguna configuración del repositorio. Dile en una línea: "Unido y cerrado: tarea #N cerrada en Altum".
 
 ## 5. Cerrar y avisar
 - `git worktree remove ../.sn-validar/<rama>` (la carpeta del líder queda como estaba).

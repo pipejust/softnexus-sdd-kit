@@ -28,6 +28,22 @@ const PROTECTED_PATHS = [
   { pattern: /^(?!.*\/plantillas\/).*(^|\/)\.github\/workflows\//, tools: ['Edit', 'Write'], reason: 'Cambiar CI es R4. Requiere tech lead.' },
 ];
 
+async function motivoParaNoUnir(cwd) {
+  try {
+    const { execFileSync } = await import('node:child_process');
+    const { readFileSync } = await import('node:fs');
+    const lider = JSON.parse(readFileSync(`${cwd}/.sn/state/altum-lider.json`, 'utf8'));
+    if (!lider?.github) return ''; // sin líder conocido con GitHub no se puede comprobar: no se bloquea
+    const yo = execFileSync('gh', ['api', 'user', '--jq', '.login'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim();
+    if (yo && yo.toLowerCase() !== lider.github.toLowerCase()) {
+      return `Solo el líder del proyecto (${lider.name}, @${lider.github}) une el PR: es quien cierra el proceso. Él lo hace desde su Claude con /sn-validate. Tú ya terminaste tu parte: el PR queda esperando su aprobación.`;
+    }
+    return '';
+  } catch {
+    return '';
+  }
+}
+
 async function motivoParaNoAbrirPr(cwd) {
   try {
     const { execFileSync } = await import('node:child_process');
@@ -81,6 +97,11 @@ if (tool === 'Bash') {
   if (hit) block(hit.reason);
   // Sellos: no se abre un PR si el plano del ítem de esta rama no tiene su sello 1 o falta la evidencia.
   // Es determinista a propósito: el agente no puede "saltarse el sello y seguir adelante".
+  // Unir el PR es cerrar el proceso: solo lo hace el líder que dice Altum (desde /sn-validate).
+  if (segments.some((segment) => /\bgh\s+pr\s+merge\b|\baz\s+repos\s+pr\s+update\b.*--status\s+completed/.test(segment))) {
+    const motivo = await motivoParaNoUnir(input.cwd || process.cwd());
+    if (motivo) block(motivo);
+  }
   if (segments.some((segment) => /\b(gh\s+pr\s+create|az\s+repos\s+pr\s+create)\b/.test(segment))) {
     const motivo = await motivoParaNoAbrirPr(input.cwd || process.cwd());
     if (motivo) block(`Falta un paso del proceso: ${motivo}`);
