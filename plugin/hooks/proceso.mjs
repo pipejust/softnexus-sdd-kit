@@ -22,7 +22,7 @@ try {
   const cwd = payload.cwd || process.cwd();
   // Solo en proyectos que trabajan con la metodología.
   if (existsSync(`${cwd}/docs/items`) || existsSync(`${cwd}/AGENTS.md`)) {
-    const partes = [FORMATO];
+    const partes = [FORMATO, '[Softnexus · regla] A una persona del equipo solo se le pide su clave personal de Altum. Nunca claves de empresa, secretos, CI, protección de ramas ni tokens de GitHub/Azure: eso es del líder y le aparece a él.'];
     try {
       process.chdir(cwd);
       process.env.SN_SYNC_NO_GH = process.env.SN_SYNC_NO_GH || '';

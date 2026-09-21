@@ -22,7 +22,11 @@ jobs:
         with:
           node-version: 22
       - name: ¿Lo aprobó el líder según Altum?
-        run: node scripts/sn/sn-sync.mjs verificar-firma ${{ github.event.pull_request.number }}
+        # Sin la clave de Altum de la empresa no se puede saber quién es el líder: avisa sin fallar.
+        # (El líder configura la clave y la protección de la rama al mismo tiempo: /sn-connect.)
+        run: |
+          if [ -z "${SN_ALTUM_KEY}" ]; then echo "::notice::Falta la clave de Altum de la empresa en los secretos: todavía no se puede verificar la firma del líder (lo configura el líder)."; exit 0; fi
+          node scripts/sn/sn-sync.mjs verificar-firma ${{ github.event.pull_request.number }}
         env:
           GH_TOKEN: ${{ github.token }}
           SN_ALTUM_KEY: ${{ secrets.SN_ALTUM_KEY }}

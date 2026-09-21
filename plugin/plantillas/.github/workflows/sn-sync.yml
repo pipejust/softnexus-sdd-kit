@@ -29,7 +29,10 @@ jobs:
         with:
           node-version: 22
       - name: Sincronizar (foto completa, idempotente)
-        run: node scripts/sn/sn-sync.mjs sync --upsert-only
+        # Sin la clave de Altum de la empresa en los secretos, no falla: avisa (la configura el líder).
+        run: |
+          if [ -z "${SN_ALTUM_KEY}" ]; then echo "::notice::Falta la clave de Altum de la empresa en los secretos (la configura el líder). Mientras tanto la tarea se cierra con el siguiente git pull del equipo."; exit 0; fi
+          node scripts/sn/sn-sync.mjs sync --upsert-only
         env:
           GH_TOKEN: ${{ github.token }}
           SN_ALTUM_KEY: ${{ secrets.SN_ALTUM_KEY }}

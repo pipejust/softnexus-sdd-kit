@@ -28,6 +28,8 @@ Si la carpeta madre ya se llama como el proyecto, no se crea otra igual adentro.
 - Detecta el stack **leyendo el código**: `package.json` (scripts, dependencias), `pnpm-lock`/`yarn.lock`/`package-lock`, `tsconfig`, carpetas `supabase/`, `prisma/`, `app/`, `src/`, configuración de tests (vitest, jest, playwright), CI existente (`.github/workflows`), estilos (tailwind, tokens, fuentes).
 - Identifica los comandos reales: instalar, dev, lint, typecheck, test, e2e, build. Si falta alguno (p. ej. no hay typecheck), anótalo como pendiente, no lo inventes.
 
+**A quién le hablas:** si la persona no es el líder del proyecto (`sn-sync lead`), lo único que se le pide es su clave personal de Altum. No le muestres tareas de administración (secretos de GitHub/Azure, claves de empresa, CI, protección de ramas, tokens) ni copies los workflows de CI, ni le des mensajes para reenviar: esa configuración le aparece al líder cuando él abre el proyecto. Ella sigue con su trabajo.
+
 ## 2. Crear rama
 `chore/adoptar-spec-driven`
 
@@ -42,7 +44,7 @@ Si la carpeta madre ya se llama como el proyecto, no se crea otra igual adentro.
 - `CLAUDE.md`: solo `@AGENTS.md` y `@DESIGN.md`.
 - `openspec/config.yaml`: plantilla + `context` con stack y usuarios del sistema.
 - `DESIGN.md` (solo si hay UI): extrae colores, tipografías, espaciados, radios, sombras y componentes del código (tailwind config, CSS variables, componentes). Estructura: tema visual · paleta con roles · tipografía · componentes · layout · profundidad · reglas de sí/no · responsive. Si la marca del cliente está en una web, ofrece extraerla (Firecrawl) o partir de un `DESIGN.md` de referencia (colección awesome-design-md).
-- `scripts/check-file-size.mjs`, `.sn-size-ignore` y `.github/workflows/calidad.yml` desde la plantilla (límite de 1000 líneas por archivo en local y en CI). Luego, según el tipo de proyecto:
+- `scripts/check-file-size.mjs`, `.sn-size-ignore` y (solo si quien prepara es el líder) `.github/workflows/calidad.yml` desde la plantilla (límite de 1000 líneas por archivo en local y en CI). Luego, según el tipo de proyecto:
   - **Proyecto nuevo (sin código aún o recién creado):** no se crea línea base. Desde el primer día ningún archivo puede pasar el límite; el plano de cada cambio define módulos pequeños.
   - **Proyecto existente:** corre `node scripts/check-file-size.mjs --write-baseline`. Los archivos que ya pasan el límite quedan en `.sn-size-baseline` como **deuda heredada** (se pueden tocar sin crecer). Anótalos en `AGENTS.md` §8 y crea un ítem de backlog por archivo para reducirlo con `sn-split`, del más tocado al menos tocado. No los dividas en este cambio.
 - `.github/pull_request_template.md` y `.claude/settings.json` desde la plantilla (ajusta el gestor de paquetes en permisos y hooks: pnpm/npm/yarn).

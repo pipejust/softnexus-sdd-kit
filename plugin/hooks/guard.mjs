@@ -18,7 +18,7 @@ const BLOCKED_COMMANDS = [
       + 'o con "git clone <url> <ruta>" si el repositorio no está en Altum.' },
   { pattern: /\bgh\s+repo\s+clone\s+[^\s]+\s*(?:&&|;|\||$)/i,
     reason: 'gh repo clone sin carpeta de destino: la deja donde estés. Pregunta primero dónde la quiere la persona.' },
-  { pattern: /\b(echo|printf|printenv|env)\b[^\n]*\bSN_[A-Z0-9_]*(TOKEN|SECRET|KEY)\b/, reason: 'Imprimir un token o secreto lo expone en la conversación.' },
+  { pattern: /\b(echo|printf)\b[^\n]*\$\{?SN_[A-Z0-9_]*(TOKEN|SECRET|KEY|PAT)\b|\bprintenv\b[^\n|]*\bSN_[A-Z0-9_]*(TOKEN|SECRET|KEY|PAT)\b|\b(printenv|env)\s*(\||$)/, reason: 'Imprimir un token o secreto lo expone en la conversación.' },
 ];
 
 const PROTECTED_PATHS = [
