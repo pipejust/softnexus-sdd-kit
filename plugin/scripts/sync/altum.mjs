@@ -176,6 +176,7 @@ async function fetchProjectStates(connector) {
   return {
     valid: list.map((s) => s.key),
     done: list.filter((s) => ['done', 'cancelled'].includes(s.kind)).map((s) => s.key),
+    list: list.map((s) => ({ key: s.key, kind: s.kind })),
   };
 }
 
@@ -206,7 +207,7 @@ export function customFieldsFor(connector, item, fields) {
 const runCache = new Map();
 async function projectContext(connector) {
   if (runCache.has(connector.name)) return runCache.get(connector.name);
-  const [{ valid }, fields, { items }] = await Promise.all([
+  const [{ valid, list: estados = valid.map((key) => ({ key })) }, fields, { items }] = await Promise.all([
     projectStates(connector, { fresh: true }),
     projectFields(connector),
     listTasks(connector, { project_id: connector.project_id }),
@@ -214,7 +215,7 @@ async function projectContext(connector) {
   const byRef = new Map(items.map((t) => [t.external_ref || findMark(t.description), t.id]).filter(([id]) => id));
   // En un PATCH, custom_fields REEMPLAZA el objeto: se guarda lo que ya tiene cada tarea para mezclarlo.
   const currentFields = new Map(items.map((t) => [t.id, t.custom_fields || {}]));
-  const context = { validStates: valid, fields, byRef, currentFields };
+  const context = { validStates: valid, estados, fields, byRef, currentFields };
   runCache.set(connector.name, context);
   return context;
 }
@@ -230,9 +231,27 @@ export function priorityOf(item) {
   return { R3: 2, R2: 3 }[item.risk] || 4;
 }
 
-function stateFor(connector, item, validStates) {
-  const wanted = connector.status_map?.[item.stage] || DEFAULT_STATUS[item.stage];
-  return validStates.includes(wanted) ? wanted : null; // estado no válido en ese proyecto: no se envía
+// Qué "kind" de Altum corresponde a cada etapa, para proyectos con workflow propio.
+const STAGE_KIND = {
+  triaged: 'open', ready: 'open', planning: 'in_progress', plan_written: 'in_progress', plan_approved: 'in_progress',
+  building: 'in_progress', built: 'in_progress', verified: 'in_progress', in_review: 'in_progress', merged: 'done', done: 'done',
+};
+
+// Estado a enviar: el de status_map o el de siempre si el proyecto lo tiene; si no (workflow propio),
+// el equivalente por "kind" — así una tarea terminada SIEMPRE queda en un estado de terminado.
+// Al terminar se usa el ÚLTIMO estado "done" del workflow (el más cerrado); en los demás, el primero.
+export function estadoPara(stage, estados, statusMap = {}) {
+  const valid = estados.map((s) => s.key);
+  const wanted = statusMap[stage] || DEFAULT_STATUS[stage];
+  if (valid.includes(wanted)) return wanted;
+  const kind = STAGE_KIND[stage];
+  const mismos = estados.filter((s) => s.kind === kind);
+  if (!mismos.length) return null;
+  return (stage === 'done' ? mismos[mismos.length - 1] : mismos[0]).key;
+}
+
+function stateFor(connector, item, estados) {
+  return estadoPara(item.stage, estados, connector.status_map);
 }
 
 export async function deliverAltum(connector, evt) {
@@ -242,7 +261,7 @@ export async function deliverAltum(connector, evt) {
     return;
   }
   const { item } = evt;
-  const { validStates, fields, byRef, currentFields } = await projectContext(connector);
+  const { estados, fields, byRef, currentFields } = await projectContext(connector);
   const description = itemPlainBody(evt);
   const email = item.assignee.match(/<([^>]+@[^>]+)>/)?.[1] || '';
   const assignee = connector.assignee_map?.[email || item.assignee];
@@ -266,7 +285,7 @@ export async function deliverAltum(connector, evt) {
     currentFields.set(taskId, created.custom_fields || ours);
     if (item.file) setExternalId(item.file, connector.name, taskId); // queda en el repo con el siguiente commit
   }
-  const state = stateFor(connector, item, validStates);
+  const state = stateFor(connector, item, estados);
   const customFields = Object.keys(ours).length ? { custom_fields: { ...(currentFields.get(taskId) || {}), ...ours } } : {};
   const updated = await api(connector, 'PATCH', `/tasks/${taskId}`, {
     title: taskTitle(item), description, priority: priorityOf(item),
