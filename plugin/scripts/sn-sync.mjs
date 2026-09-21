@@ -34,6 +34,7 @@ import { itemMarkdown, listMarkdown } from './sync/report.mjs';
 import { takeSnapshot } from './sync/snapshot.mjs';
 import { mensajeValidacion } from './sync/validacion-mensaje.mjs';
 import { aprobacionesPr, firmaDelLider, origenRepo, prDeRama } from './sync/pr.mjs';
+import { siguientePaso } from './sync/siguiente.mjs';
 import { parseLog } from './validation-state.mjs';
 import {
   acquireLock, appendOutbox, loadConfig, loadSnapshot, readOutbox, releaseLock, saveSnapshot, writeOutbox,
@@ -375,6 +376,58 @@ function proteger() {
   console.log(`Listo: en ${repo.nameWithOwner} ya no se puede unir un PR a ${rama} sin la aprobación del líder según Altum.`);
 }
 
+// siguiente [<ID>]: en qué paso va el ítem y qué toca AHORA según el proceso (no según el agente).
+// Sin ID: el ítem de la rama actual o, si no hay, todos los que siguen abiertos.
+function siguiente(config) {
+  const id = args[1] && !args[1].startsWith('--') ? args[1].toLowerCase() : '';
+  const rama = gitOut(['rev-parse', '--abbrev-ref', 'HEAD']);
+  let items = takeSnapshot(config?.project, { solo: (i) => (id ? i.id.toLowerCase() === id : true) }).items;
+  if (!id) {
+    const deRama = items.filter((i) => i.branch && i.branch === rama);
+    items = deRama.length ? deRama : items.filter((i) => !['done', 'discarded'].includes(i.stage));
+  }
+  if (!items.length) return console.log(id ? `No existe el ítem ${args[1]}.` : 'No hay ítems abiertos. Para empezar algo: /sn');
+  for (const item of items) {
+    const { paso, siguiente: sig } = siguientePaso(item);
+    console.log(`${item.id} · ${item.title}\n  Paso: ${paso}\n  ➡️ Siguiente: ${sig}`);
+  }
+}
+
+// dividir <ID>: cierra el plano con lo que ya está hecho y pasa las tareas pendientes a un ítem nuevo.
+// Para cuando, construyendo, aparece trabajo que no estaba en el plano o conviene entregar ya lo hecho
+// (p. ej. 5 de 7): el change queda completo con esas 5 y las 2 restantes siguen su propio camino.
+function dividir(config) {
+  const id = args[1];
+  const item = takeSnapshot(config?.project, { solo: (i) => i.id.toLowerCase() === String(id).toLowerCase() }).items[0];
+  if (!item) throw new Error('uso: dividir <ID del ítem>');
+  if (!item.change) throw new Error(`${item.id} no tiene plano (change): no hay tareas que dividir.`);
+  const archivo = path.join('openspec/changes', item.change, 'tasks.md');
+  if (!existsSync(archivo)) throw new Error(`no encuentro ${archivo}.`);
+  const lineas = readFileSync(archivo, 'utf8').split('\n');
+  const pendientes = lineas.filter((l) => /^\s*- \[ \]/.test(l));
+  const hechas = lineas.filter((l) => /^\s*- \[x\]/i.test(l));
+  if (!pendientes.length) return console.log(`${item.id} no tiene tareas pendientes: no hay nada que dividir.`);
+  if (!hechas.length) throw new Error(`${item.id} todavía no tiene tareas hechas: en vez de dividir, corrige el plano (openspec-update-change).`);
+  const prefijo = item.id.split('-')[0];
+  const hoy = new Date();
+  const fecha = `${String(hoy.getFullYear()).slice(2)}${String(hoy.getMonth() + 1).padStart(2, '0')}${String(hoy.getDate()).padStart(2, '0')}`;
+  const nuevo = `${prefijo}-${fecha}-${Math.random().toString(16).slice(2, 6)}`;
+  const tareas = pendientes.map((l) => l.replace(/^\s*- \[ \]\s*(\d+(\.\d+)*\s*)?/, '- ')).join('\n');
+  mkdirSync('docs/items', { recursive: true });
+  writeFileSync(path.join('docs/items', `${nuevo}.md`), [
+    '---', `id: ${nuevo}`, `type: ${item.type}`, `title: ${item.title} (continuación)`, `risk: ${item.risk || ''}`,
+    `assignee: ${item.assignee || ''}`, `parent: ${item.id}`, `origin: dividido de ${item.id}`, `created: ${hoy.toISOString().slice(0, 10)}`, '---',
+    '## Historia',
+    `Continuación de ${item.id} («${item.title}»). Estas tareas quedaron fuera de su plano para entregar ya lo construido; siguen su propio camino (historia → plano → sello → construir).`,
+    '', '## Tareas que pasaron de ' + item.id, tareas, '',
+  ].join('\n'));
+  const resto = lineas.filter((l) => !/^\s*- \[ \]/.test(l));
+  writeFileSync(archivo, `${resto.join('\n').replace(/\n+$/, '')}\n\n> ${pendientes.length} tarea(s) pasaron a ${nuevo} el ${hoy.toISOString().slice(0, 10)}: el plano se cerró con las ${hechas.length} ya hechas.\n`);
+  console.log(`Listo: el plano de ${item.id} queda con sus ${hechas.length} tareas hechas (completo).`);
+  console.log(`Las ${pendientes.length} pendientes pasaron a ${nuevo} (docs/items/${nuevo}.md), que nace en Altum con su propia tarea.`);
+  console.log(`➡️ Siguiente para ${item.id}: evidencia (sn-evidence) y PR. ${nuevo} empieza su camino cuando lo tomen con /sn.`);
+}
+
 // repos [<clave o nombre>]: los repositorios que tiene ese proyecto en Altum (pueden ser varios).
 async function repos(config) {
   const connector = anyAltum(config);
@@ -643,6 +696,8 @@ else if (command === 'githooks') githooks();
 else if (command === 'projects') await projects(config);
 else if (command === 'lead') await lead(config);
 else if (command === 'repos') await repos(config);
+else if (command === 'siguiente') siguiente(config);
+else if (command === 'dividir') dividir(config);
 else if (command === 'verificar-firma') await verificarFirma(config);
 else if (command === 'proteger-rama') proteger();
 else if (command === 'asegurar') await asegurar(config);
@@ -679,6 +734,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }
