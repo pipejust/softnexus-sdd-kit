@@ -48,6 +48,7 @@ Para el sello `entrega`, "cambió después" significa cualquier commit en la ram
 ## Mensaje para el líder (mientras no haya mensajería conectada)
 Lo arma el motor, no el agente: `node scripts/sn/sn-sync.mjs mensaje [<change>] [--sello …] [--riesgo …] [--titulo …] [--que …] [--pr …]`.
 Saca de Altum el proyecto y **quién es el líder** (nombre y correo), y de git la rama, el commit de la solicitud y el PR.
+**Fuente única del líder: Altum.** `sn-sync lead` corrige la línea de `AGENTS.md` si dice otra cosa, y `sn-sync lead --github` da el usuario de GitHub del líder para pedirle la revisión del PR (falla si no hay usuario en Altum o si es la misma cuenta de quien pide: nadie se revisa a sí mismo). La etiqueta `sn:needs-validation` se crea sola con `gh label create … --force`.
 La persona lo copia de la pantalla y lo manda por donde hable con el líder (Teams, WhatsApp, correo). Formato:
 
 ```

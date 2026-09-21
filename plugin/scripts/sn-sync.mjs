@@ -283,6 +283,50 @@ function anyAltum(config) {
   return config?.connectors.find((c) => c.kind === 'altum') || { name: 'altum', kind: 'altum' };
 }
 
+// Quién firma lo dice Altum, siempre. AGENTS.md es solo una copia para leer: si dice otra cosa (se
+// escribió a mano antes, o cambió el líder en Altum), se corrige. Nunca se toma la cuenta de GitHub
+// de quien está trabajando como líder: quien escribe el código no se aprueba a sí mismo.
+const LINEA_LIDER = /^- Líder técnico[^\n]*$/m;
+
+function lineaLider(l) {
+  return `- Líder técnico (valida sellos a distancia con \`/sn-validate\`): ${l.name}${l.email ? ` <${l.email}>` : ''}`
+    + `${l.github ? ` · GitHub @${l.github}` : ''} — según Altum (se actualiza solo, no se edita a mano)`;
+}
+
+function cuentaGithubActual() {
+  if (process.env.SN_SYNC_NO_GH === '1') return '';
+  try {
+    return execFileSync('gh', ['api', 'user', '--jq', '.login'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim();
+  } catch {
+    return '';
+  }
+}
+
+// lead [--github]: el líder según Altum. Con --github imprime solo su usuario de GitHub (para pedirle
+// la revisión del PR) o falla diciendo por qué no se puede pedir.
+async function lead(config) {
+  const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
+  if (!connector) throw new Error('uso: lead [--github] — este repositorio todavía no está unido a un proyecto de Altum (/sn-connect)');
+  const l = await projectLead(connector);
+  if (flag('--github')) {
+    if (!l?.name) throw new Error('Altum no dice quién es el líder de este proyecto: no se pide revisión en GitHub (el mensaje sigue sirviendo).');
+    if (!l.github) throw new Error(`${l.name} no tiene usuario de GitHub registrado en Altum (ficha del empleado → pestaña Git): no se pide revisión en GitHub; manda el mensaje.`);
+    if (l.github.toLowerCase() === cuentaGithubActual().toLowerCase()) throw new Error(`@${l.github} es la cuenta con la que estás trabajando: no puedes pedirte revisión a ti mismo.`);
+    return console.log(l.github);
+  }
+  process.stdout.write(leadText(l));
+  // AGENTS.md: si su línea del líder no coincide con Altum, se corrige.
+  if (l?.name && existsSync('AGENTS.md')) {
+    const texto = readFileSync('AGENTS.md', 'utf8');
+    const actual = texto.match(LINEA_LIDER)?.[0];
+    const correcta = lineaLider(l);
+    if (actual && actual !== correcta) {
+      writeFileSync('AGENTS.md', texto.replace(LINEA_LIDER, correcta));
+      console.log(`AGENTS.md decía otro líder. Lo corregí con lo que dice Altum:\n  antes:  ${actual}\n  ahora:  ${correcta}`);
+    }
+  }
+}
+
 // repos [<clave o nombre>]: los repositorios que tiene ese proyecto en Altum (pueden ser varios).
 async function repos(config) {
   const connector = anyAltum(config);
@@ -549,11 +593,7 @@ else if (command === 'show') {
 else if (command === 'githooks') githooks();
 // projects, clone y whoami funcionan aunque el repositorio todavía no esté conectado (incluso en una carpeta vacía): basta la clave de Altum.
 else if (command === 'projects') await projects(config);
-else if (command === 'lead') {
-  const connector = config?.connectors.find((c) => c.kind === 'altum' && (!args[1] || c.name === args[1]));
-  if (!connector?.project_id) throw new Error('uso: lead [conector altum] — este repositorio todavía no está unido a un proyecto de Altum (/sn-connect)');
-  process.stdout.write(leadText(await projectLead(connector)));
-}
+else if (command === 'lead') await lead(config);
 else if (command === 'repos') await repos(config);
 else if (command === 'asegurar') await asegurar(config);
 else if (command === 'quitar-repo') await quitarRepo(config);
