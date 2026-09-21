@@ -32,7 +32,13 @@ async function motivoParaNoUnir(cwd) {
   try {
     const { execFileSync } = await import('node:child_process');
     const { readFileSync } = await import('node:fs');
-    const lider = JSON.parse(readFileSync(`${cwd}/.sn/state/altum-lider.json`, 'utf8'));
+    const archivo = `${cwd}/.sn/state/altum-lider.json`;
+    const { existsSync } = await import('node:fs');
+    if (!existsSync(archivo) && existsSync(`${cwd}/scripts/sn/sn-sync.mjs`)) {
+      // Aún no se sabe quién es el líder en este computador: se pregunta a Altum antes de decidir.
+      try { execFileSync(process.execPath, [`${cwd}/scripts/sn/sn-sync.mjs`, 'lead', '--github'], { cwd, stdio: 'ignore', timeout: 15000 }); } catch { /* sin clave o sin red */ }
+    }
+    const lider = JSON.parse(readFileSync(archivo, 'utf8'));
     if (!lider?.github) return ''; // sin líder conocido con GitHub no se puede comprobar: no se bloquea
     const yo = execFileSync('gh', ['api', 'user', '--jq', '.login'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim();
     if (yo && yo.toLowerCase() !== lider.github.toLowerCase()) {

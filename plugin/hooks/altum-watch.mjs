@@ -95,6 +95,8 @@ try {
       // En segundo plano: el vigilante y la comprobación de si el proyecto ya tiene repositorio registrado.
       if (connector.watch !== false) spawn(process.execPath, [script, 'watch', connector.name, '--background'], { cwd: root, detached: true, stdio: 'ignore' }).unref();
       spawn(process.execPath, [script, 'repo-check'], { cwd: root, detached: true, stdio: 'ignore' }).unref();
+      // Deja al líder de Altum guardado desde el primer minuto: el candado "solo el líder une el PR" lo necesita.
+      spawn(process.execPath, [script, 'lead', '--github'], { cwd: root, detached: true, stdio: 'ignore' }).unref();
     } else if (event === 'SessionEnd') {
       execFileSync(process.execPath, [script, 'watch-stop'], { cwd: root, stdio: 'ignore', timeout: 5000 });
     } else if (event === 'UserPromptSubmit' && !tieneClave) {
