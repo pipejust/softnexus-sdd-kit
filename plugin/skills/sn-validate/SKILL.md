@@ -41,6 +41,7 @@ Resume para el líder en lenguaje claro, máximo 10 líneas: qué problema resue
 Presenta los hallazgos ordenados por gravedad y propone una decisión: **APROBADO**, **CAMBIOS PEDIDOS** (con lista concreta) o **RECHAZADO** (con motivo).
 
 ## 4. Registrar la decisión (la toma el líder, no tú)
+Antes: `node scripts/sn/sn-sync.mjs lead` dice quién es el líder según Altum. Si quien está validando (`git config user.email`) es **la misma persona que pidió** la validación (línea `Pide:` de la solicitud), no registres APROBADO: quien escribió el código no se aprueba a sí mismo; dile que se lo mande al líder que dice Altum. Si no es el líder de Altum pero tampoco quien pidió, avísale en una línea y deja que decida.
 Pregunta al líder la decisión y sus notas. Luego, en la carpeta aparte:
 - Agrega la entrada al final de `validacion.md` (formato de la referencia; commit validado = `git rev-parse --short HEAD` de la rama antes de tu commit).
 - Commit `docs(<change>): <aprobado|cambios pedidos|rechazado> <sello>` y `git push origin HEAD:<rama>`.
