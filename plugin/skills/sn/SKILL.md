@@ -98,7 +98,9 @@ Usa la skill `sn-ship` (modo PR). Si el riesgo es R2 o más, usa después `sn-re
 "✅ Listo para revisión. Ahora: 1) abre una sesión NUEVA de Claude y escribe `/code-review` (el que construyó no se revisa a sí mismo); 2) prueba tú mismo en el enlace de vista previa; 3) cuando el PR se apruebe y se una a main, escribe `/sn` otra vez y te ayudo a cerrar."
 
 ## Paso 10 — Cerrar (cuando el PR ya está unido a main)
-Si al entrar detectas un change cuyo PR ya está merged (`gh pr view --json state`): usa `openspec-archive-change`, luego `sn-explain` (microlección de 5 min). Si hubo retrabajo o errores en el camino, sugiere `sn-learn`.
+Si al entrar detectas un change cuyo PR ya está merged (`gh pr view --json state`): usa `openspec-archive-change` y haz commit del archivo.
+**Luego confirma que la tarea quedó cerrada en Altum:** `node scripts/sn/sn-sync.mjs asegurar <ID del ítem>`. Debe decir "Cerrada en Altum"; díselo a la persona con el número ("La tarea #152 quedó cerrada en Altum"). Si dice que sigue abierta o Altum responde que la bloquea otra tarea, explica cuál y que se cerrará cuando esa termine: no lo des por terminado sin decirlo.
+Después, `sn-explain` (microlección de 5 min). Si hubo retrabajo o errores en el camino, sugiere `sn-learn`.
 
 ## Reglas de conversación
 - Una pregunta a la vez cuando la persona es nueva; máximo 3 por ronda.

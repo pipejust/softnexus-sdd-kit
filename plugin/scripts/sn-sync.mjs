@@ -23,7 +23,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { hasKey, keyName, NotRetryable } from './sync/altum.mjs';
+import { hasKey, keyName, listTasks, NotRetryable, projectStates } from './sync/altum.mjs';
 import { addProjectRepo, backlogMarkdown, checkProjectRepo, fetchAltumTask, leadText, listProjects, listRepos, projectLead, pullAltum, readBacklog, removeProjectRepo, repoReminder, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
 import { alreadyThere, cloneProject, findProject, findRepo, targetDir } from './sync/altum-clone.mjs';
 import { clearInbox, describe, isWatching, readInbox, stopWatch, watch } from './sync/altum-watch.mjs';
@@ -360,7 +360,12 @@ async function asegurar(config) {
   if (!item) throw new Error(`no existe el ítem ${id} en docs/items/.`);
   // ¿La tarea que dice el ítem existe de verdad en Altum? (pudo borrarse o ser de otro proyecto)
   const existente = async (taskId) => {
-    if (!taskId) return null;
+    // Sin enlace en el ítem (p. ej. otro computador), se busca por external_ref = ID del ítem.
+    if (!taskId) {
+      const { items } = await listTasks(connector, { project_id: connector.project_id, external_ref: item.id });
+      if (items[0] && item.file) setExternalId(item.file, connector.name, items[0].id);
+      return items[0] || null;
+    }
     try {
       const tarea = await fetchAltumTask(connector, taskId);
       return tarea?.id ? tarea : null;
@@ -370,7 +375,11 @@ async function asegurar(config) {
     }
   };
   let tarea = await existente(item.external?.[connector.name]);
-  if (!tarea) {
+  if (tarea) {
+    // Ya existe: se le lleva la etapa actual del ítem (al cerrar, esto la deja terminada en Altum).
+    await deliver(connector, { specversion: '1.0', id: `${item.id}:asegurar`, type: 'sn.item.upserted', project: config.project, time: new Date().toISOString(), actor: localActor(), item });
+    tarea = await existente(item.external?.[connector.name]);
+  } else {
     // Si el ítem apuntaba a una tarea que ya no existe (se borró en Altum), se olvida ese enlace y se crea de nuevo.
     const anterior = item.external?.[connector.name];
     const sinEnlace = { ...item, external: { ...(item.external || {}), [connector.name]: undefined }, ...(anterior ? { recrear: anterior } : {}) };
@@ -381,7 +390,14 @@ async function asegurar(config) {
   if (!tarea) throw new Error(`no pude confirmar la tarea de ${item.id} en Altum. Revisa "status" y vuelve a intentar antes de construir.`);
   const numero = tarea.number ? `#${tarea.number}` : tarea.id;
   console.log(`Tarea en Altum ${numero}: ${tarea.title} · estado ${tarea.state}`);
-  console.log(`Ítem ${item.id} enlazado (ext.${connector.name}: ${tarea.id}). Ya se puede construir.`);
+  if (item.stage === 'done') {
+    const { done } = await projectStates(connector);
+    const cerrada = [...done, 'done', 'cancelled'].includes(tarea.state);
+    console.log(cerrada ? `Cerrada en Altum: ${item.id} terminó.` : `OJO: el ítem terminó pero la tarea sigue en "${tarea.state}" en Altum.`);
+    if (!cerrada) process.exitCode = 1;
+  } else {
+    console.log(`Ítem ${item.id} enlazado (ext.${connector.name}: ${tarea.id}). Ya se puede construir.`);
+  }
 }
 
 // quitar-repo <proyecto> <nombre o dirección> --si: saca un repositorio mal registrado del proyecto.
