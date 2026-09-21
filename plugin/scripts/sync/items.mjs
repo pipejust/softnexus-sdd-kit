@@ -54,6 +54,8 @@ export function readItems(root = '.') {
         origin: data.origin || '',
         created: data.created || '',
         parent: data.parent || '',
+        // "descartado: <motivo>": se decidió no hacerlo. Queda escrito por qué y la tarea se cancela en Altum.
+        discarded: data.descartado || '',
         external: externalIds(data),
         ready: /dado|given/i.test(criteria) && !/\?\s*$/m.test(section(body, 'Preguntas abiertas')),
         story: section(body, 'Historia'),

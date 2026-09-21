@@ -5,6 +5,7 @@
 // Una clave por empresa (X-API-Key); el resto del contrato es igual para todas.
 import { execFileSync } from 'node:child_process';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import { findMark, itemPlainBody } from './body.mjs';
 import { setExternalId } from './items.mjs';
@@ -30,6 +31,14 @@ export function selfKeyId(connector) {
 }
 
 const DEFAULT_BASE = 'https://servicios.softnexus.io/api/v1/api';
+const CLIENTE = (() => {
+  try {
+    const manifiesto = new URL('../../.claude-plugin/plugin.json', import.meta.url);
+    return `softnexus-sdd/${JSON.parse(readFileSync(manifiesto, 'utf8')).version}`;
+  } catch {
+    return 'softnexus-sdd'; // copia del motor dentro de un repositorio: sin manifiesto al lado
+  }
+})();
 const TIMEOUT_MS = 10000;
 const PAGE_LIMIT = 200; // máximo que acepta GET /tasks
 const MAX_SIGNATURE_AGE_S = 300;
@@ -37,7 +46,7 @@ const MAX_SIGNATURE_AGE_S = 300;
 // Etapa Softnexus -> estado Altum por defecto (sobrescribible con "status_map").
 const DEFAULT_STATUS = {
   triaged: 'new', ready: 'new', planning: 'active', plan_written: 'active', plan_approved: 'active',
-  building: 'active', built: 'active', verified: 'active', in_review: 'active', merged: 'closed', done: 'closed',
+  building: 'active', built: 'active', verified: 'active', in_review: 'active', merged: 'closed', done: 'closed', discarded: 'removed',
 };
 // Tipo de ítem -> kind de Altum (epica|feature|historia|requerimiento|tarea|bug|pendiente).
 const DEFAULT_KIND = { feature: 'historia', improvement: 'requerimiento', bug: 'bug', incident: 'bug', content: 'tarea', chore: 'tarea' };
@@ -53,7 +62,7 @@ export const ACTEN_STATES = ['pending', 'blocked', 'done', 'cancelled'];
 export const ACTEN_DONE = ['done', 'cancelled'];
 const ACTEN_STATUS = {
   triaged: 'pending', ready: 'pending', planning: 'pending', plan_written: 'pending', plan_approved: 'pending',
-  building: 'pending', built: 'pending', verified: 'pending', in_review: 'pending', merged: 'done', done: 'done',
+  building: 'pending', built: 'pending', verified: 'pending', in_review: 'pending', merged: 'done', done: 'done', discarded: 'cancelled',
 };
 
 // Altum promete UTC, pero las fechas de Acten viajan sin zona ("2026-08-20T17:07:23.569141"):
@@ -119,7 +128,11 @@ export async function api(connector, method, route, body, headers = {}) {
   const base = (connector.base_url || process.env.SN_ALTUM_BASE_URL || DEFAULT_BASE).replace(/\/$/, '');
   const response = await fetch(`${base}${route}`, {
     method,
-    headers: { 'X-API-Key': key(connector), 'Content-Type': 'application/json', Accept: 'application/json', ...headers },
+    // Quién escribe: el plugin, no "alguien". Altum puede mostrarlo en el historial de la tarea (pedido J).
+    headers: {
+      'X-API-Key': key(connector), 'Content-Type': 'application/json', Accept: 'application/json',
+      'User-Agent': CLIENTE, 'X-Client-Name': 'Plugin Softnexus', ...headers,
+    },
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
@@ -215,7 +228,9 @@ async function projectContext(connector) {
   const byRef = new Map(items.map((t) => [t.external_ref || findMark(t.description), t.id]).filter(([id]) => id));
   // En un PATCH, custom_fields REEMPLAZA el objeto: se guarda lo que ya tiene cada tarea para mezclarlo.
   const currentFields = new Map(items.map((t) => [t.id, t.custom_fields || {}]));
-  const context = { validStates: valid, estados, fields, byRef, currentFields };
+  // Cómo está cada tarea hoy en Altum: solo se envía lo que cambió (cada PATCH queda en el historial).
+  const current = new Map(items.map((t) => [t.id, t]));
+  const context = { validStates: valid, estados, fields, byRef, currentFields, current };
   runCache.set(connector.name, context);
   return context;
 }
@@ -234,7 +249,7 @@ export function priorityOf(item) {
 // Qué "kind" de Altum corresponde a cada etapa, para proyectos con workflow propio.
 const STAGE_KIND = {
   triaged: 'open', ready: 'open', planning: 'in_progress', plan_written: 'in_progress', plan_approved: 'in_progress',
-  building: 'in_progress', built: 'in_progress', verified: 'in_progress', in_review: 'in_progress', merged: 'done', done: 'done',
+  building: 'in_progress', built: 'in_progress', verified: 'in_progress', in_review: 'in_progress', merged: 'done', done: 'done', discarded: 'cancelled',
 };
 
 // Estado a enviar: el de status_map o el de siempre si el proyecto lo tiene; si no (workflow propio),
@@ -246,13 +261,21 @@ export function estadoPara(stage, estados, statusMap = {}) {
   const wanted = statusMap[stage] || DEFAULT_STATUS[stage];
   if (valid.includes(wanted)) return wanted;
   const kind = STAGE_KIND[stage];
-  const mismos = estados.filter((s) => s.kind === kind);
+  let mismos = estados.filter((s) => s.kind === kind);
+  // Descartado sin estado de "cancelado" en el workflow: se cierra igual (nunca queda abierta).
+  if (!mismos.length && kind === 'cancelled') mismos = estados.filter((s) => s.kind === 'done');
   if (!mismos.length) return null;
-  return (['merged', 'done'].includes(stage) ? mismos[mismos.length - 1] : mismos[0]).key;
+  return (['merged', 'done', 'discarded'].includes(stage) ? mismos[mismos.length - 1] : mismos[0]).key;
 }
 
 function stateFor(connector, item, estados) {
   return estadoPara(item.stage, estados, connector.status_map);
+}
+
+// Solo los campos que de verdad cambian. Altum guarda en el historial cada PATCH con el antes y el
+// después completos, así que mandar lo mismo otra vez solo ensucia ese historial.
+function soloCambios(actual = {}, deseado) {
+  return Object.fromEntries(Object.entries(deseado).filter(([k, v]) => JSON.stringify(actual[k] ?? null) !== JSON.stringify(v ?? null)));
 }
 
 export async function deliverAltum(connector, evt) {
@@ -262,7 +285,7 @@ export async function deliverAltum(connector, evt) {
     return;
   }
   const { item } = evt;
-  const { estados, fields, byRef, currentFields } = await projectContext(connector);
+  const { estados, fields, byRef, currentFields, current } = await projectContext(connector);
   const description = itemPlainBody(evt);
   const email = item.assignee.match(/<([^>]+@[^>]+)>/)?.[1] || '';
   const assignee = connector.assignee_map?.[email || item.assignee];
@@ -272,10 +295,13 @@ export async function deliverAltum(connector, evt) {
   // Prioridad, campos propios, etiquetas o external_ref responderían 422, así que ni se envían.
   if (esDeActen({ id: taskId })) {
     const estado = connector.acten_status_map?.[item.stage] || ACTEN_STATUS[item.stage];
-    const actualizada = await api(connector, 'PATCH', `/tasks/${encodeURIComponent(taskId)}`, {
+    const cambios = soloCambios(current.get(taskId), {
       title: taskTitle(item), description,
       ...(ACTEN_STATES.includes(estado) ? { state: estado } : {}), ...(assignee ? { assignee_id: assignee } : {}),
     });
+    if (!Object.keys(cambios).length) return;
+    const actualizada = await api(connector, 'PATCH', `/tasks/${encodeURIComponent(taskId)}`, cambios);
+    current.set(taskId, { ...current.get(taskId), ...cambios, ...actualizada });
     recordPush(connector, { ...actualizada, id: taskId });
     return;
   }
@@ -284,15 +310,21 @@ export async function deliverAltum(connector, evt) {
     taskId = created.id;
     byRef.set(item.id, taskId);
     currentFields.set(taskId, created.custom_fields || ours);
+    // Recién creada con título, descripción y prioridad: el PATCH de abajo solo lleva lo que falte (p. ej. el estado).
+    current.set(taskId, created);
+    recordPush(connector, created); // también es un cambio nuestro: el vigilante no debe avisarlo
     if (item.file) setExternalId(item.file, connector.name, taskId); // queda en el repo con el siguiente commit
   }
   const state = stateFor(connector, item, estados);
   const customFields = Object.keys(ours).length ? { custom_fields: { ...(currentFields.get(taskId) || {}), ...ours } } : {};
-  const updated = await api(connector, 'PATCH', `/tasks/${taskId}`, {
+  const cambios = soloCambios(current.get(taskId), {
     title: taskTitle(item), description, priority: priorityOf(item),
     ...(state ? { state } : {}), ...(assignee ? { assignee_id: assignee } : {}), ...customFields,
   });
+  if (!Object.keys(cambios).length) return; // nada cambió: la tarea no se toca
+  const updated = await api(connector, 'PATCH', `/tasks/${taskId}`, cambios);
   if (updated?.custom_fields) currentFields.set(taskId, updated.custom_fields);
+  current.set(taskId, { ...current.get(taskId), ...cambios, ...updated });
   recordPush(connector, { ...updated, id: taskId });
 }
 
