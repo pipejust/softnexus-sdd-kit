@@ -8,7 +8,7 @@ description: Dice en qué punto del camino Spec Driven va cada ítem y cuál es 
 No guardes el estado en ningún archivo: **dedúcelo** de lo que existe. Así nunca se desactualiza.
 
 ## Antes del estado: el repositorio en Altum
-Si `node scripts/sn/sn-sync.mjs repo-check` dice que el proyecto no tiene registrado de dónde se clona, menciónalo en la primera línea y ofrece registrarlo (`… set-repo <clave>`). Es lo que permite que cualquiera del equipo lo traiga por su nombre.
+Si `node scripts/sn/sn-sync.mjs repo-check` dice que el proyecto no tiene registrado de dónde se clona, menciónalo en la primera línea y ofrece registrarlo (`… set-repo "<nombre>"`). Es lo que permite que cualquiera del equipo lo traiga por su nombre.
 
 ## Cómo deducir la etapa de cada change activo
 Primero `git fetch --quiet` (si hay remoto): una validación hecha por el líder desde otro computador llega por git. Si la rama remota tiene commits nuevos, di "Hay novedades: haz `git pull`" antes de todo.

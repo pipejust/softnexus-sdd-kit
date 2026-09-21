@@ -11,11 +11,11 @@ Las plantillas están en `${CLAUDE_PLUGIN_ROOT}/plantillas/` (dentro del plugin 
 Antes de nada, comprueba si ya la tiene: `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" whoami`. Si falta, ofrécele guardarla siguiendo `${CLAUDE_PLUGIN_ROOT}/references/clave-altum.md` (la genera en su perfil de Altum y la pega en la terminal, nunca en el chat). Con la clave lista, el agente ya sabe quién es y qué proyectos tiene asignados. Si dice que no, sigue sin Altum.
 
 ## 0b. ¿La persona ya tiene el proyecto en su computador?
-Si dice "no lo tengo", "clóname el proyecto X" o abrió una carpeta vacía, tráelo con `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" clone <nombre o clave>`: lo busca en Altum por su nombre (sin importar tildes ni mayúsculas) y lo clona desde el repositorio que ese proyecto tiene registrado. Si hay varios parecidos, los muestra para elegir; si no tiene repositorio registrado, hay que registrarlo antes (`… set-repo <clave>`). Para ver todos: `… projects`.
+Si dice "no lo tengo", "clóname el proyecto X" o abrió una carpeta vacía, tráelo con `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" clone "<nombre>"`: lo busca en Altum por su nombre (sin importar tildes ni mayúsculas) y lo clona desde el repositorio que ese proyecto tiene registrado. Si hay varios parecidos, los muestra para elegir; si no tiene repositorio registrado, hay que registrarlo antes (`… set-repo "<nombre>"`). Para ver todos: `… projects`.
 
 **Antes de clonar, pregunta SIEMPRE dónde ponerlo.** El comando **se niega a clonar si no le das ruta** (no hay carpeta por defecto) y el guard bloquea `git clone` sin destino, así que no hay forma de saltarse este paso. Pregunta en una sola línea, con ejemplo:
 "¿En qué carpeta lo dejo? Puedes darme una carpeta madre (ej. `~/Proyectos`) y yo creo adentro la del proyecto, o la ruta exacta donde quieres que quede el contenido (ej. `~/Proyectos/cursos`)."
-- Carpeta madre → `… clone <nombre> --in ~/Proyectos` → queda en `~/Proyectos/<clave-del-proyecto>`.
+- Carpeta madre → `… clone <nombre> --in ~/Proyectos` → queda en `~/Proyectos/<nombre-del-proyecto>`.
 - Ruta exacta → `… clone <nombre> --into ~/Proyectos/cursos` → el contenido del repositorio queda ahí, **sin otra carpeta dentro**.
 - Aquí mismo → `… clone <nombre> --here` (solo si la carpeta actual está vacía).
 - **Si el proyecto tiene varios repositorios**, el comando los lista y exige `--repo <nombre>`: pregúntale a la persona cuál quiere antes de seguir.
@@ -50,7 +50,7 @@ Si la carpeta madre ya se llama como el proyecto, no se crea otra igual adentro.
 - `.github/pull_request_template.md` y `.claude/settings.json` desde la plantilla (ajusta el gestor de paquetes en permisos y hooks: pnpm/npm/yarn).
 - `docs/aprendizajes.md` vacío con encabezado.
 - `docs/items/_plantilla.md` desde la plantilla (aquí vivirán las historias y bugs como texto).
-- **Altum:** con la clave del paso 0, corre `node scripts/sn/sn-sync.mjs whoami`, muéstrale sus proyectos asignados, propón el que corresponde a este repositorio y conéctalo con `/sn-connect`. Pregunta también por mensajería (Matrix) o Orca/GitHub.
+- **Altum:** con la clave del paso 0, corre `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" conectar`: reconoce el proyecto por el repositorio y lo conecta solo. Si varios proyectos usan ese repositorio, pregúntale **por el nombre** en cuál va a trabajar y corre `… conectar "<nombre>"`. **Nunca le pidas a nadie una "clave del proyecto" ni un nombre corto**: el proyecto sale solo del repositorio. El resto de la conexión, con `/sn-connect`. Pregunta también por mensajería (Matrix) o Orca/GitHub.
 
 ## 5. Primeras specs (opcional, recomendado)
 No documentes todo el sistema. Pregunta: "¿Cuál es la parte más importante o más frágil del sistema?" y ofrece usar `openspec-explore` sobre esa área para dejar su spec base.
