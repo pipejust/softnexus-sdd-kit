@@ -428,6 +428,24 @@ function dividir(config) {
   console.log(`➡️ Siguiente para ${item.id}: evidencia (sn-evidence) y PR. ${nuevo} empieza su camino cuando lo tomen con /sn.`);
 }
 
+// pedir-config: la configuración que solo hace el líder (clave de empresa en los secretos, revisión
+// automática, protección de la rama). Al líder le dice que es suya; a cualquier otra persona, que no
+// tiene nada que hacer. A alguien del equipo nunca se le muestran esas instrucciones.
+async function pedirConfig(config) {
+  const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
+  let lider = null;
+  try { lider = connector ? await projectLead(connector) : null; } catch { lider = null; }
+  const origen = origenRepo();
+  const proyecto = lider?.project || config?.project || path.basename(process.cwd());
+  const plataforma = origen.provider === 'azure_devops' ? 'Azure DevOps' : 'GitHub';
+  if (lider?.soyYo) {
+    console.log(`Eres el líder de "${proyecto}": estas tareas son tuyas. Corre /sn-connect y te guío paso a paso (clave de empresa en ${plataforma}, revisión automática y protección de la rama).`);
+    return;
+  }
+  // A una persona del equipo no se le pide nada de esto (ni que reenvíe mensajes): le aparece al líder.
+  console.log(`Nada que hacer de tu parte: la configuración del proyecto la hace ${lider?.name || 'el líder'} cuando abra "${proyecto}". Tú sigue con tu trabajo.`);
+}
+
 // repos [<clave o nombre>]: los repositorios que tiene ese proyecto en Altum (pueden ser varios).
 async function repos(config) {
   const connector = anyAltum(config);
@@ -696,6 +714,7 @@ else if (command === 'githooks') githooks();
 else if (command === 'projects') await projects(config);
 else if (command === 'lead') await lead(config);
 else if (command === 'repos') await repos(config);
+else if (command === 'pedir-config') await pedirConfig(config);
 else if (command === 'siguiente') siguiente(config);
 else if (command === 'dividir') dividir(config);
 else if (command === 'verificar-firma') await verificarFirma(config);
@@ -734,6 +753,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|pedir-config|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }

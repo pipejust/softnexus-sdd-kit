@@ -7,6 +7,11 @@ description: Conecta el proyecto con sistemas de tareas y mensajería para que h
 
 Contrato completo: `${CLAUDE_PLUGIN_ROOT}/references/integraciones.md`. Léelo antes de escribir la configuración.
 
+## Antes de todo: ¿quién está conectando?
+Corre `node scripts/sn/sn-sync.mjs lead`.
+- **Si la persona NO es el líder** (lo normal en el equipo): **lo único que necesita es su clave personal de Altum** (`references/clave-altum.md`). Con eso conectas su parte (el proyecto de Altum en `.sn/connectors.json`, registrar el repositorio) y **sigue con su trabajo**. **No le hables de nada más**: ni claves de empresa, ni secretos, ni workflows, ni CI, ni protección de ramas, ni tokens de GitHub o de Azure, ni mensajes para reenviar. Su sesión de GitHub (o de Azure) para subir su trabajo es asunto suyo y no es parte de este proceso.
+- **Si es el líder**: además de lo anterior, esta skill le hace la configuración del proyecto (CI, clave de empresa en los secretos, `proteger-rama`). Esa parte le aparece **a él** cuando abre el proyecto; nunca se le delega a alguien del equipo.
+
 ## 0. Qué quiere la persona
 - "Conectar" / "agregar" → pasos 1 a 6.
 - "Estado" → `node scripts/sn/sn-sync.mjs status` y explica en simple (conectores, última sincronización, pendientes en cola).
@@ -29,9 +34,9 @@ Se pueden tener varios a la vez.
 - Pide **solo el nombre** de la variable (ej. `SN_ALTUM_TOKEN`). **Si la persona pega un token en el chat, dile que lo revoque y genere uno nuevo**: quedó expuesto.
 - Explícale cómo definirla ella misma en su computador (fuera de esta conversación): agregar `export SN_ALTUM_TOKEN="…"` a su `~/.zshrc` (o variable de entorno de Windows) y abrir una terminal nueva.
 - Para el CI: los mismos nombres en GitHub → Settings → Secrets and variables → Actions.
-- Para `github` basta con haber iniciado sesión con `gh auth login`.
+- Para `github` basta con la sesión que la persona ya tenga en `gh` (si no la tiene, no es asunto de este proceso: su trabajo en Altum sigue funcionando).
 - **Altum: una sola clave personal, una sola vez, para todos sus proyectos** (paso a paso en `${CLAUDE_PLUGIN_ROOT}/references/clave-altum.md`). La persona la genera sola en Altum (**Mi perfil → Mis datos → "Tu clave personal de API" → Regenerar**; prefijo `sk_user_`, nace con `tasks:read`, `tasks:write`, `projects:read`) y la guarda con un comando que la pide sin mostrarla y la deja en el Llavero de macOS, exportada en esa terminal y en `~/.zshrc`: `source scripts/sn/sn-clave-altum.sh`. No hay que pedirle nada a un administrador ni repetirlo por proyecto. Si la regenera, vuelve a correr el comando. Esa clave alcanza **solo a los proyectos donde está asignada**: en otro, Altum responde `403 "No estás asignado a este proyecto"` y el líder la asigna en Altum (el acceso cambia al instante, sin regenerar nada).
-- **CI y servidores:** clave de empresa (`sk_live_`, la crea un administrador en Configuración → Claves de API) como secreto del repositorio: `gh secret set SN_ALTUM_KEY`.
+- **CI y servidores (solo en la sesión del líder):** clave de empresa (`sk_live_`, la crea un administrador en Configuración → Claves de API) como secreto del repositorio: `gh secret set SN_ALTUM_KEY`.
 - Cambios hechos a mano en Altum: **no hace falta n8n**. Con la clave definida, el plugin arranca solo un vigilante al abrir la sesión y avisa en el siguiente mensaje (y con notificación del sistema en macOS). Explícaselo a la persona. El webhook de Altum hacia un receptor propio es opcional (solo para avisos cuando nadie tiene la sesión abierta; referencia §7a).
 
 ## 3. Escribir la configuración

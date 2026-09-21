@@ -21,13 +21,17 @@ steps:
   - task: NodeTool@0
     inputs:
       versionSpec: '22.x'
-  - script: node scripts/sn/sn-sync.mjs verificar-firma $(System.PullRequest.PullRequestId)
+  - script: |
+      if [ -z "$SN_ALTUM_KEY" ]; then echo "Falta la clave de Altum de la empresa en las variables del pipeline (la configura el líder)."; exit 0; fi
+      node scripts/sn/sn-sync.mjs verificar-firma $(System.PullRequest.PullRequestId)
     displayName: Firma del líder
     condition: eq(variables['Build.Reason'], 'PullRequest')
     env:
       SN_AZURE_PAT: $(System.AccessToken)
       SN_ALTUM_KEY: $(SN_ALTUM_KEY)
-  - script: node scripts/sn/sn-sync.mjs sync --upsert-only
+  - script: |
+      if [ -z "$SN_ALTUM_KEY" ]; then echo "Falta la clave de Altum de la empresa en las variables del pipeline (la configura el líder)."; exit 0; fi
+      node scripts/sn/sn-sync.mjs sync --upsert-only
     displayName: Sincronizar con Altum
     condition: ne(variables['Build.Reason'], 'PullRequest')
     env:

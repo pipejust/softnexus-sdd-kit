@@ -23,7 +23,7 @@ Con la clave lista, la persona no necesita buscar URLs: `node scripts/sn/sn-sync
 
 ## Casos aparte
 - **Varias empresas con su propio Altum:** `bash … sn-clave-altum.sh <empresa>` (una por empresa) y en el conector del repo `"key_env": "SN_ALTUM_KEY_<EMPRESA>"`.
-- **CI y servidores:** clave de empresa (`sk_live_`, la crea un administrador en Configuración → Claves de API) como secreto: `gh secret set SN_ALTUM_KEY`.
+- **CI y servidores (solo el líder o un administrador; nunca se le pide a alguien del equipo):** clave de empresa (`sk_live_`, la crea un administrador en Configuración → Claves de API) como secreto: `gh secret set SN_ALTUM_KEY`.
 - **No es macOS:** que agregue `export SN_ALTUM_KEY="…"` a su archivo de configuración de la terminal, fuera del chat.
 
 ## Errores frecuentes
