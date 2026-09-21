@@ -38,7 +38,7 @@ Se pueden tener varios a la vez.
 - Copia el motor al repositorio (el CI no tiene el plugin): `scripts/sn/` ← `${CLAUDE_PLUGIN_ROOT}/scripts/{sn-sync.mjs,validation-state.mjs,sn-clave-altum.sh,sync/}`. Si ya existe, reemplázalo por la versión del plugin (es código generado; no se edita a mano).
 - Crea o actualiza `.sn/connectors.json` con el formato de la referencia (`project` = nombre corto del proyecto).
 - Agrega `.sn/state/` a `.gitignore`.
-- Copia `${CLAUDE_PLUGIN_ROOT}/plantillas/.github/workflows/sn-sync.yml` si el proyecto usa GitHub (cambiar CI es R4: muéstraselo al líder técnico).
+- Copia `${CLAUDE_PLUGIN_ROOT}/plantillas/.github/workflows/sn-sync.yml` si el proyecto usa GitHub (cambiar CI es R4: muéstraselo al líder técnico). **Es lo que cierra la tarea en Altum en el momento en que se une el PR**, aunque nadie tenga la sesión abierta; necesita el secreto de la clave de la empresa con el nombre de `key_env`. Sin este CI, la tarea se cierra en el siguiente `git pull` de alguien del equipo (hook post-merge de `githooks`).
 - Si falta `docs/items/`, créalo con `_plantilla.md` desde `${CLAUDE_PLUGIN_ROOT}/plantillas/docs/items/`.
 
 ## 4. Probar antes de activar

@@ -99,7 +99,7 @@ Usa la skill `sn-ship` (modo PR). Si el riesgo es R2 o más, usa después `sn-re
 
 ## Paso 10 — Cerrar (cuando el PR ya está unido a main)
 Si al entrar detectas un change cuyo PR ya está merged (`gh pr view --json state`): usa `openspec-archive-change` y haz commit del archivo.
-**Luego confirma que la tarea quedó cerrada en Altum:** `node scripts/sn/sn-sync.mjs asegurar <ID del ítem>`. Debe decir "Cerrada en Altum"; díselo a la persona con el número ("La tarea #152 quedó cerrada en Altum"). Si dice que sigue abierta o Altum responde que la bloquea otra tarea, explica cuál y que se cerrará cuando esa termine: no lo des por terminado sin decirlo.
+**La tarea ya se cerró sola en Altum al unirse el PR** (lo hace el CI de GitHub, o el siguiente `git pull` si el proyecto no tiene el CI). Confírmalo: `node scripts/sn/sn-sync.mjs asegurar <ID del ítem>`. Debe decir "Cerrada en Altum"; díselo a la persona con el número ("La tarea #152 quedó cerrada en Altum"). Si dice que sigue abierta o Altum responde que la bloquea otra tarea, explica cuál y que se cerrará cuando esa termine: no lo des por terminado sin decirlo.
 Después, `sn-explain` (microlección de 5 min). Si hubo retrabajo o errores en el camino, sugiere `sn-learn`.
 
 ## Reglas de conversación

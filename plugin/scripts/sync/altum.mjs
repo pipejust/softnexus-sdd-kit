@@ -37,7 +37,7 @@ const MAX_SIGNATURE_AGE_S = 300;
 // Etapa Softnexus -> estado Altum por defecto (sobrescribible con "status_map").
 const DEFAULT_STATUS = {
   triaged: 'new', ready: 'new', planning: 'active', plan_written: 'active', plan_approved: 'active',
-  building: 'active', built: 'active', verified: 'active', in_review: 'active', merged: 'resolved', done: 'closed',
+  building: 'active', built: 'active', verified: 'active', in_review: 'active', merged: 'closed', done: 'closed',
 };
 // Tipo de ítem -> kind de Altum (epica|feature|historia|requerimiento|tarea|bug|pendiente).
 const DEFAULT_KIND = { feature: 'historia', improvement: 'requerimiento', bug: 'bug', incident: 'bug', content: 'tarea', chore: 'tarea' };
@@ -239,7 +239,8 @@ const STAGE_KIND = {
 
 // Estado a enviar: el de status_map o el de siempre si el proyecto lo tiene; si no (workflow propio),
 // el equivalente por "kind" — así una tarea terminada SIEMPRE queda en un estado de terminado.
-// Al terminar se usa el ÚLTIMO estado "done" del workflow (el más cerrado); en los demás, el primero.
+// Al terminar (PR unido o plano archivado) se usa el ÚLTIMO estado "done" del workflow, el más cerrado;
+// en los demás, el primero. Unir el PR ya es terminar: la tarea se cierra ahí, sin esperar a nadie.
 export function estadoPara(stage, estados, statusMap = {}) {
   const valid = estados.map((s) => s.key);
   const wanted = statusMap[stage] || DEFAULT_STATUS[stage];
@@ -247,7 +248,7 @@ export function estadoPara(stage, estados, statusMap = {}) {
   const kind = STAGE_KIND[stage];
   const mismos = estados.filter((s) => s.kind === kind);
   if (!mismos.length) return null;
-  return (stage === 'done' ? mismos[mismos.length - 1] : mismos[0]).key;
+  return (['merged', 'done'].includes(stage) ? mismos[mismos.length - 1] : mismos[0]).key;
 }
 
 function stateFor(connector, item, estados) {
