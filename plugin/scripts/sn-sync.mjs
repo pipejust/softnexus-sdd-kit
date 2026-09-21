@@ -317,6 +317,17 @@ async function lead(config) {
     return console.log(l.github);
   }
   process.stdout.write(leadText(l));
+  // CODEOWNERS: el líder de Altum es el dueño del código; GitHub le pide la revisión de cada PR solo.
+  if (l?.github && existsSync('.git') && origenRepo().provider !== 'azure_devops') {
+    const linea = `* @${l.github}`;
+    const archivo = '.github/CODEOWNERS';
+    const actual = existsSync(archivo) ? readFileSync(archivo, 'utf8') : '';
+    if (!actual.split('\n').includes(linea)) {
+      mkdirSync('.github', { recursive: true });
+      writeFileSync(archivo, `# Lo mantiene el plugin Softnexus desde Altum (líder del proyecto). No se edita a mano.\n${linea}\n`);
+      console.log(`CODEOWNERS: ${l.name} (@${l.github}) queda como revisor de todos los PR.`);
+    }
+  }
   // AGENTS.md: si su línea del líder no coincide con Altum, se corrige.
   if (l?.name && existsSync('AGENTS.md')) {
     const texto = readFileSync('AGENTS.md', 'utf8');
@@ -364,6 +375,16 @@ function proteger() {
     return;
   }
   const base = `repos/${repo.nameWithOwner}/branches/${rama}/protection`;
+  try {
+    execFileSync('gh', ['api', base], { stdio: 'ignore', timeout: 15000 });
+  } catch (error) {
+    if (/Upgrade to GitHub Pro/i.test(String(error.stderr || error.message))) {
+      console.log(`GitHub no permite proteger ramas en repositorios PRIVADOS de cuentas gratuitas (${repo.nameWithOwner}). Opciones: GitHub Pro para la cuenta dueña, o pasar los repositorios a la organización con plan Team.`);
+      console.log('Mientras tanto, el control lo hace el plugin: solo el líder de Altum puede unir el PR (desde /sn-validate) y el líder queda como revisor automático (CODEOWNERS).');
+      process.exitCode = 1;
+      return;
+    }
+  }
   try {
     ghJson(['api', '-X', 'POST', `${base}/required_status_checks/contexts`, '--input', '-'], JSON.stringify({ contexts: ['Firma del líder'] }));
   } catch {
@@ -428,22 +449,33 @@ function dividir(config) {
   console.log(`➡️ Siguiente para ${item.id}: evidencia (sn-evidence) y PR. ${nuevo} empieza su camino cuando lo tomen con /sn.`);
 }
 
-// pedir-config: la configuración que solo hace el líder (clave de empresa en los secretos, revisión
-// automática, protección de la rama). Al líder le dice que es suya; a cualquier otra persona, que no
-// tiene nada que hacer. A alguien del equipo nunca se le muestran esas instrucciones.
-async function pedirConfig(config) {
-  const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
-  let lider = null;
-  try { lider = connector ? await projectLead(connector) : null; } catch { lider = null; }
+// Poner secretos y proteger la rama exige ser ADMINISTRADOR del repositorio (no basta con ser el líder
+// del proyecto en Altum). Y la clave de Altum de la empresa solo la crea un administrador de Altum.
+// Por eso esta configuración nunca se le pide al equipo ni al líder: la hace el administrador.
+function esAdminDelRepo() {
+  if (process.env.SN_SYNC_NO_GH === '1') return false;
+  try {
+    return execFileSync('gh', ['api', `repos/{owner}/{repo}`, '--jq', '.permissions.admin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim() === 'true';
+  } catch {
+    return false;
+  }
+}
+
+// pedir-config: ¿le toca a quien está trabajando configurar el proyecto? Solo si administra el repositorio.
+async function pedirConfig() {
   const origen = origenRepo();
-  const proyecto = lider?.project || config?.project || path.basename(process.cwd());
-  const plataforma = origen.provider === 'azure_devops' ? 'Azure DevOps' : 'GitHub';
-  if (lider?.soyYo) {
-    console.log(`Eres el líder de "${proyecto}": estas tareas son tuyas. Corre /sn-connect y te guío paso a paso (clave de empresa en ${plataforma}, revisión automática y protección de la rama).`);
+  if (origen.provider === 'azure_devops') {
+    console.log('Esta configuración la hace el administrador del proyecto de Azure DevOps (variable con la clave de empresa y política de la rama). A nadie más se le pide nada.');
     return;
   }
-  // A una persona del equipo no se le pide nada de esto (ni que reenvíe mensajes): le aparece al líder.
-  console.log(`Nada que hacer de tu parte: la configuración del proyecto la hace ${lider?.name || 'el líder'} cuando abra "${proyecto}". Tú sigue con tu trabajo.`);
+  if (esAdminDelRepo()) {
+    const hecho = existsSync('.github/workflows/sn-sync.yml') && existsSync('.github/workflows/firma-lider.yml');
+    console.log(hecho
+      ? 'Eres administrador de este repositorio y ya tiene las revisiones automáticas. Si falta el secreto con la clave de empresa o proteger la rama: /sn-connect.'
+      : 'Eres administrador de este repositorio: puedes dejarlo configurado (5 min, una vez): /sn-connect. Necesitas la clave de Altum de la empresa (Altum → Configuración → Claves de API).');
+    return;
+  }
+  console.log('Nada que hacer de tu parte: esta configuración la hace el administrador del repositorio. Tú sigue con tu trabajo; nada se pierde.');
 }
 
 // repos [<clave o nombre>]: los repositorios que tiene ese proyecto en Altum (pueden ser varios).
@@ -714,7 +746,7 @@ else if (command === 'githooks') githooks();
 else if (command === 'projects') await projects(config);
 else if (command === 'lead') await lead(config);
 else if (command === 'repos') await repos(config);
-else if (command === 'pedir-config') await pedirConfig(config);
+else if (command === 'pedir-config') await pedirConfig();
 else if (command === 'siguiente') siguiente(config);
 else if (command === 'dividir') dividir(config);
 else if (command === 'verificar-firma') await verificarFirma(config);
