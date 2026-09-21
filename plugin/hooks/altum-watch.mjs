@@ -48,7 +48,18 @@ function context(text, hookEventName = 'UserPromptSubmit') {
 // el agente no tiene forma de saber que este equipo trabaja con Spec Driven, así que se lo decimos al abrir la sesión.
 const MOTOR_DEL_PLUGIN = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'sn-sync.mjs');
 
-function orientacion(tieneClave) {
+function orientacion(tieneClave, esRepo = false) {
+  // Carpeta con un repositorio que la persona YA tenía clonado (lo más común): no se vuelve a clonar,
+  // se prepara aquí mismo y se adopta el trabajo que tenga a medias.
+  if (esRepo) {
+    const lineas = [
+      '[Softnexus] Este repositorio ya está en el computador de la persona pero todavía no tiene la metodología Spec Driven (no hay AGENTS.md ni motor en scripts/sn).',
+      'NO le propongas clonarlo de nuevo ni crear otra carpeta: se trabaja aquí mismo. Usa la skill `sn`: primero `git pull` de la rama principal (puede que alguien ya lo haya preparado); si sigue sin preparar, `sn-setup` lo prepara en su propia rama sin tocar su trabajo.',
+      'Si la persona estaba a mitad de un desarrollo (rama con cambios o commits), `sn` lo ADOPTA: crea su ficha y un plano con lo ya hecho y lo que falta, y sigue desde ahí. No se rehace nada.',
+    ];
+    if (!tieneClave) lineas.push(FALTA_CLAVE);
+    return lineas.join('\n');
+  }
   const lineas = [
     '[Softnexus] Esta carpeta todavía no es un proyecto preparado con la metodología Spec Driven de Softnexus, pero la persona sí trabaja con ella.',
     'Si pide traer un proyecto ("clóname X", "bájame el repositorio", "no tengo el proyecto"): NO busques repositorios a mano en GitHub ni en el disco. Usa la skill `sn` — Altum sabe de dónde se clona cada proyecto.',
@@ -71,7 +82,7 @@ try {
     // Sin proyecto preparado no hay vigilante ni bandeja: solo la orientación de apertura.
     if (event === 'SessionStart') {
       const { hasKey } = await import(pathToFileURL(path.join(path.dirname(MOTOR_DEL_PLUGIN), 'sync/altum.mjs')).href);
-      context(orientacion(hasKey({})), 'SessionStart');
+      context(orientacion(hasKey({}), existsSync(path.join(root, '.git'))), 'SessionStart');
     }
   } else {
     const connector = altumConnector(root);
