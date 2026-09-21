@@ -70,3 +70,10 @@ Rama: <rama> · Commit: <el de la solicitud>
 PR: <enlace, si existe>
 ```
 Si el proyecto tiene la variable `SN_NOTIFY_WEBHOOK` (webhook entrante del canal del equipo), `sn-request` ofrece enviarlo directamente, **siempre con confirmación de la persona**.
+
+## Rieles del proceso (no dependen de que el agente se acuerde)
+- `sn-sync siguiente [<ID>]`: paso actual y siguiente paso **exacto** del ítem, calculados desde el repo. Si hay un sello pendiente, ese es el siguiente paso.
+- Hook `proceso.mjs` (cada mensaje): le entrega al agente ese paso y el formato corto de respuesta (✅ hecho · ❓ necesito · ➡️ siguiente, máximo 6 líneas).
+- Guard: `gh pr create` / `az repos pr create` quedan **bloqueados** si el ítem de la rama no tiene sello 1 (plano aprobado; R3+ por el líder) o le falta la evidencia.
+- `sn-sync dividir <ID>`: cierra el plano con las tareas hechas y pasa las pendientes a un ítem nuevo (`parent: <ID>`), que nace con su propia tarea en Altum.
+- El sello del líder se exige donde el proceso lo pide: plano R3–R4, entrega R2+, o cuando hubo una SOLICITUD. Un plano R0–R2 lo aprueba la propia persona.

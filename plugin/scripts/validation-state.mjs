@@ -69,6 +69,27 @@ function liderGuardado(root = '.') {
 
 const correoDe = (texto) => String(texto || '').match(/<([^>]+@[^>]+)>/)?.[1]?.toLowerCase() || '';
 
+// Riesgo del ítem que usa este change (docs/items/*.md con "change: <nombre>").
+function riesgoDelChange(change, root = '.') {
+  const dir = path.join(root, 'docs/items');
+  if (!change || !existsSync(dir)) return '';
+  for (const f of readdirSync(dir).filter((n) => n.endsWith('.md'))) {
+    const texto = readFileSync(path.join(dir, f), 'utf8');
+    if (new RegExp(`^change:\\s*${change.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'm').test(texto)) {
+      return texto.match(/^risk:\s*(R\d)/m)?.[1] || '';
+    }
+  }
+  return '';
+}
+
+// ¿Este sello lo tiene que dar el líder? Plano R3–R4 y entrega R2+, o cuando se pidió su firma
+// (hay una SOLICITUD). Un plano R0–R2 lo aprueba la propia persona, como dice el proceso.
+function pideLider(entries, last, change) {
+  if (entries.some((e) => e.type === 'SOLICITUD' && e.seal === last.seal)) return true;
+  const nivel = Number((riesgoDelChange(change) || 'R0').slice(1));
+  return last.seal === 'plano' ? nivel >= 3 : nivel >= 2;
+}
+
 export function statusOf(entries, change, lider = liderGuardado()) {
   if (!entries.length) return { status: 'sin validación' };
   const last = entries[entries.length - 1];
@@ -76,7 +97,7 @@ export function statusOf(entries, change, lider = liderGuardado()) {
   if (last.type === 'SOLICITUD') return { ...base, status: 'esperando validación', commit: commitOf(last) };
   // Solo el líder que dice Altum puede aprobar, pedir cambios o detener. Una decisión escrita por
   // cualquier otra persona no cuenta: el plano sigue esperando la firma.
-  if (lider?.email && correoDe(last.fields.Valida) && correoDe(last.fields.Valida) !== lider.email.toLowerCase()) {
+  if (lider?.email && pideLider(entries, last, change) && correoDe(last.fields.Valida) && correoDe(last.fields.Valida) !== lider.email.toLowerCase()) {
     return { ...base, status: 'firma inválida', detail: `la firmó ${last.fields.Valida}, pero el líder es ${lider.name} <${lider.email}>` };
   }
   if (last.type === 'CAMBIOS PEDIDOS') return { ...base, status: 'con correcciones' };

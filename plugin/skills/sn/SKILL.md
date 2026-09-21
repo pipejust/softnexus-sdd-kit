@@ -7,6 +7,9 @@ description: La puerta única de Softnexus. Úsala también cuando alguien diga 
 
 La persona que te habla puede no saber programar. No le pidas que elija comandos ni que sepa el proceso: **el proceso lo sabes tú**. Ella solo trae el ítem y responde preguntas. Habla simple, frases cortas, una decisión a la vez.
 
+**Respuestas cortas (obligatorio).** Máximo 6 líneas salvo que pida detalle: `✅ qué quedó hecho` · `❓ lo único que necesitas de ella` · `➡️ Siguiente: …`. No narres cada comando ni listes todo lo que revisaste. La tarjeta, el plano y el mensaje al líder son las excepciones (tienen su propio formato).
+**El siguiente paso no lo decides tú.** Córrelo: `node scripts/sn/sn-sync.mjs siguiente` (en cada mensaje también te llega como "[Softnexus · proceso]"). Si dice que hay un **sello pendiente**, ese es el siguiente paso: nunca propongas abrir el PR, unir, ni pasar a otra cosa antes. El guard bloquea abrir un PR sin sello 1 o sin evidencia.
+
 ## Paso 0 — ¿Dónde estamos?
 0. Si la persona no sabe qué quiere hacer o pregunta qué comandos hay, usa la skill `sn-help`.
 0b. **Carpeta vacía o sin el proyecto todavía** (la persona dice "clóname X", "no tengo el proyecto", o la carpeta no tiene código): ve directo al paso 3a y trae el proyecto ANTES de preparar nada. No corras `sn-setup` sobre una carpeta vacía ni busques el repositorio a mano en GitHub.
@@ -65,6 +68,9 @@ Con el "sí", **crea el ítem** en `docs/items/<ID>.md` desde la plantilla (`${C
 Si faltan datos (quién, qué debe pasar, qué NO, casos borde, referencia visual, fuera de alcance, cómo se prueba) → usa la skill `sn-story`. Si ya está todo claro, escríbela tú directamente.
 Crea la rama: `<prefijo>/<ID del ítem>-<slug-corto>` (ej. `fix/CLI-260919-a3f2-login-bloqueado`) y anótala en `branch:` del ítem.
 
+## Paso 5b — Revisar el código ANTES del plano (obligatorio)
+El plano se escribe sobre lo que el código es hoy, no sobre lo que se supone. Antes de proponer nada, revisa el área como lo haría el revisor del PR: lee los archivos que se van a tocar y los que los usan, corre los tests de esa zona y busca **errores existentes, deuda, casos que ya fallan y restricciones** (tipos, migraciones, permisos, dependencias). Anótalos en el plano en una sección "Lo que encontré en el código", cada uno con una decisión: *entra en este plano* (con su tarea), *va aparte* (se crea otro ítem) o *no se toca* (y por qué). Así la revisión del final no descubre cosas que el plano debió prever.
+
 ## Paso 6 — Spec (OpenSpec)
 Usa la skill `openspec-propose` con un nombre kebab-case que empiece por el verbo (`add-…`, `fix-…`, `update-…`, `remove-…`), pasándole la historia completa del ítem. Anota el nombre en `change:` del ítem.
 Para **bug**, la spec debe incluir un escenario que describa el comportamiento correcto que hoy falla.
@@ -87,6 +93,7 @@ Luego usa la skill `openspec-apply-change`.
 - Lógica nueva o bug → primero un test que falla, luego el código (skill `test-driven-development` si está disponible).
 - Bug difícil → skill `systematic-debugging`.
 - Si durante la construcción descubres que la spec estaba mal: para, explica, actualiza la spec, pide aprobación de nuevo.
+- **Si aparece trabajo que no estaba en el plano, o conviene entregar ya lo hecho** (p. ej. van 5 de 7 tareas y las 2 restantes dependen de otra decisión): propón **dividir** en una línea. Con el "sí": `node scripts/sn/sn-sync.mjs dividir <ID>` cierra el plano con las tareas hechas y pasa las pendientes a un ítem nuevo (con su propia tarea en Altum). El ítem actual sigue a evidencia y PR con lo que sí se hizo; el nuevo empieza su propio camino. No metas trabajo nuevo en un plano ya aprobado sin volver a aprobarlo.
 - Mantén los archivos pequeños **sin que nadie lo pida**: lo sano es 200–400 líneas y el máximo 1000. Si un archivo que tocas se acerca a 800, pon el código nuevo en un módulo aparte con una responsabilidad clara en esa misma tarea. En código nuevo no se usa `sn-split`: el tamaño se cuida mientras se escribe.
 - Haz commits pequeños mientras avanzas con la skill `sn-ship` (modo commit).
 

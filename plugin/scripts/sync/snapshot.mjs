@@ -83,11 +83,11 @@ function lastActor(item) {
   return git(['log', '-1', '--format=%an <%ae>', '--', ...paths]);
 }
 
-export function takeSnapshot(projectName = '') {
+export function takeSnapshot(projectName = '', { solo = null } = {}) {
   const archived = archivedChanges();
   const project = projectName || path.basename(git(['rev-parse', '--show-toplevel']) || process.cwd());
   const source = git(['config', '--get', 'remote.origin.url']) || project;
-  const items = readItems().map((item) => {
+  const items = readItems().filter((item) => !solo || solo(item)).map((item) => {
     const pr = prInfo(item.branch);
     const stage = deriveStage(item, archived, pr);
     const progress = item.change ? tasksProgress(path.join(CHANGES, item.change)) : null;

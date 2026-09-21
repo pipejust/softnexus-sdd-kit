@@ -68,6 +68,14 @@
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/altum-watch.mjs\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/proceso.mjs\""
+          }
+        ]
       }
     ]
   }
