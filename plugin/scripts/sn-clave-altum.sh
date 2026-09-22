@@ -12,7 +12,16 @@
 # Sin "set -e": si esto se ejecuta con "source", un fallo no debe cerrar la terminal de la persona.
 sn_clave_altum() {
   if [ "$(uname)" != "Darwin" ]; then
-    echo "Este asistente usa el Llavero de macOS. En otro sistema, agrega el export a mano o pide ayuda al líder técnico."
+    case "$(uname -s)" in
+      MINGW*|MSYS*|CYGWIN*)
+        echo "Estás en Windows: usa el asistente de Windows, que guarda la clave cifrada para tu usuario."
+        echo "  powershell -ExecutionPolicy Bypass -File scripts\\sn\\sn-clave-altum.ps1"
+        ;;
+      *)
+        echo "Este asistente usa el Llavero de macOS (en Windows: sn-clave-altum.ps1)."
+        echo "En Linux, define la variable SN_ALTUM_KEY en tu terminal o pide ayuda al líder técnico."
+        ;;
+    esac
     return 1
   fi
 

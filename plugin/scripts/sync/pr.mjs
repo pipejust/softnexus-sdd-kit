@@ -9,7 +9,7 @@ const TIMEOUT_MS = 8000;
 
 function git(args) {
   try {
-    return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return execFileSync('git', args, { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return '';
   }
@@ -29,7 +29,7 @@ export function origenRepo() {
 function gh(args) {
   if (process.env.SN_SYNC_NO_GH === '1') return null;
   try {
-    return JSON.parse(execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: TIMEOUT_MS }));
+    return JSON.parse(execFileSync('gh', args, { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: TIMEOUT_MS }));
   } catch {
     return null;
   }
@@ -49,7 +49,7 @@ function azure(origen, ruta) {
   const url = `${base}/${encodeURIComponent(origen.org)}/${encodeURIComponent(origen.project)}/_apis/git/repositories/${encodeURIComponent(origen.repo)}${ruta}`;
   try {
     const salida = execFileSync('curl', ['-sS', '--fail', '--max-time', '8', '-K', '-', url], {
-      input: `user = ":${pat.replace(/"/g, '')}"\n`, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: TIMEOUT_MS + 2000,
+      input: `user = ":${pat.replace(/"/g, '')}"\n`, encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'], timeout: TIMEOUT_MS + 2000, windowsHide: true,
     });
     return JSON.parse(salida);
   } catch {

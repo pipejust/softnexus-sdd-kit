@@ -150,7 +150,7 @@ Contrato vigente de Altum: `altum-api-contrato.md`; resumen de lo que ya está e
 - **De empresa (`sk_live_…`):** la crea un administrador en Configuración → Claves de API eligiendo alcances; ve todos los proyectos. Para CI y servidores.
 - **Variable:** `SN_ALTUM_KEY` para todo (el `key_env` del conector solo se usa si la persona trabaja con varias empresas con su propio Altum: `SN_ALTUM_KEY_<EMPRESA>`).
 - **Dónde la busca el motor:** primero la variable de entorno; si no está (las apps de escritorio no leen `~/.zshrc`), en macOS la lee del **Llavero** con `security find-generic-password`. El valor se queda en memoria del proceso: nunca se imprime ni se escribe en disco.
-- **Guardarla:** `bash scripts/sn/sn-clave-altum.sh` (la pide sin mostrarla, la deja en el Llavero de macOS y la carga en cada terminal). **Comprobarla:** `sn-sync whoami` — funciona aunque el repositorio no esté conectado y lista los proyectos asignados.
+- **Guardarla:** `bash scripts/sn/sn-clave-altum.sh` en macOS (Llavero + línea en `~/.zshrc` que lo lee) o `powershell -ExecutionPolicy Bypass -File scripts\sn\sn-clave-altum.ps1` en Windows (cifrada con DPAPI para ese usuario en `%LOCALAPPDATA%\Softnexus\<VARIABLE>.dpapi`, sin variables de entorno ni perfil que editar). El motor la busca en el entorno y, si no está, en ese almacén; el valor solo vive en memoria. **Comprobarla:** `sn-sync whoami` — funciona aunque el repositorio no esté conectado y lista los proyectos asignados.
 - Límite 120 peticiones/minuto **por clave** (no por IP), sin otro límite diario u horario; con una clave por persona, el límite no se comparte.
 
 ## 7b. GitHub Issues (Orca, GitHub Projects)

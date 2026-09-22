@@ -1,6 +1,6 @@
 {
   "name": "softnexus-sdd",
-  "version": "0.40.0",
+  "version": "0.41.0",
   "description": "Metodología Spec Driven de Softnexus: puerta /sn, ayuda /sn-help, validación a distancia, historias en texto con trazabilidad (/sn-items), sincronización en tiempo real con Altum, GitHub/Orca, n8n y Matrix (/sn-connect), límite de 1000 líneas y guardas deterministas. Se usa junto con OpenSpec.",
   "author": {
     "name": "Softnexus"

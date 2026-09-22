@@ -36,11 +36,11 @@ async function motivoParaNoUnir(cwd) {
     const { existsSync } = await import('node:fs');
     if (!existsSync(archivo) && existsSync(`${cwd}/scripts/sn/sn-sync.mjs`)) {
       // Aún no se sabe quién es el líder en este computador: se pregunta a Altum antes de decidir.
-      try { execFileSync(process.execPath, [`${cwd}/scripts/sn/sn-sync.mjs`, 'lead', '--github'], { cwd, stdio: 'ignore', timeout: 15000 }); } catch { /* sin clave o sin red */ }
+      try { execFileSync(process.execPath, [`${cwd}/scripts/sn/sn-sync.mjs`, 'lead', '--github'], { cwd, stdio: 'ignore', timeout: 15000, windowsHide: true }); } catch { /* sin clave o sin red */ }
     }
     const lider = JSON.parse(readFileSync(archivo, 'utf8'));
     if (!lider?.github) return ''; // sin líder conocido con GitHub no se puede comprobar: no se bloquea
-    const yo = execFileSync('gh', ['api', 'user', '--jq', '.login'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim();
+    const yo = execFileSync('gh', ['api', 'user', '--jq', '.login'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim();
     if (yo && yo.toLowerCase() !== lider.github.toLowerCase()) {
       return `Solo el líder del proyecto (${lider.name}, @${lider.github}) une el PR: es quien cierra el proceso. Él lo hace desde su Claude con /sn-validate. Tú ya terminaste tu parte: el PR queda esperando su aprobación.`;
     }
@@ -57,7 +57,7 @@ async function motivoParaNoAbrirPr(cwd) {
     if (!existsSync(`${cwd}/docs/items`)) return '';
     process.chdir(cwd);
     process.env.SN_SYNC_NO_GH = '1'; // para abrir el PR no hace falta preguntarle a GitHub; así es rápido
-    const rama = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    const rama = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
     const aqui = new URL('../scripts/sync/', import.meta.url);
     const { takeSnapshot } = await import(new URL('snapshot.mjs', aqui).href);
     const { puedeAbrirPr } = await import(new URL('siguiente.mjs', aqui).href);

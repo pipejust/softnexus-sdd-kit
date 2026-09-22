@@ -14,7 +14,7 @@ const FIELD = /^-\s+(Pide|Valida|Rama|Commit|Commit validado|Riesgo|Qué validar
 
 function git(args) {
   try {
-    return execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return execFileSync('git', args, { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return '';
   }
@@ -22,7 +22,7 @@ function git(args) {
 
 function commitExists(commit) {
   try {
-    execFileSync('git', ['cat-file', '-e', `${commit}^{commit}`], { stdio: 'ignore' });
+    execFileSync('git', ['cat-file', '-e', `${commit}^{commit}`], { windowsHide: true, stdio: 'ignore' });
     return true;
   } catch {
     return false;

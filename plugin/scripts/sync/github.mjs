@@ -10,7 +10,7 @@ function token(connector) {
   const fromEnv = process.env[connector.token_env || ''] || process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
   if (fromEnv) return fromEnv;
   try {
-    return execFileSync('gh', ['auth', 'token'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return execFileSync('gh', ['auth', 'token'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     throw new Error('sin token de GitHub (inicia sesión con "gh auth login" o define GH_TOKEN)');
   }
@@ -18,7 +18,7 @@ function token(connector) {
 
 export function repoFromRemote() {
   try {
-    const url = execFileSync('git', ['config', '--get', 'remote.origin.url'], { encoding: 'utf8' }).trim();
+    const url = execFileSync('git', ['config', '--get', 'remote.origin.url'], { windowsHide: true, encoding: 'utf8' }).trim();
     const match = url.match(/github\.com[:/]([^/]+\/[^/.]+)(\.git)?$/);
     return match ? match[1] : '';
   } catch {

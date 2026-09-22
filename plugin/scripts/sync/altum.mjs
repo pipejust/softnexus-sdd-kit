@@ -5,8 +5,9 @@
 // Una clave por empresa (X-API-Key); el resto del contrato es igual para todas.
 import { execFileSync } from 'node:child_process';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 import { findMark, itemPlainBody } from './body.mjs';
 import { setExternalId } from './items.mjs';
 import { readState, writeState } from './store.mjs';
@@ -91,19 +92,45 @@ function blockersMessage(detail) {
 // guarda SU clave personal (dice quién es, de qué empresa y qué proyectos tiene asignados); en el CI,
 // la clave de la empresa. El plugin no distingue: Altum sabe de quién es cada clave (GET /me).
 //
-// Si la variable no está en el entorno (las apps de escritorio no leen ~/.zshrc), en macOS se busca en el
-// Llavero, donde la dejó sn-clave-altum.sh. El valor se queda en memoria: nunca se imprime ni se guarda.
+// Si la variable no está en el entorno (las apps de escritorio no leen ~/.zshrc ni el perfil de
+// PowerShell), se busca donde la dejó el asistente de la clave, cifrada por el sistema operativo:
+//   macOS   → Llavero (sn-clave-altum.sh)
+//   Windows → archivo cifrado con DPAPI para ese usuario (sn-clave-altum.ps1), en %LOCALAPPDATA%\Softnexus
+// El valor se queda en memoria: nunca se imprime ni se guarda en el repositorio.
 const keyCache = new Map();
 
+// Cómo se guarda la clave en cada sistema (el asistente la pide sin mostrarla y la deja cifrada).
+export const COMO_GUARDARLA = process.platform === 'win32'
+  ? '"powershell -ExecutionPolicy Bypass -File scripts\\sn\\sn-clave-altum.ps1"'
+  : '"source scripts/sn/sn-clave-altum.sh"';
+
+const ALMACEN_WINDOWS = (name) => path.join(process.env.LOCALAPPDATA || '', 'Softnexus', `${name}.dpapi`);
+
+function delLlavero(name) {
+  return execFileSync('security', ['find-generic-password', '-a', os.userInfo().username, '-s', name, '-w'],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000, windowsHide: true }).trim();
+}
+
+// DPAPI: lo que cifró ConvertFrom-SecureString solo lo descifra el mismo usuario en el mismo computador.
+function deDpapi(name) {
+  const archivo = ALMACEN_WINDOWS(name);
+  if (!existsSync(archivo)) return '';
+  const guion = '$e = Get-Content -Raw -LiteralPath $env:SN_ARCHIVO_CLAVE;'
+    + '$s = ConvertTo-SecureString $e.Trim();'
+    + '[Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($s))';
+  return execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-Command', guion],
+    { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000, windowsHide: true,
+      env: { ...process.env, SN_ARCHIVO_CLAVE: archivo } }).trim();
+}
+
 export function fromKeychain(name) {
-  if (process.platform !== 'darwin') return '';
   if (keyCache.has(name)) return keyCache.get(name);
   let value = '';
   try {
-    value = execFileSync('security', ['find-generic-password', '-a', os.userInfo().username, '-s', name, '-w'],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim();
+    if (process.platform === 'darwin') value = delLlavero(name);
+    else if (process.platform === 'win32') value = deDpapi(name);
   } catch {
-    value = ''; // no hay entrada en el Llavero
+    value = ''; // no hay clave guardada en este computador
   }
   keyCache.set(name, value);
   return value;
@@ -120,7 +147,7 @@ export function hasKey(connector) {
 function key(connector) {
   const name = keyName(connector);
   const value = process.env[name] || fromKeychain(name);
-  if (!value) throw new Error(`falta la clave de Altum (${name}): guárdala con "bash scripts/sn/sn-clave-altum.sh" (una sola vez, sirve para todos tus proyectos)`);
+  if (!value) throw new Error(`falta la clave de Altum (${name}): guárdala con ${COMO_GUARDARLA} (una sola vez, sirve para todos tus proyectos)`);
   return value;
 }
 
