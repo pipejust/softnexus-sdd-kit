@@ -25,7 +25,7 @@ try {
     ? RELEVANT_COMMAND.test(String(input.command ?? ''))
     : RELEVANT_PATH.test(path.relative(root, path.resolve(root, String(input.file_path ?? ''))));
   if (relevant && existsSync(path.join(root, '.sn/connectors.json')) && existsSync(script)) {
-    spawn(process.execPath, [script, 'sync', '--background'], { cwd: root, detached: true, stdio: 'ignore' }).unref();
+    spawn(process.execPath, [script, 'sync', '--background'], { windowsHide: true, cwd: root, detached: process.platform !== 'win32', stdio: 'ignore' }).unref();
   }
 } catch {
   // Payload ilegible o proyecto sin sincronización: no hacer nada.

@@ -94,12 +94,12 @@ try {
       if (shouldRemind(root)) context(FALTA_CLAVE, 'SessionStart');
     } else if (event === 'SessionStart' && connector?.project_id) {
       // En segundo plano: el vigilante y la comprobación de si el proyecto ya tiene repositorio registrado.
-      if (connector.watch !== false) spawn(process.execPath, [script, 'watch', connector.name, '--background'], { cwd: root, detached: true, stdio: 'ignore' }).unref();
-      spawn(process.execPath, [script, 'repo-check'], { cwd: root, detached: true, stdio: 'ignore' }).unref();
+      if (connector.watch !== false) spawn(process.execPath, [script, 'watch', connector.name, '--background'], { windowsHide: true, cwd: root, detached: process.platform !== 'win32', stdio: 'ignore' }).unref();
+      spawn(process.execPath, [script, 'repo-check'], { windowsHide: true, cwd: root, detached: process.platform !== 'win32', stdio: 'ignore' }).unref();
       // Deja al líder de Altum guardado desde el primer minuto: el candado "solo el líder une el PR" lo necesita.
-      spawn(process.execPath, [script, 'lead', '--github'], { cwd: root, detached: true, stdio: 'ignore' }).unref();
+      spawn(process.execPath, [script, 'lead', '--github'], { windowsHide: true, cwd: root, detached: process.platform !== 'win32', stdio: 'ignore' }).unref();
     } else if (event === 'SessionEnd') {
-      execFileSync(process.execPath, [script, 'watch-stop'], { cwd: root, stdio: 'ignore', timeout: 5000 });
+      execFileSync(process.execPath, [script, 'watch-stop'], { windowsHide: true, cwd: root, stdio: 'ignore', timeout: 5000 });
     } else if (event === 'UserPromptSubmit' && !tieneClave) {
       if (shouldRemind(root)) context(FALTA_CLAVE);
     } else if (event === 'UserPromptSubmit' && connector?.project_id) {
@@ -110,7 +110,7 @@ try {
       if (falta && shouldRemind(root, 'altum-repo-remind.json')) {
         avisos.push(`[Altum] ${falta}\nDíselo a la persona ANTES de seguir con lo suyo, en una línea, y ofrécele hacerlo tú.`);
       }
-      const notes = execFileSync(process.execPath, [script, 'inbox'], { cwd: root, encoding: 'utf8', timeout: 5000 }).trim();
+      const notes = execFileSync(process.execPath, [script, 'inbox'], { windowsHide: true, cwd: root, encoding: 'utf8', timeout: 5000 }).trim();
       if (notes && !notes.startsWith('Sin avisos')) {
         avisos.push(`[Altum] Novedades desde el último mensaje (menciónalas en una línea a la persona):\n${notes}`);
       }

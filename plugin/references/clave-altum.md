@@ -2,7 +2,7 @@
 
 **Una sola clave personal por persona sirve para todos sus proyectos.** No se pide a un administrador ni se repite por proyecto. Sin ella, la persona no ve sus proyectos ni sus tareas de Altum (todo lo demás del proceso funciona igual).
 
-**La clave nunca se escribe en el chat.** La persona la pega en su terminal; el comando la guarda en el Llavero de macOS y la carga en cada terminal nueva.
+**La clave nunca se escribe en el chat.** La persona la pega en su terminal y el comando la guarda cifrada por el propio sistema operativo: en **macOS** en el Llavero, en **Windows** con DPAPI (cifrada para ese usuario de ese computador). En los dos casos el plugin la lee solo: **no hay que definir variables de entorno ni tocar el perfil de la terminal**.
 
 ## Cuándo la pide el agente
 - **Al instalar el plugin** (alguien dice "instala esta skill" con la URL del repositorio): es el último paso de la instalación.
@@ -14,22 +14,24 @@
 1. **Comprobar si ya la tiene:** `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" whoami` (o `node scripts/sn/sn-sync.mjs whoami` si el repo ya tiene el motor). Si responde con su nombre y sus proyectos, ya está: pasa al paso 3.
 2. **Que la genere y la guarde:**
    - En Altum: **Mi perfil → Mis datos → "Tu clave personal de API" → Regenerar**. Empieza por `sk_user_` y Altum la muestra una sola vez.
-   - Dile: "no la pegues en el chat". Abre una pestaña de terminal y corre ahí **`source "${CLAUDE_PLUGIN_ROOT}/scripts/sn-clave-altum.sh"`** (con `source`, no con `bash`: así la variable queda lista también en esa terminal). El comando la pide sin mostrarla, la guarda en el Llavero, la exporta en esa terminal y agrega a `~/.zshrc` la línea que la carga en las siguientes. La clave nunca queda escrita en el archivo: la línea la lee del Llavero.
-   - No hace falta reiniciar nada: si la variable no está en el entorno (las apps de escritorio no leen `~/.zshrc`), el plugin busca la clave en el Llavero él mismo.
+   - Dile: "no la pegues en el chat". Abre una pestaña de terminal y corre ahí el asistente de su sistema. Pide la clave sin mostrarla en pantalla.
+     - **macOS:** `source "${CLAUDE_PLUGIN_ROOT}/scripts/sn-clave-altum.sh"` (con `source`, no con `bash`: así queda lista también en esa terminal). La guarda en el Llavero y agrega a `~/.zshrc` la línea que la carga en las siguientes; la clave nunca queda escrita en el archivo.
+     - **Windows:** `powershell -ExecutionPolicy Bypass -File "%CLAUDE_PLUGIN_ROOT%\scripts\sn-clave-altum.ps1"`. La guarda cifrada con DPAPI en `%LOCALAPPDATA%\Softnexus\SN_ALTUM_KEY.dpapi`, con permisos solo para ese usuario. **No define variables de entorno ni edita el perfil de PowerShell**: no hay nada más que configurar, y ese archivo copiado a otro computador no se puede descifrar.
+   - No hace falta reiniciar nada: si la variable no está en el entorno (las apps de escritorio no leen `~/.zshrc` ni el perfil de PowerShell), el plugin busca la clave donde la dejó el asistente (Llavero en Mac, DPAPI en Windows).
 3. **Comprobar y seguir:** `… whoami` muestra nombre, empresa y **proyectos asignados**. Si este repositorio corresponde a uno de ellos y no está unido, ofrécele conectarlo con `sn-connect`. Si el proyecto no aparece, no está asignada a él: que el líder del proyecto la agregue en Altum (el acceso cambia al instante, sin regenerar la clave).
 
 ## Después de la clave: traer el proyecto
 Con la clave lista, la persona no necesita buscar URLs: `node scripts/sn/sn-sync.mjs projects` lista sus proyectos por nombre y `… clone "<nombre>"` lo clona desde el repositorio que Altum tiene registrado en ese proyecto (`repo_url`). Si el proyecto no tiene repositorio registrado, hay que ponerlo en su ficha de Altum ("Repositorio" → Registrar); lo puede hacer cualquiera del equipo del proyecto. Dentro de un repositorio ya clonado, `… conectar` lo une con su proyecto sin preguntar nada (si varios proyectos usan ese repositorio, pregunta cuál por nombre).
 
 ## Casos aparte
-- **Varias empresas con su propio Altum:** `bash … sn-clave-altum.sh <empresa>` (una por empresa) y en el conector del repo `"key_env": "SN_ALTUM_KEY_<EMPRESA>"`.
+- **Varias empresas con su propio Altum:** `bash … sn-clave-altum.sh <empresa>` en Mac, `powershell … sn-clave-altum.ps1 <empresa>` en Windows (una por empresa) y en el conector del repo `"key_env": "SN_ALTUM_KEY_<EMPRESA>"`.
 - **CI y servidores (solo el líder o un administrador; nunca se le pide a alguien del equipo):** clave de empresa (`sk_live_`, la crea un administrador en Configuración → Claves de API) como secreto: `gh secret set SN_ALTUM_KEY`.
-- **No es macOS:** que agregue `export SN_ALTUM_KEY="…"` a su archivo de configuración de la terminal, fuera del chat.
+- **Linux:** no hay almacén del sistema equivalente; que agregue `export SN_ALTUM_KEY="…"` a su archivo de configuración de la terminal, fuera del chat.
 
 ## Errores frecuentes
 | Dice | Qué pasó | Qué hacer |
 |---|---|---|
-| `falta la clave de Altum (…)` | No la guardó, o el Llavero no tiene esa entrada | Paso 2 |
+| `falta la clave de Altum (…)` | No la guardó, o el almacén del sistema no tiene esa entrada (Llavero en Mac, `%LOCALAPPDATA%\Softnexus` en Windows) | Paso 2 |
 | `404 … no existe, o tu clave personal no alcanza ese proyecto` | El `project_id` está mal, o no estás asignado a ese proyecto | Comprueba con `whoami` y pide al líder que te asigne |
 | `401 clave de API inválida` | La regeneró (la anterior dejó de servir) o la copió incompleta | Repetir el paso 2 con la nueva |
 | `403 no estás asignado a este proyecto` | Su clave es personal y no está en ese proyecto | Que el líder la asigne en Altum |

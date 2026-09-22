@@ -51,7 +51,7 @@ export function cloneProject(project, parent, opciones = {}) {
   const url = opciones.repo?.url || project.repo;
   if (!url) throw new Error(`el proyecto "${project.name}" no tiene repositorio registrado en Altum: regístralo en su ficha ("Repositorios") y vuelve a intentar`);
   if (alreadyThere(dir)) return { dir, cloned: false };
-  execFileSync('git', ['clone', url, dir], { stdio: 'inherit' });
+  execFileSync('git', ['clone', url, dir], { windowsHide: true, stdio: 'inherit' });
   return { dir, cloned: true };
 }
 

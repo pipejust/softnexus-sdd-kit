@@ -50,7 +50,7 @@ const option = (name, fallback) => (args.includes(name) ? args[args.indexOf(name
 // Remoto "origin" de este repositorio, para registrarlo en Altum sin escribirlo a mano.
 function remoteUrl() {
   try {
-    return execFileSync('git', ['config', '--get', 'remote.origin.url'], { encoding: 'utf8' }).trim();
+    return execFileSync('git', ['config', '--get', 'remote.origin.url'], { windowsHide: true, encoding: 'utf8' }).trim();
   } catch {
     return '';
   }
@@ -58,8 +58,8 @@ function remoteUrl() {
 
 function localActor() {
   try {
-    const name = execFileSync('git', ['config', 'user.name'], { encoding: 'utf8' }).trim();
-    const email = execFileSync('git', ['config', 'user.email'], { encoding: 'utf8' }).trim();
+    const name = execFileSync('git', ['config', 'user.name'], { windowsHide: true, encoding: 'utf8' }).trim();
+    const email = execFileSync('git', ['config', 'user.email'], { windowsHide: true, encoding: 'utf8' }).trim();
     return `${name} <${email}>`;
   } catch {
     return '';
@@ -111,7 +111,7 @@ function upsertEvents(snapshot) {
 
 async function sync(config) {
   if (flag('--background')) {
-    spawn(process.execPath, [SELF, 'sync', '--delay'], { detached: true, stdio: 'ignore', cwd: process.cwd(), env: process.env }).unref();
+    spawn(process.execPath, [SELF, 'sync', '--delay'], { windowsHide: true, detached: process.platform !== 'win32', stdio: 'ignore', cwd: process.cwd(), env: process.env }).unref();
     return;
   }
   if (flag('--delay')) await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS));
@@ -212,7 +212,7 @@ function textoLibre(lista) {
 
 function gitOut(argumentos) {
   try {
-    return execFileSync('git', argumentos, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    return execFileSync('git', argumentos, { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch {
     return '';
   }
@@ -231,7 +231,7 @@ function changeActivo(nombre) {
 function urlDelPr(rama) {
   if (process.env.SN_SYNC_NO_GH) return '';
   try {
-    return JSON.parse(execFileSync('gh', ['pr', 'view', rama, '--json', 'url'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })).url || '';
+    return JSON.parse(execFileSync('gh', ['pr', 'view', rama, '--json', 'url'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })).url || '';
   } catch {
     return '';
   }
@@ -299,7 +299,7 @@ function lineaLider(l) {
 function cuentaGithubActual() {
   if (process.env.SN_SYNC_NO_GH === '1') return '';
   try {
-    return execFileSync('gh', ['api', 'user', '--jq', '.login'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim();
+    return execFileSync('gh', ['api', 'user', '--jq', '.login'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim();
   } catch {
     return '';
   }
@@ -366,7 +366,7 @@ function proteger() {
     console.log('En Azure DevOps se hace desde la política de la rama: Project settings → Repos → Policies → rama principal → Build validation → el pipeline de azure-pipelines-sn.yml, marcado como "Required". Así el PR no se puede completar sin la firma del líder.');
     return;
   }
-  const ghJson = (a, input) => JSON.parse(execFileSync('gh', a, { encoding: 'utf8', input, stdio: [input ? 'pipe' : 'ignore', 'pipe', 'pipe'], timeout: 15000 }) || 'null');
+  const ghJson = (a, input) => JSON.parse(execFileSync('gh', a, { windowsHide: true, encoding: 'utf8', input, stdio: [input ? 'pipe' : 'ignore', 'pipe', 'pipe'], timeout: 15000 }) || 'null');
   const repo = ghJson(['repo', 'view', '--json', 'nameWithOwner,defaultBranchRef']);
   const rama = repo.defaultBranchRef?.name || 'main';
   if (!flag('--si')) {
@@ -377,7 +377,7 @@ function proteger() {
   }
   const base = `repos/${repo.nameWithOwner}/branches/${rama}/protection`;
   try {
-    execFileSync('gh', ['api', base], { stdio: 'ignore', timeout: 15000 });
+    execFileSync('gh', ['api', base], { windowsHide: true, stdio: 'ignore', timeout: 15000 });
   } catch (error) {
     if (/Upgrade to GitHub Pro/i.test(String(error.stderr || error.message))) {
       console.log(`GitHub no permite proteger ramas en repositorios PRIVADOS de cuentas gratuitas (${repo.nameWithOwner}). Opciones: GitHub Pro para la cuenta dueña, o pasar los repositorios a la organización con plan Team.`);
@@ -456,7 +456,7 @@ function dividir(config) {
 function esAdminDelRepo() {
   if (process.env.SN_SYNC_NO_GH === '1') return false;
   try {
-    return execFileSync('gh', ['api', `repos/{owner}/{repo}`, '--jq', '.permissions.admin'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim() === 'true';
+    return execFileSync('gh', ['api', `repos/{owner}/{repo}`, '--jq', '.permissions.admin'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim() === 'true';
   } catch {
     return false;
   }
@@ -730,7 +730,7 @@ async function startWatch(config) {
   if (flag('--background')) {
     if (isWatching()) return;
     const rest = args.filter((a) => a !== '--background');
-    spawn(process.execPath, [SELF, ...rest], { detached: true, stdio: 'ignore', cwd: process.cwd(), env: process.env }).unref();
+    spawn(process.execPath, [SELF, ...rest], { windowsHide: true, detached: process.platform !== 'win32', stdio: 'ignore', cwd: process.cwd(), env: process.env }).unref();
     return;
   }
   await watch(connector, {
@@ -760,9 +760,9 @@ const HOOK_LINE = `( [ -f .sn/connectors.json ] && [ -f scripts/sn/sn-sync.mjs ]
 
 function githooks() {
   const configured = (() => {
-    try { return execFileSync('git', ['config', 'core.hooksPath'], { encoding: 'utf8' }).trim(); } catch { return ''; }
+    try { return execFileSync('git', ['config', 'core.hooksPath'], { encoding: 'utf8', windowsHide: true }).trim(); } catch { return ''; }
   })();
-  const dir = configured || execFileSync('git', ['rev-parse', '--git-path', 'hooks'], { encoding: 'utf8' }).trim();
+  const dir = configured || execFileSync('git', ['rev-parse', '--git-path', 'hooks'], { windowsHide: true, encoding: 'utf8' }).trim();
   mkdirSync(dir, { recursive: true });
   for (const hook of ['post-commit', 'post-merge', 'post-checkout', 'post-rewrite']) {
     const file = path.join(dir, hook);

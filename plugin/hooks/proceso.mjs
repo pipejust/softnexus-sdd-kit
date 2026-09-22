@@ -26,7 +26,7 @@ try {
     try {
       process.chdir(cwd);
       process.env.SN_SYNC_NO_GH = process.env.SN_SYNC_NO_GH || '';
-      const rama = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+      const rama = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
       const aqui = new URL('../scripts/sync/', import.meta.url);
       const { takeSnapshot } = await import(new URL('snapshot.mjs', aqui).href);
       const { siguientePaso } = await import(new URL('siguiente.mjs', aqui).href);
