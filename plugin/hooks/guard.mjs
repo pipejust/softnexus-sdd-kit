@@ -36,7 +36,10 @@ async function motivoParaNoUnir(cwd) {
     const { existsSync } = await import('node:fs');
     if (!existsSync(archivo) && existsSync(`${cwd}/scripts/sn/sn-sync.mjs`)) {
       // Aún no se sabe quién es el líder en este computador: se pregunta a Altum antes de decidir.
-      try { execFileSync(process.execPath, [`${cwd}/scripts/sn/sn-sync.mjs`, 'lead', '--github'], { cwd, stdio: 'ignore', timeout: 15000, windowsHide: true }); } catch { /* sin clave o sin red */ }
+      // Con el motor del plugin, que es el que la persona mantiene al día (la copia del repo puede ser vieja).
+      const { fileURLToPath } = await import('node:url');
+      const motor = `${fileURLToPath(new URL('../scripts/sn-sync.mjs', import.meta.url))}`;
+      try { execFileSync(process.execPath, [motor, 'lead', '--github'], { cwd, stdio: 'ignore', timeout: 15000, windowsHide: true }); } catch { /* sin clave o sin red */ }
     }
     const lider = JSON.parse(readFileSync(archivo, 'utf8'));
     if (!lider?.github) return ''; // sin líder conocido con GitHub no se puede comprobar: no se bloquea

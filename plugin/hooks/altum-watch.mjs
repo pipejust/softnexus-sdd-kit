@@ -77,9 +77,13 @@ const FALTA_CLAVE = '[Altum] Esta persona todavía no tiene guardada su clave pe
 try {
   const payload = JSON.parse(await readStdin());
   const root = payload.cwd || process.cwd();
-  const script = path.join(root, 'scripts/sn/sn-sync.mjs');
+  // El motor que se ejecuta es SIEMPRE el del plugin: la copia del repositorio (scripts/sn) puede ser
+  // más vieja, porque viaja en las ramas del proyecto y se actualiza cuando alguien la trae. Esa copia
+  // sigue siendo la del CI; aquí solo dice si el proyecto ya está preparado.
+  const preparado = path.join(root, 'scripts/sn/sn-sync.mjs');
+  const script = MOTOR_DEL_PLUGIN;
   const event = payload.hook_event_name;
-  if (!existsSync(script)) {
+  if (!existsSync(preparado)) {
     // Sin proyecto preparado no hay vigilante ni bandeja: solo la orientación de apertura.
     if (event === 'SessionStart') {
       const { hasKey } = await import(pathToFileURL(path.join(path.dirname(MOTOR_DEL_PLUGIN), 'sync/altum.mjs')).href);
@@ -88,7 +92,7 @@ try {
   } else {
     const connector = altumConnector(root);
     // La clave puede estar en el entorno o, en macOS, en el Llavero: se pregunta al motor.
-    const { hasKey } = await import(pathToFileURL(path.join(root, 'scripts/sn/sync/altum.mjs')).href);
+    const { hasKey } = await import(pathToFileURL(path.join(path.dirname(MOTOR_DEL_PLUGIN), 'sync/altum.mjs')).href);
     const tieneClave = hasKey(connector || {});
     if (event === 'SessionStart' && !tieneClave) {
       if (shouldRemind(root)) context(FALTA_CLAVE, 'SessionStart');

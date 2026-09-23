@@ -21,7 +21,7 @@
 //   node sn-sync.mjs githooks                                            activa la sync en commit/merge/pull (agrega, no reemplaza)
 // Se ejecuta en la raíz del repositorio. Sin .sn/connectors.json no hace nada (proyecto no conectado).
 import { execFileSync, spawn } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hasKey, keyName, listTasks, NotRetryable, projectStates } from './sync/altum.mjs';
@@ -507,6 +507,55 @@ async function projects(config) {
   console.log('\nPara empezar a trabajar en uno: clone "<nombre>"');
 }
 
+// motor [--actualizar]: la copia del motor dentro del repositorio (scripts/sn) es la que usa el CI y
+// viaja en las ramas del proyecto, así que puede quedarse atrás del plugin que cada persona actualiza.
+// Esto compara las dos y, con --actualizar, deja la copia igual a la del plugin (es código generado).
+const ARCHIVOS_MOTOR = ['sn-sync.mjs', 'validation-state.mjs', 'sn-clave-altum.sh', 'sn-clave-altum.ps1'];
+
+function archivosDelMotor(dir) {
+  const sueltos = ARCHIVOS_MOTOR.filter((f) => existsSync(path.join(dir, f)));
+  const modulos = existsSync(path.join(dir, 'sync'))
+    ? readdirSync(path.join(dir, 'sync')).filter((f) => f.endsWith('.mjs')).map((f) => path.join('sync', f))
+    : [];
+  return [...sueltos, ...modulos];
+}
+
+function motorDelPlugin() {
+  const raiz = process.env.CLAUDE_PLUGIN_ROOT;
+  return raiz ? path.join(raiz, 'scripts') : path.dirname(SELF);
+}
+
+function motor() {
+  const origen = motorDelPlugin();
+  const destino = path.resolve('scripts/sn');
+  if (path.resolve(origen) === destino) {
+    return console.log('Este repositorio no tiene copia propia del motor: usa la del plugin, que siempre está al día.');
+  }
+  if (!existsSync(destino)) return console.log('Este repositorio todavía no tiene el motor (scripts/sn). Lo instala /sn-setup.');
+  const nombres = [...new Set([...archivosDelMotor(origen), ...archivosDelMotor(destino)])];
+  const distintos = nombres.filter((f) => {
+    const a = path.join(origen, f);
+    const b = path.join(destino, f);
+    if (!existsSync(a) || !existsSync(b)) return true;
+    return readFileSync(a, 'utf8') !== readFileSync(b, 'utf8');
+  });
+  if (!distintos.length) return console.log('La copia del motor en el repositorio está igual que la del plugin.');
+  if (!flag('--actualizar')) {
+    console.log(`La copia del motor en scripts/sn no está igual que la del plugin (${distintos.length} archivo(s)): ${distintos.join(', ')}.`);
+    console.log('Los hooks del plugin ya usan el motor del plugin, así que tu sesión no se queda atrás; la copia del repositorio es la que usa el CI.');
+    console.log('Para dejarla igual (es código generado, no se edita a mano): motor --actualizar, y entrega el cambio con /sn-ship.');
+    return;
+  }
+  for (const f of distintos) {
+    const a = path.join(origen, f);
+    const b = path.join(destino, f);
+    if (!existsSync(a)) { rmSync(b, { force: true }); continue; }
+    mkdirSync(path.dirname(b), { recursive: true });
+    copyFileSync(a, b);
+  }
+  console.log(`Motor actualizado en scripts/sn (${distintos.length} archivo(s)). Entrégalo con /sn-ship: es lo que usa el CI.`);
+}
+
 // conectar [nombre]: une este repositorio con su proyecto de Altum sin pedirle nada a la persona.
 // La clave personal ya dice quién es; el remoto "origin" dice qué repositorio es; Altum sabe qué
 // proyectos lo usan. Uno solo → se conecta. Varios (un repositorio para varios proyectos) → se
@@ -798,6 +847,7 @@ else if (command === 'mensaje') await mensaje(config);
 else if (command === 'clone') await clone(config);
 else if (command === 'set-repo') await setRepo(config);
 else if (command === 'conectar') await conectar(config);
+else if (command === 'motor') motor();
 // repo-check: mira si el proyecto ya tiene repositorio registrado y lo deja anotado para el aviso.
 else if (command === 'repo-check') {
   const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
@@ -827,6 +877,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|pedir-config|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|conectar|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|pedir-config|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|conectar|motor|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }

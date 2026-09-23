@@ -50,6 +50,7 @@ Si la carpeta madre ya se llama como el proyecto, no se crea otra igual adentro.
 - `.github/pull_request_template.md` y `.claude/settings.json` desde la plantilla (ajusta el gestor de paquetes en permisos y hooks: pnpm/npm/yarn).
 - `docs/aprendizajes.md` vacío con encabezado.
 - `docs/items/_plantilla.md` desde la plantilla (aquí vivirán las historias y bugs como texto).
+- **Motor del proyecto:** deja `scripts/sn` igual al del plugin con `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" motor` y, si dice que hay diferencias, `… motor --actualizar` (es código generado; se entrega con el resto del cambio).
 - **Altum:** con la clave del paso 0, corre `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" conectar`: reconoce el proyecto por el repositorio y lo conecta solo. Si varios proyectos usan ese repositorio, pregúntale **por el nombre** en cuál va a trabajar y corre `… conectar "<nombre>"`. **Nunca le pidas a nadie una "clave del proyecto" ni un nombre corto**: el proyecto sale solo del repositorio. El resto de la conexión, con `/sn-connect`. Pregunta también por mensajería (Matrix) o Orca/GitHub.
 
 ## 5. Primeras specs (opcional, recomendado)
