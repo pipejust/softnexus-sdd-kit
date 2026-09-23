@@ -8,6 +8,8 @@ description: Dice en qué punto del camino Spec Driven va cada ítem y cuál es 
 No guardes el estado en ningún archivo: **dedúcelo** de lo que existe. Así nunca se desactualiza.
 
 ## Antes del estado: el repositorio en Altum
+Corre también `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" motor`: si la copia del motor del repositorio (`scripts/sn`, la que usa el CI) quedó atrás del plugin, dilo en una línea y ofrece actualizarla (`… motor --actualizar` y entrega con `/sn-ship`). La sesión de la persona no se ve afectada: los hooks usan siempre el motor del plugin.
+
 Si `node scripts/sn/sn-sync.mjs repo-check` dice que el proyecto no tiene registrado de dónde se clona, menciónalo en la primera línea y ofrece registrarlo (`… set-repo "<nombre>"`). Es lo que permite que cualquiera del equipo lo traiga por su nombre.
 
 ## Cómo deducir la etapa de cada change activo
