@@ -24,7 +24,7 @@ El líder solo va a ver lo que esté **en la rama remota**. Antes de pedir:
 - Sello **plano**: si no existe PR, crea uno en **borrador** con título `plan(<área>): <change>` y cuerpo = resumen del proposal + enlace a la carpeta del change.
 - Sello **entrega**: usa el PR existente (o créalo con `sn-ship` modo PR).
 - **Quién firma lo dice Altum, nunca `AGENTS.md` ni la cuenta de GitHub con la que estás trabajando.** Corre `node scripts/sn/sn-sync.mjs lead`: dice el líder del proyecto y, si `AGENTS.md` tenía otro escrito a mano, lo corrige solo (inclúyelo en el commit). No le preguntes a la persona quién es el líder.
-- Revisor del PR: `node scripts/sn/sn-sync.mjs lead --github` devuelve el usuario de GitHub del líder según Altum → `gh pr edit <pr> --add-reviewer <usuario>`. Si falla (sin usuario en Altum, o es tu propia cuenta), **no pidas revisor**: sigue, el mensaje del paso 4 es el aviso.
+- Revisor del PR: `node scripts/sn/sn-sync.mjs lead --github` devuelve el usuario de GitHub del líder según Altum → `gh pr edit <pr> --add-reviewer <usuario>`. Si falla (sin usuario en Altum, o es tu propia cuenta), **no pidas revisor**: sigue, el mensaje del paso 4 es el aviso. **Si el líder es la persona que está trabajando** (el comando lo dice: "eres el líder de este proyecto"), no hay a quién pedirle firma ni mensaje que mandar: dile que revise y registre su decisión con `/sn-validate` y que una el PR él mismo. Su PR ya cuenta como firmado para el CI.
 - Etiqueta: `gh label create sn:needs-validation --color FBCA04 --description "Esperando la firma del líder técnico" --force` (la crea si falta; no preguntes, es parte del proceso) y ponla en el PR.
 **Muestra a la persona lo que vas a publicar y pide confirmación antes** (es visible para otros).
 
