@@ -49,7 +49,9 @@ Para el sello `entrega`, "cambió después" significa cualquier commit en la ram
 Lo arma el motor, no el agente: `node scripts/sn/sn-sync.mjs mensaje [<change>] [--sello …] [--riesgo …] [--titulo …] [--que …] [--pr …]`.
 Saca de Altum el proyecto y **quién es el líder** (nombre y correo), y de git la rama, el commit de la solicitud y el PR.
 **Solo vale la firma del líder.** En `validacion.md`, una decisión (APROBADO, CAMBIOS PEDIDOS, RECHAZADO) cuyo `Valida:` no sea el correo del líder de Altum queda como **firma inválida** y el plano sigue esperando. En el PR, `sn-sync verificar-firma <n>` solo pasa si lo aprobó el líder (GitHub: su usuario de GitHub en Altum, última revisión de cada persona; Azure DevOps: su correo con voto 10 o 5), y nunca si el líder es el autor del PR. El CI (`firma-lider.yml` en GitHub, `azure-pipelines-sn.yml` en Azure) lo corre en cada PR; `proteger-rama` lo vuelve obligatorio en la rama principal de GitHub.
-**Fuente única del líder: Altum.** `sn-sync lead` corrige la línea de `AGENTS.md` si dice otra cosa, y `sn-sync lead --github` da el usuario de GitHub del líder para pedirle la revisión del PR (falla si no hay usuario en Altum o si es la misma cuenta de quien pide: nadie se revisa a sí mismo). La etiqueta `sn:needs-validation` se crea sola con `gh label create … --force`.
+**Fuente única del líder: Altum.** `sn-sync lead` corrige la línea de `AGENTS.md` si dice otra cosa, y `sn-sync lead --github` da el usuario de GitHub del líder para pedirle la revisión del PR (falla si no hay usuario en Altum, o si es la misma cuenta de quien pide: el líder no se pide revisión a sí mismo porque no la necesita — su PR lo firma y lo une él).
+
+**Cuando el PR lo abre el propio líder**, `verificar-firma` lo da por firmado: él es quien decide en el proyecto y GitHub no permite aprobar el PR propio, así que no habría ninguna aprobación que leer. Para cualquier otra persona sigue haciendo falta la aprobación del líder. La etiqueta `sn:needs-validation` se crea sola con `gh label create … --force`.
 La persona lo copia de la pantalla y lo manda por donde hable con el líder (Teams, WhatsApp, correo). Formato:
 
 ```
