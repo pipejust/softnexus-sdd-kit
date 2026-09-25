@@ -1,0 +1,97 @@
+[
+ [
+  "git push origin main",
+  2,
+  "push directo a main"
+ ],
+ [
+  "git push -q -u origin feat/x && echo main",
+  0,
+  "push a rama + otra palabra main"
+ ],
+ [
+  "git status; git push --force origin feat/x",
+  2,
+  "force en el segundo comando"
+ ],
+ [
+  "cd x && git push origin HEAD:feat/SN-42",
+  0,
+  "push a rama feature"
+ ],
+ [
+  "git push origin feat/maintenance",
+  0,
+  "rama llamada maintenance"
+ ],
+ [
+  "cat .env | grep KEY",
+  2,
+  "leer .env en un pipe"
+ ],
+ [
+  "echo hola > a.txt",
+  0,
+  "comando normal"
+ ],
+ [
+  "git reset --hard HEAD~1",
+  2,
+  "reset hard"
+ ],
+ [
+  "git clone https://github.com/SoftnexusCo/manual-platform",
+  2,
+  "clonar sin decir dónde"
+ ],
+ [
+  "git clone https://github.com/SoftnexusCo/manual-platform ~/Proyectos/cursos",
+  0,
+  "clonar con carpeta de destino"
+ ],
+ [
+  "gh repo clone SoftnexusCo/manual-platform",
+  2,
+  "gh repo clone sin destino"
+ ],
+ [
+  "gh repo clone SoftnexusCo/manual-platform ~/Proyectos/cursos",
+  0,
+  "gh repo clone con destino"
+ ],
+ [
+  "git clone git@github.com:SoftnexusCo/manual-platform.git && cd manual-platform",
+  2,
+  "clonar sin destino y entrar"
+ ],
+ [
+  "echo $SN_ALTUM_KEY",
+  2,
+  "echo del valor de la clave: bloqueado"
+ ],
+ [
+  "printf '%s' \"${SN_ALTUM_KEY}\"",
+  2,
+  "printf del valor de la clave: bloqueado"
+ ],
+ [
+  "printenv SN_ALTUM_KEY",
+  2,
+  "printenv de la clave: bloqueado"
+ ],
+ [
+  "env | grep SN_",
+  2,
+  "env completo: bloqueado"
+ ],
+ [
+  "echo 'Falta la variable SN_ALTUM_KEY en GitHub'",
+  0,
+  "nombrar la variable (sin su valor) no se bloquea"
+ ],
+ [
+  "env -u SN_ALTUM_KEY bash -c true",
+  0,
+  "env -u (quitar la variable) no imprime nada: no se bloquea"
+ ]
+]
