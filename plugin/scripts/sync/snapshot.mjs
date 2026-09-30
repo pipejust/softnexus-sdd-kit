@@ -7,6 +7,7 @@ import { readItems } from './items.mjs';
 import { validationFor } from '../validation-state.mjs';
 import { commitsFor } from './trace.mjs';
 import { prDeRama } from './pr.mjs';
+import { leerTexto } from './texto.mjs';
 
 const RECENT_COMMITS = 20;
 
@@ -34,7 +35,7 @@ function git(args) {
 function tasksProgress(dir) {
   const file = path.join(dir, 'tasks.md');
   if (!existsSync(file)) return null;
-  const text = readFileSync(file, 'utf8');
+  const text = leerTexto(file);
   const done = (text.match(/^\s*- \[x\]/gim) || []).length;
   const total = done + (text.match(/^\s*- \[ \]/gm) || []).length;
   return { done, total };

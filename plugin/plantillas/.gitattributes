@@ -1,0 +1,10 @@
+# Los archivos del proceso se guardan SIEMPRE con finales de renglón de Unix (LF), venga el commit
+# de Windows, Mac o Linux. Si no, Windows los guarda con CRLF y el motor lee las fichas vacías:
+# la tarea no se actualiza en Altum y se queda como si nadie la hubiera tocado.
+* text=auto eol=lf
+
+docs/items/*.md      text eol=lf
+openspec/**/*.md     text eol=lf
+.sn/*.json           text eol=lf
+scripts/sn/**        text eol=lf
+*.sh                 text eol=lf
