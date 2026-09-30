@@ -230,6 +230,24 @@ mkdir -p openspec/changes/add-firma && printf -- "## 2026-09-21 10:00 · SOLICIT
 check "validacion.md aprobado por quien no es el líder: NO cuenta como validado (firma inválida)" "node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x[\"change\"]==\"add-firma\"][0]; assert e[\"status\"]==\"firma inválida\", e'"
 sed -i '' 's/Valida: Pedro <pedro@softnexus.co>/Valida: Marta Ríos <marta@softnexus.co>/' openspec/changes/add-firma/validacion.md
 check "Firmado por el líder de Altum: sí cuenta" "node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x[\"change\"]==\"add-firma\"][0]; assert e[\"status\"]!=\"firma inválida\", e'"
+estado() { node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x["change"]=="add-firma"][0]; print(e["status"])'; }
+detalle() { node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x["change"]=="add-firma"][0]; print(e.get("detail",""))'; }
+# El caso real: el líder firma desde su computador con su correo PERSONAL (nadie commitea con el de la empresa)
+sed -i '' 's|Valida: Marta Ríos <marta@softnexus.co>|Valida: Marta Ríos <marta.rios.personal@gmail.com>|' openspec/changes/add-firma/validacion.md
+check "Correo personal suelto, que Altum no conoce: sigue sin valer, y dice cómo se reconoce al líder" "[ \"\$(estado)\" = 'firma inválida' ] && detalle | grep -q 'GitHub @martarios'"
+sed -i '' 's|Valida: Marta Ríos <marta.rios.personal@gmail.com>|Valida: Marta Ríos <marta.rios.personal@gmail.com> · GitHub @martarios|' openspec/changes/add-firma/validacion.md
+check "Correo personal + usuario de GitHub del líder: la firma vale" "[ \"\$(estado)\" != 'firma inválida' ]"
+python3 - <<'PY2'
+import json, pathlib
+p = pathlib.Path('.sn/state/altum-lider.json')
+d = json.loads(p.read_text())
+d['emails'] = ['marta.rios.personal@gmail.com']   # correo alterno registrado en Altum
+p.write_text(json.dumps(d))
+PY2
+sed -i '' 's| · GitHub @martarios||' openspec/changes/add-firma/validacion.md
+check "Correo alterno registrado en Altum: la firma vale sin poner el usuario de GitHub" "[ \"\$(estado)\" != 'firma inválida' ]"
+sed -i '' 's|Valida: Marta Ríos <marta.rios.personal@gmail.com>|Valida: Pedro <pedro@x.com> · GitHub @pedrox|' openspec/changes/add-firma/validacion.md
+check "Otra persona, con su propio usuario de GitHub: no vale (el candado sigue puesto)" "[ \"\$(estado)\" = 'firma inválida' ]"
 rm -rf openspec/changes/add-firma
 
 echo "== Criterios de aceptación en los dos sentidos"

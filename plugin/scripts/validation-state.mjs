@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { leerTexto, normalizarTexto } from './sync/texto.mjs';
+import { comoSeIdentifica, esElLider, identidadFirmante } from './sync/lider.mjs';
 
 const CHANGES_DIR = 'openspec/changes';
 const PLAN_PATHS = ['proposal.md', 'specs', 'design.md', 'tasks.md'];
@@ -69,7 +70,6 @@ function liderGuardado(root = '.') {
   }
 }
 
-const correoDe = (texto) => String(texto || '').match(/<([^>]+@[^>]+)>/)?.[1]?.toLowerCase() || '';
 
 // Riesgo del ítem que usa este change (docs/items/*.md con "change: <nombre>").
 function riesgoDelChange(change, root = '.') {
@@ -99,8 +99,15 @@ export function statusOf(entries, change, lider = liderGuardado()) {
   if (last.type === 'SOLICITUD') return { ...base, status: 'esperando validación', commit: commitOf(last) };
   // Solo el líder que dice Altum puede aprobar, pedir cambios o detener. Una decisión escrita por
   // cualquier otra persona no cuenta: el plano sigue esperando la firma.
-  if (lider?.email && pideLider(entries, last, change) && correoDe(last.fields.Valida) && correoDe(last.fields.Valida) !== lider.email.toLowerCase()) {
-    return { ...base, status: 'firma inválida', detail: `la firmó ${last.fields.Valida}, pero el líder es ${lider.name} <${lider.email}>` };
+  const firmante = identidadFirmante(last.fields.Valida);
+  const hayFirmante = Boolean(firmante.correo || firmante.github);
+  if ((lider?.email || lider?.github) && pideLider(entries, last, change) && hayFirmante && !esElLider(lider, firmante)) {
+    return {
+      ...base,
+      status: 'firma inválida',
+      detail: `la firmó ${last.fields.Valida}, pero el líder es ${lider.name} (${comoSeIdentifica(lider)}).`
+        + ' Si ese es su correo personal, que lo registre en Altum o que firme agregando su usuario de GitHub: "Nombre <correo> · GitHub @usuario".',
+    };
   }
   if (last.type === 'CAMBIOS PEDIDOS') return { ...base, status: 'con correcciones' };
   if (last.type === 'RECHAZADO') return { ...base, status: 'detenido' };

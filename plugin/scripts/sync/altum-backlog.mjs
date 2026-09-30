@@ -189,8 +189,15 @@ export function whoAmIText(me, projectId) {
 export async function projectLead(connector, projectId = connector.project_id) {
   const lider = await leerLider(connector, projectId);
   // Copia local: validation-state la usa para no aceptar firmas de quien no es el líder (sin red).
-  if (lider?.name) writeState('altum-lider.json', { at: Date.now(), name: lider.name, email: lider.email || '', github: lider.github || '' });
+  if (lider?.name) writeState('altum-lider.json', { at: Date.now(), name: lider.name, email: lider.email || '', emails: lider.emails || [], github: lider.github || '' });
   return lider;
+}
+
+// Correos alternos del líder: el de la empresa casi nunca es con el que commitea desde su computador.
+// Altum los devuelve cuando su ficha los tiene (personal_email, git_email o la lista emails).
+function otrosCorreos(...fichas) {
+  const correos = fichas.filter(Boolean).flatMap((f) => [f.personal_email, f.git_email, f.email_personal, ...(f.emails || [])]);
+  return [...new Set(correos.map((c) => String(c || '').trim().toLowerCase()).filter((c) => c.includes('@')))];
 }
 
 async function leerLider(connector, projectId) {
@@ -204,10 +211,12 @@ async function leerLider(connector, projectId) {
   const lead = (proyecto.members || []).find((m) => m.is_lead) || null;
   const yo = (me?.projects || []).find((p) => p.id === projectId);
   if (yo?.is_lead && me?.user) {
-    return { project: proyecto.name, role: yo.role || lead?.role || 'Líder técnico', soyYo: true, name: me.user.name || '', email: me.user.email || '', github: lead?.github_username || '', employee_id: lead?.employee_id || '' };
+    // La persona tiene dos correos en Altum: el de su ficha de empleado y el de su cuenta (con el que entra).
+    // Los dos valen para reconocerla, porque nadie commitea siempre con el mismo.
+    return { project: proyecto.name, role: yo.role || lead?.role || 'Líder técnico', soyYo: true, name: me.user.name || lead?.name || '', email: lead?.email || me.user.email || '', emails: otrosCorreos(lead, me.user, { emails: [me.user.email] }), github: lead?.github_username || me.user.github_username || '', employee_id: lead?.employee_id || '' };
   }
   if (!lead) return { project: proyecto.name, falta: 'sin-lider' };
-  return { project: proyecto.name, role: lead.role || 'Líder técnico', soyYo: false, name: lead.name || '', email: lead.email || '', github: lead.github_username || '', employee_id: lead.employee_id || '' };
+  return { project: proyecto.name, role: lead.role || 'Líder técnico', soyYo: false, name: lead.name || '', email: lead.email || '', emails: otrosCorreos(lead), github: lead.github_username || '', employee_id: lead.employee_id || '' };
 }
 
 export function leadText(lead) {
