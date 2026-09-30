@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { parseFrontmatter } from './items.mjs';
 import { STAGES, FLAGS } from './snapshot.mjs';
 import { traceOf } from './trace.mjs';
+import { leerTexto } from './texto.mjs';
 
 const TYPE_LABEL = {
   feature: 'Funcionalidad', improvement: 'Mejora', bug: 'Bug', incident: 'Incidente', content: 'Contenido', chore: 'Tarea técnica',
@@ -22,7 +23,7 @@ export function listMarkdown(snapshot) {
 }
 
 export function itemMarkdown(item) {
-  const { body } = parseFrontmatter(readFileSync(item.file, 'utf8'));
+  const { body } = parseFrontmatter(leerTexto(item.file));
   const trace = traceOf(item);
   const stage = `${STAGES[item.stage]}${item.flag ? ` · ${FLAGS[item.flag]}` : ''}`;
   const out = [

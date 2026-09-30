@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseLog } from '../validation-state.mjs';
+import { leerTexto } from './texto.mjs';
 
 const CHANGES = 'openspec/changes';
 const SEP = '\x1f';
@@ -64,7 +65,7 @@ export function validationsFor(item) {
   const dir = changeDir(item.change);
   const file = dir && path.join(dir, 'validacion.md');
   if (!file || !existsSync(file)) return [];
-  return parseLog(readFileSync(file, 'utf8')).map((e) => ({
+  return parseLog(leerTexto(file)).map((e) => ({
     date: e.date, decision: e.type, seal: e.seal, by: e.fields.Pide || e.fields.Valida || '', notes: e.fields.Notas || '',
   }));
 }

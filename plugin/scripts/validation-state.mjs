@@ -6,6 +6,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { leerTexto, normalizarTexto } from './sync/texto.mjs';
 
 const CHANGES_DIR = 'openspec/changes';
 const PLAN_PATHS = ['proposal.md', 'specs', 'design.md', 'tasks.md'];
@@ -29,7 +30,8 @@ function commitExists(commit) {
   }
 }
 
-export function parseLog(text) {
+export function parseLog(entrada) {
+  const text = normalizarTexto(entrada);
   const entries = [];
   for (const line of text.split('\n')) {
     const head = line.match(ENTRY);
@@ -74,7 +76,7 @@ function riesgoDelChange(change, root = '.') {
   const dir = path.join(root, 'docs/items');
   if (!change || !existsSync(dir)) return '';
   for (const f of readdirSync(dir).filter((n) => n.endsWith('.md'))) {
-    const texto = readFileSync(path.join(dir, f), 'utf8');
+    const texto = leerTexto(path.join(dir, f));
     if (new RegExp(`^change:\\s*${change.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'm').test(texto)) {
       return texto.match(/^risk:\s*(R\d)/m)?.[1] || '';
     }
@@ -112,7 +114,7 @@ function localStates() {
     .filter((d) => d.isDirectory() && d.name !== 'archive')
     .map((d) => {
       const file = path.join(CHANGES_DIR, d.name, 'validacion.md');
-      const entries = existsSync(file) ? parseLog(readFileSync(file, 'utf8')) : [];
+      const entries = existsSync(file) ? parseLog(leerTexto(file)) : [];
       return { change: d.name, ...statusOf(entries, d.name) };
     });
 }
@@ -138,7 +140,7 @@ function pendingRemote() {
 
 export function validationFor(change, root = '.') {
   const file = path.join(root, CHANGES_DIR, change, 'validacion.md');
-  return statusOf(existsSync(file) ? parseLog(readFileSync(file, 'utf8')) : [], change);
+  return statusOf(existsSync(file) ? parseLog(leerTexto(file)) : [], change);
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname;

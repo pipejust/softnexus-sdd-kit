@@ -341,6 +341,16 @@ check "Repositorio que ningún proyecto tiene: muestra sus proyectos por nombre"
 check "Con el nombre: conecta y registra el repositorio en ese proyecto" "C 'clientes vip' | grep -q 'quedó registrado en Altum' && C 'clientes vip' | grep -q 'ya está conectado'"
 cd "$W/altum-repo"
 
+echo "== Fichas guardadas en Windows (CRLF y BOM): se leen igual"
+printf -- '---\r\nid: CLI-0040\r\ntype: feature\r\ntitle: Pago con tarjeta\r\nrisk: R2\r\n---\r\n## Historia\r\nComo cliente quiero pagar con tarjeta\r\n\r\n## Criterios de aceptación\r\n- Dado un pago aprobado, entonces veo el recibo\r\n' > docs/items/CLI-0040.md
+before=$(posts)
+out=$(sn asegurar CLI-0040 2>&1)
+check "Ficha con finales de renglón de Windows: el ítem se lee completo y su tarea nace en Altum" "echo \"\$out\" | grep -qE 'Tarea en Altum #[0-9]+: \\[CLI-0040\\] Pago con tarjeta' && [ \$(posts) -eq \$((before + 1)) ]"
+check "Y viaja lo de adentro: historia y criterios, no una tarea vacía" "state | python3 -c 'import json,sys; t=[x for x in json.load(sys.stdin) if x[\"title\"].startswith(\"[CLI-0040]\")][0]; assert \"tarjeta\" in (t[\"description\"] or \"\"), t[\"description\"]; assert \"recibo\" in (t[\"acceptance_criteria\"] or \"\"), t[\"acceptance_criteria\"]'"
+printf -- '\xef\xbb\xbf---\r\nid: CLI-0041\r\ntype: bug\r\ntitle: Recibo sin IVA\r\nrisk: R1\r\n---\r\n## Historia\r\nEl recibo no muestra el IVA\r\n' > docs/items/CLI-0041.md
+check "Ficha con BOM al inicio (editores de Windows): también se lee" "sn asegurar CLI-0041 2>&1 | grep -qE 'Tarea en Altum #[0-9]+: \\[CLI-0041\\] Recibo sin IVA'"
+check "El plano y la validación también se leen con finales de Windows" "node -e \"import('./scripts/sn/validation-state.mjs').then(m => { const log = m.parseLog('## 2026-09-30 10:00 · APROBADO · sello: plano\\r\\n- Valida: Marta <marta@softnexus.co>\\r\\n- Commit validado: abc1234\\r\\n'); if (log.length !== 1 || !log[0].fields.Valida.includes('marta@softnexus.co')) process.exit(1); })\""
+
 echo "== Firma de webhooks de Altum"
 cat > /tmp/sn-verify-$$.mjs <<'JS'
 import { createHmac } from 'node:crypto';

@@ -37,6 +37,7 @@ import { mensajeValidacion } from './sync/validacion-mensaje.mjs';
 import { aprobacionesPr, firmaDelLider, origenRepo, prDeRama } from './sync/pr.mjs';
 import { siguientePaso } from './sync/siguiente.mjs';
 import { parseLog } from './validation-state.mjs';
+import { leerTexto } from './sync/texto.mjs';
 import {
   acquireLock, appendOutbox, CONFIG_FILE, loadConfig, loadSnapshot, readOutbox, releaseLock, saveSnapshot, writeOutbox,
 } from './sync/store.mjs';
@@ -243,7 +244,7 @@ async function mensaje(config) {
   const change = changeActivo(args[1] && !args[1].startsWith('--') ? args[1] : '');
   const rama = gitOut(['rev-parse', '--abbrev-ref', 'HEAD']);
   const archivo = change ? path.join('openspec/changes', change, 'validacion.md') : '';
-  const entradas = archivo && existsSync(archivo) ? parseLog(readFileSync(archivo, 'utf8')) : [];
+  const entradas = archivo && existsSync(archivo) ? parseLog(leerTexto(archivo)) : [];
   const solicitud = [...entradas].reverse().find((e) => e.type === 'SOLICITUD');
   const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
   // El líder y el nombre del proyecto salen de Altum; si Altum no responde, el mensaje se arma igual.
@@ -333,7 +334,7 @@ async function lead(config) {
   }
   // AGENTS.md: si su línea del líder no coincide con Altum, se corrige.
   if (l?.name && existsSync('AGENTS.md')) {
-    const texto = readFileSync('AGENTS.md', 'utf8');
+    const texto = leerTexto('AGENTS.md');
     const actual = texto.match(LINEA_LIDER)?.[0];
     const correcta = lineaLider(l);
     if (actual && actual !== correcta) {
@@ -427,7 +428,7 @@ function dividir(config) {
   if (!item.change) throw new Error(`${item.id} no tiene plano (change): no hay tareas que dividir.`);
   const archivo = path.join('openspec/changes', item.change, 'tasks.md');
   if (!existsSync(archivo)) throw new Error(`no encuentro ${archivo}.`);
-  const lineas = readFileSync(archivo, 'utf8').split('\n');
+  const lineas = leerTexto(archivo).split('\n');
   const pendientes = lineas.filter((l) => /^\s*- \[ \]/.test(l));
   const hechas = lineas.filter((l) => /^\s*- \[x\]/i.test(l));
   if (!pendientes.length) return console.log(`${item.id} no tiene tareas pendientes: no hay nada que dividir.`);

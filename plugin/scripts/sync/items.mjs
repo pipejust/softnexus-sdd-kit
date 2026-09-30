@@ -2,11 +2,13 @@
 // Son la fuente legible y exportable; el estado (etapa) nunca se escribe aquí, se deriva.
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { leerTexto, normalizarTexto } from './texto.mjs';
 
 export const ITEMS_DIR = 'docs/items';
 export const ITEM_TYPES = ['feature', 'improvement', 'bug', 'incident', 'content', 'chore'];
 
-export function parseFrontmatter(text) {
+export function parseFrontmatter(entrada) {
+  const text = normalizarTexto(entrada);
   const match = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) return { data: {}, body: text };
   const data = {};
@@ -38,7 +40,7 @@ export function readItems(root = '.') {
   return readdirSync(dir)
     .filter((f) => f.endsWith('.md') && !f.startsWith('_'))
     .map((file) => {
-      const text = readFileSync(path.join(dir, file), 'utf8');
+      const text = leerTexto(path.join(dir, file));
       const { data, body } = parseFrontmatter(text);
       const criteria = section(body, 'Criterios');
       return {
@@ -67,7 +69,7 @@ export function readItems(root = '.') {
 
 // Guarda el id que asignó un sistema externo (ej. "ext.altum: <uuid>") en la cabecera del ítem.
 export function setExternalId(file, connectorName, externalId) {
-  const text = readFileSync(file, 'utf8');
+  const text = leerTexto(file);
   const key = `ext.${connectorName}`;
   const line = `${key}: ${externalId}`;
   const re = new RegExp(`^${key.replace('.', '\\.')}:.*$`, 'm');
