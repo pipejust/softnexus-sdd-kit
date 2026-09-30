@@ -4,6 +4,7 @@
 import { execFileSync } from 'node:child_process';
 import { identificarRepo } from './altum-backlog.mjs';
 import { fromKeychain } from './altum.mjs';
+import { esElLider } from './lider.mjs';
 
 const TIMEOUT_MS = 8000;
 
@@ -108,8 +109,7 @@ export function aprobacionesPr(numero, origen = origenRepo()) {
 export function firmaDelLider(aprob, lider) {
   if (!aprob) return { valida: false, motivo: 'no pude leer las aprobaciones del PR (¿sesión de gh o token de Azure DevOps?).' };
   if (!lider?.name) return { valida: false, motivo: 'Altum no dice quién es el líder de este proyecto.' };
-  const esLider = (p) => (lider.github && p.usuario.toLowerCase() === lider.github.toLowerCase())
-    || (lider.email && p.correo && p.correo === lider.email.toLowerCase());
+  const esLider = (p) => esElLider(lider, { github: p.usuario.toLowerCase(), correo: (p.correo || '').toLowerCase() });
   if (esLider(aprob.autor)) return { valida: true, motivo: `el PR lo abrió el propio líder (${lider.name}): su decisión es la que vale en este proyecto.` };
   if (aprob.aprobaron.some(esLider)) return { valida: true, motivo: `aprobado por ${lider.name}, el líder según Altum.` };
   const otros = aprob.aprobaron.map((p) => p.usuario).filter(Boolean);

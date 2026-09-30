@@ -17,7 +17,7 @@ La validación **viaja por git**: nadie comparte sesión ni carpeta. Quien pide 
 - Por qué necesita validación: toca permisos de usuarios (R3).
 
 ## 2026-09-19 15:02 · APROBADO · sello: plano
-- Valida: Felipe Cortés <felipe@softnexus.co>
+- Valida: Felipe Cortés <felipe@softnexus.co> · GitHub @pipejust
 - Commit validado: 3f2a91c
 - Notas: incluir prueba de que un usuario sin rol admin recibe 403.
 ```
@@ -48,7 +48,7 @@ Para el sello `entrega`, "cambió después" significa cualquier commit en la ram
 ## Mensaje para el líder (mientras no haya mensajería conectada)
 Lo arma el motor, no el agente: `node scripts/sn/sn-sync.mjs mensaje [<change>] [--sello …] [--riesgo …] [--titulo …] [--que …] [--pr …]`.
 Saca de Altum el proyecto y **quién es el líder** (nombre y correo), y de git la rama, el commit de la solicitud y el PR.
-**Solo vale la firma del líder.** En `validacion.md`, una decisión (APROBADO, CAMBIOS PEDIDOS, RECHAZADO) cuyo `Valida:` no sea el correo del líder de Altum queda como **firma inválida** y el plano sigue esperando. En el PR, `sn-sync verificar-firma <n>` solo pasa si lo aprobó el líder (GitHub: su usuario de GitHub en Altum, última revisión de cada persona; Azure DevOps: su correo con voto 10 o 5), y nunca si el líder es el autor del PR. El CI (`firma-lider.yml` en GitHub, `azure-pipelines-sn.yml` en Azure) lo corre en cada PR; `proteger-rama` lo vuelve obligatorio en la rama principal de GitHub.
+**Solo vale la firma del líder**, pero el líder se reconoce por **cualquiera** de sus identidades de Altum: el correo de su ficha, los correos alternos que Altum devuelva (`personal_email`, `git_email`, `emails`) y su **usuario de GitHub** (`github_username`). Es lo normal: casi nadie commitea con el correo de la empresa. Por eso en `validacion.md` la línea `Valida:` se escribe `Nombre <correo> · GitHub @usuario`, y basta con que **una** de las dos identidades sea la del líder. Si ninguna lo es, la decisión queda como **firma inválida** y el plano sigue esperando; el mensaje dice con qué identidades se le reconoce. En el PR, `sn-sync verificar-firma <n>` solo pasa si lo aprobó el líder (GitHub: su usuario de GitHub en Altum, última revisión de cada persona; Azure DevOps: su correo con voto 10 o 5), y nunca si el líder es el autor del PR. El CI (`firma-lider.yml` en GitHub, `azure-pipelines-sn.yml` en Azure) lo corre en cada PR; `proteger-rama` lo vuelve obligatorio en la rama principal de GitHub.
 **Fuente única del líder: Altum.** `sn-sync lead` corrige la línea de `AGENTS.md` si dice otra cosa, y `sn-sync lead --github` da el usuario de GitHub del líder para pedirle la revisión del PR (falla si no hay usuario en Altum, o si es la misma cuenta de quien pide: el líder no se pide revisión a sí mismo porque no la necesita — su PR lo firma y lo une él).
 
 **Cuando el PR lo abre el propio líder**, `verificar-firma` lo da por firmado: él es quien decide en el proyecto y GitHub no permite aprobar el PR propio, así que no habría ninguna aprobación que leer. Para cualquier otra persona sigue haciendo falta la aprobación del líder. La etiqueta `sn:needs-validation` se crea sola con `gh label create … --force`.
