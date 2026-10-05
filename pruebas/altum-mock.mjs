@@ -2,7 +2,7 @@
 // página para ejercitarla), external_ref, Idempotency-Key, assignee_email, updated_by, include_deleted,
 // 409 con bloqueadores o por external_ref repetido, 422 por estado no válido.
 import { randomUUID } from 'node:crypto';
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import http from 'node:http';
 
 const PORT = Number(process.argv[2] || 4598);
@@ -27,11 +27,16 @@ const FIELDS = [
   { key: 'riesgo', label: 'Riesgo', field_type: 'select', options: ['R0', 'R1', 'R2', 'R3', 'R4'], required: false, position: 0 },
   { key: 'tamano', label: 'Tamaño', field_type: 'select', options: ['XS', 'S', 'M', 'L'], required: false, position: 1 },
   { key: 'cliente_final', label: 'Cliente final', field_type: 'text', required: false, position: 2 },
+  { key: 'fecha_inicio', label: 'Inicio previsto', field_type: 'date', required: false, position: 3 },
+  { key: 'fecha_fin', label: 'Entrega prevista', field_type: 'date', required: false, position: 4 },
+  { key: 'inicio_real', label: 'Empezó', field_type: 'date', required: false, position: 5 },
+  { key: 'fin_real', label: 'Terminó', field_type: 'date', required: false, position: 6 },
 ];
 const BLOCKED_TITLE = 'bloqueada';
 // custom_fields se valida contra FIELDS (tipo y opciones), como en Altum.
 const badField = (cf = {}) => Object.entries(cf).find(([k, v]) => {
   const def = FIELDS.find((f) => f.key === k);
+  if (def && def.field_type === 'date') return !/^\d{4}-\d{2}-\d{2}$/.test(String(v));
   return def && def.field_type === 'select' && !def.options.includes(v);
 });
 const now = () => new Date().toISOString();
@@ -82,6 +87,15 @@ http.createServer((req, res) => {
     }
     if (url.pathname === '/_edit') { Object.assign(findBy(url), { state: 'en_revision', updated_at: now(), updated_by: null }); return send(res, 200, {}); }
     if (url.pathname === '/_setfield') { const t = findBy(url); t.custom_fields = { ...t.custom_fields, cliente_final: 'Almacenes Éxito' }; t.updated_at = now(); t.updated_by = null; return send(res, 200, {}); }
+    // Alguien le pone una etiqueta a mano dentro de Altum (no debe perderse al sincronizar).
+    if (url.pathname === '/_tag') { const t = findBy(url); t.tags = [...(t.tags || []), url.searchParams.get('tag')]; t.updated_at = now(); t.updated_by = null; return send(res, 200, t.tags); }
+    // Cuántos PATCH ha recibido esa tarea: sirve para comprobar que no se reescribe lo mismo.
+    if (url.pathname === '/_patches') {
+      const t = findBy(url);
+      const n = readFileSync(LOG, 'utf8').split('\n').filter(Boolean)
+        .filter((l) => { const e = JSON.parse(l); return e.method === 'PATCH' && e.path === `/api/v1/api/tasks/${t.id}`; }).length;
+      return send(res, 200, { patches: n });
+    }
     if (url.pathname === '/_stripmark') { tasks.forEach((t) => { t.description = String(t.description || '').replace(/<!--[^>]*-->/g, ''); }); return send(res, 200, {}); }
     // --- Azure DevOps (mismo servidor falso): PR de ramas y sus aprobaciones ---
     const az = url.pathname.match(/^\/([^/]+)\/([^/]+)\/_apis\/git\/repositories\/([^/]+)\/pullrequests(?:\/(\d+))?$/);

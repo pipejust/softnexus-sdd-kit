@@ -394,5 +394,6 @@ No hay que preguntar constantemente ni sondear (`polling`) — la regla dispara 
 ## Lo que todavía no existe (para no asumirlo)
 
 - **Reintento del webhook**: hoy Altum reintenta UNA vez, de inmediato, si hay un corte de red al mandarlo — no si su endpoint responde algo distinto de `2xx` (eso se registra en una bitácora interna, pero no se vuelve a intentar). Una cola con reintentos programados y backoff todavía no existe.
+- **Fechas propias de la tarea** (`start_date` / `due_date` en tareas nativas) — no existen: solo las tareas de Acten traen `due_date`, y de lectura. Mientras tanto, las fechas viajan en la descripción y, si el proyecto los define, en campos propios de tipo fecha (pedido L).
 - **Comentarios o enlaces** en la tarea (para que el PR, la rama o los commits se vean como referencias reales) — no existen todavía.
 - **Endpoint en lote** (`PATCH /tasks/batch`) para sincronizar un proyecto grande de una sola vez — no existe; con el límite de 120/min y paginación en `GET /tasks` debería alcanzar, pero si no, pídanle al administrador que suba el límite de su clave.

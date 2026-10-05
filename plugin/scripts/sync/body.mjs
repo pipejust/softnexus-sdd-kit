@@ -28,6 +28,18 @@ export function itemMarkdownBody(evt) {
 // después completos de cada cambio de descripción, así que aquí solo va lo que casi no cambia:
 // la historia, riesgo, tamaño, responsable, rama, plano y PR (cada uno cambia una vez en la vida).
 // La etapa ya la dice el estado de la tarea; el avance y los commits viven en el repositorio (/sn-items).
+// Fechas de la tarea, en una línea y solo las que existen: planeadas (las escribe la persona en la
+// ficha) y reales (el primer commit y el día en que se unió el PR).
+export function lineaFechas(item) {
+  const partes = [
+    item.start && `inicio previsto ${item.start}`,
+    item.due && `entrega prevista ${item.due}`,
+    item.started && `empezó ${item.started}`,
+    item.finished && `terminó ${item.finished}`,
+  ].filter(Boolean);
+  return partes.length ? `Fechas: ${partes.join(' · ')}` : '';
+}
+
 export function itemPlainBody(evt) {
   const { item } = evt;
   const historia = String(item.story || '(ver archivo del ítem)')
@@ -37,7 +49,8 @@ export function itemPlainBody(evt) {
   return [
     ...(item.discarded ? [`DESCARTADO: ${item.discarded}`, ''] : []),
     `Riesgo: ${item.risk || '—'} · Tamaño: ${item.size || '—'}`,
-    `Responsable: ${item.assignee || '—'}`, '',
+    `Responsable: ${item.assignee || '—'}`,
+    ...(lineaFechas(item) ? [lineaFechas(item)] : []), '',
     'HISTORIA', historia, '',
     'TRAZABILIDAD',
     `- Archivo: ${item.file}`,

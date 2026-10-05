@@ -68,12 +68,12 @@ export function prDeRama(branch, origen = origenRepo()) {
     const pr = (datos?.value || []).sort((a, b) => b.pullRequestId - a.pullRequestId)[0];
     if (!pr) return {};
     return {
-      pr_state: ESTADO_AZURE[pr.status] || 'OPEN', pr_number: pr.pullRequestId,
+      pr_state: ESTADO_AZURE[pr.status] || 'OPEN', pr_number: pr.pullRequestId, pr_merged_at: pr.closedDate || '',
       pr_url: `https://dev.azure.com/${encodeURIComponent(origen.org)}/${encodeURIComponent(origen.project)}/_git/${encodeURIComponent(origen.repo)}/pullrequest/${pr.pullRequestId}`,
     };
   }
-  const pr = gh(['pr', 'view', branch, '--json', 'state,number,url']);
-  return pr ? { pr_state: pr.state, pr_number: pr.number, pr_url: pr.url } : {};
+  const pr = gh(['pr', 'view', branch, '--json', 'state,number,url,mergedAt']);
+  return pr ? { pr_state: pr.state, pr_number: pr.number, pr_url: pr.url, pr_merged_at: pr.mergedAt || '' } : {};
 }
 
 // Quién aprobó el PR. GitHub: la ÚLTIMA revisión de cada persona (si aprobó y luego pidió cambios,

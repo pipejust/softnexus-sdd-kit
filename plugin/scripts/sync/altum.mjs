@@ -222,7 +222,12 @@ async function fetchProjectStates(connector) {
 
 // Campos propios del proyecto (GET /config/campos). Se envían solo los que el proyecto definió, de tipo
 // texto o lista, y con un valor permitido. Por defecto: riesgo, tamaño y etapa (cambiable con "field_map").
-const DEFAULT_FIELDS = { risk: 'riesgo', size: 'tamano', stage_label: 'etapa' };
+// Las fechas viajan aquí porque las tareas nativas de Altum todavía no tienen campos propios de
+// fecha de inicio y de fin (pedido L): si el proyecto define campos de fecha con estas llaves, se llenan.
+const DEFAULT_FIELDS = {
+  risk: 'riesgo', size: 'tamano', stage_label: 'etapa',
+  start: 'fecha_inicio', due: 'fecha_fin', started: 'inicio_real', finished: 'fin_real',
+};
 
 async function projectFields(connector) {
   try {
@@ -236,7 +241,10 @@ async function projectFields(connector) {
 
 export function customFieldsFor(connector, item, fields) {
   const defs = new Map(fields.map((f) => [f.key, f]));
-  const allowed = (def, value) => def && value && (def.field_type === 'text' || (def.field_type === 'select' && def.options?.includes(value)));
+  const esFecha = (valor) => /^\d{4}-\d{2}-\d{2}$/.test(String(valor));
+  const allowed = (def, value) => def && value && (def.field_type === 'text'
+    || (def.field_type === 'date' && esFecha(value))
+    || (def.field_type === 'select' && def.options?.includes(value)));
   return Object.fromEntries(Object.entries(connector.field_map || DEFAULT_FIELDS)
     .filter(([source, key]) => allowed(defs.get(key), item[source]))
     .map(([source, key]) => [key, item[source]]));
@@ -313,16 +321,35 @@ export function textoPlano(valor) {
 
 const comparable = (valor) => textoPlano(valor).replace(/^\s*([-*•]|\d+[.)])\s*/gm, '').replace(/\*\*|`/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
 
+// Etiquetas de la tarea. Las nuestras llevan prefijo "sn:" para poder reemplazarlas sin tocar las
+// que alguien haya puesto a mano en Altum, que se conservan siempre.
+export function etiquetasPara(connector, item, actuales = null) {
+  if (connector.tags === false) return null;
+  const nuestras = [
+    item.type && `sn:${item.type}`,
+    item.risk && `sn:${String(item.risk).toLowerCase()}`,
+    item.size && `sn:tamano-${String(item.size).toLowerCase()}`,
+    ...(connector.tags_extra || []),
+  ].filter(Boolean);
+  const ajenas = (actuales || []).filter((t) => !String(t).startsWith('sn:'));
+  return [...new Set([...ajenas, ...nuestras])];
+}
+
 function criteriosDe(item) {
   return String(item.criteria || '').replace(/\*\*|`/g, '').trim();
 }
 
 // Solo los campos que de verdad cambian. Altum guarda en el historial cada PATCH con el antes y el
 // después completos, así que mandar lo mismo otra vez solo ensucia ese historial.
+// Las etiquetas son un conjunto: el orden en que Altum las devuelva no es un cambio.
+const mismoConjunto = (a, b) => JSON.stringify([...(a || [])].sort()) === JSON.stringify([...(b || [])].sort());
+
 function soloCambios(actual = {}, deseado) {
-  return Object.fromEntries(Object.entries(deseado).filter(([k, v]) => (k === 'acceptance_criteria'
-    ? comparable(actual[k]) !== comparable(v)
-    : JSON.stringify(actual[k] ?? null) !== JSON.stringify(v ?? null))));
+  return Object.fromEntries(Object.entries(deseado).filter(([k, v]) => {
+    if (k === 'acceptance_criteria') return comparable(actual[k]) !== comparable(v);
+    if (Array.isArray(v)) return !mismoConjunto(actual[k], v);
+    return JSON.stringify(actual[k] ?? null) !== JSON.stringify(v ?? null);
+  }));
 }
 
 export async function deliverAltum(connector, evt) {
@@ -365,9 +392,11 @@ export async function deliverAltum(connector, evt) {
   const state = stateFor(connector, item, estados);
   const customFields = Object.keys(ours).length ? { custom_fields: { ...(currentFields.get(taskId) || {}), ...ours } } : {};
   const criterios = criteriosDe(item);
+  const etiquetas = etiquetasPara(connector, item, current.get(taskId)?.tags || []);
   const cambios = soloCambios(current.get(taskId), {
     title: taskTitle(item), description, priority: priorityOf(item),
     ...(criterios ? { acceptance_criteria: criterios } : {}),
+    ...(etiquetas?.length ? { tags: etiquetas } : {}),
     ...(state ? { state } : {}), ...(assignee ? { assignee_id: assignee } : {}), ...customFields,
   });
   if (!Object.keys(cambios).length) return; // nada cambió: la tarea no se toca
@@ -389,6 +418,7 @@ async function createTask(connector, item, description, { assignee, email, custo
     description,
     ...(criteriosDe(item) ? { acceptance_criteria: criteriosDe(item) } : {}),
     priority: priorityOf(item),
+    ...(etiquetasPara(connector, item)?.length ? { tags: etiquetasPara(connector, item) } : {}),
     external_ref: item.id,
     ...(Object.keys(customFields).length ? { custom_fields: customFields } : {}),
     ...(assignee ? { assignee_id: assignee } : email ? { assignee_email: email } : {}),

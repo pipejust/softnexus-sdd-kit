@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 
 // story y criteria: cambiar la historia o los criterios de aceptación también se lleva a Altum.
-const TRACKED_FIELDS = ['title', 'type', 'risk', 'size', 'assignee', 'branch', 'change', 'pr_url', 'tasks_done', 'tasks_total', 'commit_count', 'story', 'criteria'];
+const TRACKED_FIELDS = ['title', 'type', 'risk', 'size', 'assignee', 'branch', 'change', 'pr_url', 'tasks_done', 'tasks_total', 'commit_count', 'story', 'criteria', 'start', 'due', 'started', 'finished'];
 
 function eventId(parts) {
   return createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 24);
