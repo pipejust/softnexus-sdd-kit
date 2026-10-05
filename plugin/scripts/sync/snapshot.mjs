@@ -98,6 +98,9 @@ export function takeSnapshot(projectName = '', { solo = null } = {}) {
       ...rest, file, stage, stage_label: STAGES[stage], flag: flagOf(item), ...pr,
       tasks_done: progress?.done ?? null, tasks_total: progress?.total ?? null, actor: lastActor(item),
       commit_count: commits.length,
+      // Fechas reales, no planeadas: cuándo se empezó de verdad (primer commit) y cuándo se unió el PR.
+      started: (commits[commits.length - 1]?.date || '').slice(0, 10),
+      finished: (pr.pr_merged_at || '').slice(0, 10),
       commits: commits.slice(0, RECENT_COMMITS).map(({ short, date, author, subject }) => ({ short, date, author, subject })),
     };
   });

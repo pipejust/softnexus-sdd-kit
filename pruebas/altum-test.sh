@@ -359,6 +359,22 @@ check "Repositorio que ningún proyecto tiene: muestra sus proyectos por nombre"
 check "Con el nombre: conecta y registra el repositorio en ese proyecto" "C 'clientes vip' | grep -q 'quedó registrado en Altum' && C 'clientes vip' | grep -q 'ya está conectado'"
 cd "$W/altum-repo"
 
+echo "== Fechas y etiquetas de la tarea"
+printf -- '---\nid: CLI-0050\ntype: bug\ntitle: Recibo sin IVA\nrisk: R2\nsize: M\ninicio: 2026-10-05\nfin: 2026-10-12\n---\n## Historia\nEl recibo no muestra el IVA.\n' > docs/items/CLI-0050.md
+sn sync >/dev/null 2>&1
+tarea() { state | python3 -c 'import json,sys; print(json.dumps([x for x in json.load(sys.stdin) if x["title"].startswith("[CLI-0050]")][0]))'; }
+check "Las fechas previstas de la ficha llegan a los campos de fecha del proyecto" "tarea | python3 -c 'import json,sys; t=json.load(sys.stdin); cf=t[\"custom_fields\"]; assert cf.get(\"fecha_inicio\")==\"2026-10-05\" and cf.get(\"fecha_fin\")==\"2026-10-12\", cf'"
+check "Y también se leen en la descripción, sin depender de que el proyecto tenga esos campos" "tarea | python3 -c 'import json,sys; d=json.load(sys.stdin)[\"description\"]; assert \"Fechas: inicio previsto 2026-10-05 · entrega prevista 2026-10-12\" in d, d'"
+check "La tarea nace etiquetada por tipo, riesgo y tamaño" "tarea | python3 -c 'import json,sys; g=set(json.load(sys.stdin)[\"tags\"]); assert {\"sn:bug\",\"sn:r2\",\"sn:tamano-m\"} <= g, g'"
+curl -s "localhost:$PORT/_tag?ref=CLI-0050&tag=urgente" >/dev/null
+sed -i '' 's/^risk: R2/risk: R3/' docs/items/CLI-0050.md
+sn sync >/dev/null 2>&1
+check "Al cambiar el riesgo, la etiqueta se actualiza y la que pusieron a mano en Altum se conserva" "tarea | python3 -c 'import json,sys; g=set(json.load(sys.stdin)[\"tags\"]); assert \"urgente\" in g and \"sn:r3\" in g and \"sn:r2\" not in g, g'"
+antes=$(curl -s "localhost:$PORT/_patches?ref=CLI-0050")
+sn sync >/dev/null 2>&1
+despues=$(curl -s "localhost:$PORT/_patches?ref=CLI-0050")
+check "Sincronizar otra vez no reescribe las etiquetas (el orden no es un cambio)" "[ \"\$despues\" = \"\$antes\" ]"
+
 echo "== Fichas guardadas en Windows (CRLF y BOM): se leen igual"
 printf -- '---\r\nid: CLI-0040\r\ntype: feature\r\ntitle: Pago con tarjeta\r\nrisk: R2\r\n---\r\n## Historia\r\nComo cliente quiero pagar con tarjeta\r\n\r\n## Criterios de aceptación\r\n- Dado un pago aprobado, entonces veo el recibo\r\n' > docs/items/CLI-0040.md
 before=$(posts)

@@ -7,6 +7,9 @@ import { leerTexto, normalizarTexto } from './texto.mjs';
 export const ITEMS_DIR = 'docs/items';
 export const ITEM_TYPES = ['feature', 'improvement', 'bug', 'incident', 'content', 'chore'];
 
+// Solo fechas AAAA-MM-DD: lo que no tenga esa forma no viaja a ningún lado.
+const fecha = (valor) => (/^\d{4}-\d{2}-\d{2}$/.test(String(valor || '').trim()) ? String(valor).trim() : '');
+
 export function parseFrontmatter(entrada) {
   const text = normalizarTexto(entrada);
   const match = text.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
@@ -55,6 +58,9 @@ export function readItems(root = '.') {
         assignee: data.assignee || '',
         origin: data.origin || '',
         created: data.created || '',
+        // Fechas planeadas, opcionales: cuándo se empieza y para cuándo se necesita (AAAA-MM-DD).
+        start: fecha(data.inicio || data.start),
+        due: fecha(data.fin || data.due || data.vence),
         parent: data.parent || '',
         // "descartado: <motivo>": se decidió no hacerlo. Queda escrito por qué y la tarea se cancela en Altum.
         discarded: data.descartado || '',
