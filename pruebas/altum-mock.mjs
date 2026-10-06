@@ -40,7 +40,8 @@ const badField = (cf = {}) => Object.entries(cf).find(([k, v]) => {
   return def && def.field_type === 'select' && !def.options.includes(v);
 });
 const now = () => new Date().toISOString();
-const manual = (t) => ({ tags: [], external_ref: null, custom_fields: {}, updated_by: null, assignee_id: null, ...t });
+const manual = (t) => ({ tags: [], external_ref: null, custom_fields: {}, updated_by: null, assignee_id: null,
+  start_date: null, due_date: null, started_at: null, completed_at: null, parent_id: null, sprint_id: null, ...t });
 const tasks = [
   manual({ id: randomUUID(), project_id: PROJECT, number: 77, kind: 'requerimiento', title: 'Exportar clientes a Excel (creada a mano)', description: 'El cliente pidió exportar.', state: 'new', priority: 2, created_at: '2026-09-19T08:00:00Z', updated_at: '2026-09-19T08:00:00Z' }),
   manual({ id: randomUUID(), project_id: PROJECT, number: 79, kind: 'historia', title: 'Filtrar ventas por fecha (criterios-html)', description: 'Pedido del cliente.', acceptance_criteria: '<ul><li><strong>Dado</strong> un rango de fechas, cuando filtro, entonces veo solo esas ventas</li><li>Sin resultados muestra &quot;Nada en ese rango&quot;</li></ul>', state: 'new', priority: 2, created_at: '2026-09-19T08:05:00Z', updated_at: '2026-09-19T08:05:00Z' }),
@@ -67,6 +68,26 @@ const conUrl = (r) => {
   const nombre = resto.pop();
   return { ...r, url: `https://dev.azure.com/${encodeURIComponent(org)}/${resto.map(encodeURIComponent).join('/')}/_git/${encodeURIComponent(nombre)}` };
 };
+const SPRINTS = [
+  { id: 'sp-1', name: 'Sprint 1', goal: 'Entregar el login', starts_on: '2026-10-05', ends_on: '2026-10-16', state: 'active' },
+  { id: 'sp-0', name: 'Sprint 0', goal: 'Arranque', starts_on: '2026-09-21', ends_on: '2026-10-02', state: 'closed' },
+];
+const esFechaSola = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v));
+const esFechaHora = (v) => !Number.isNaN(Date.parse(String(v)));
+// Lo que Altum rechaza con 422 en los campos nuevos.
+function malDato(data) {
+  for (const k of ['start_date', 'due_date']) if (data[k] != null && !esFechaSola(data[k])) return `${k} tiene que ser AAAA-MM-DD`;
+  for (const k of ['started_at', 'completed_at']) if (data[k] != null && !esFechaHora(data[k])) return `${k} tiene que ser una fecha-hora ISO`;
+  if (data.sprint_id && !SPRINTS.some((sp) => sp.id === data.sprint_id)) return 'ese sprint no es de este proyecto';
+  if (data.parent_id && !tasks.some((t) => t.id === data.parent_id)) return 'el padre no es de este proyecto';
+  return '';
+}
+// Permisos del 6-oct: con PERMISOS=lider la clave personal puede planear; si no, 403 con los campos.
+const CAMPOS_DE_PLANEACION = ['start_date', 'due_date', 'started_at', 'completed_at', 'parent_id', 'sprint_id', 'priority'];
+let permisos = process.env.MOCK_PERMISOS || 'lider';   // se cambia en caliente con /_permisos
+const planearProhibido = (data) => (permisos === 'no-lider'
+  ? CAMPOS_DE_PLANEACION.filter((k) => data[k] !== undefined) : []);
+const dependencias = new Map(); // tarea -> [ids que la bloquean]
 const idempotent = new Map();
 let number = 100;
 
@@ -81,6 +102,8 @@ http.createServer((req, res) => {
     appendFileSync(LOG, `${JSON.stringify({ method: req.method, path: url.pathname, query: url.search, key: req.headers['x-api-key'], idem: req.headers['idempotency-key'] || null, cliente: req.headers['x-client-name'] || null, body: body ? JSON.parse(body) : null })}\n`);
     // Rutas de control de la prueba (simulan a una persona usando Altum a mano).
     if (url.pathname === '/_state') return send(res, 200, tasks);
+    // Quien usa la clave lidera el proyecto o no: cambia qué puede planear (contrato del 6-oct).
+    if (url.pathname === '/_permisos') { permisos = url.searchParams.get('modo') || 'lider'; return send(res, 200, { permisos }); }
     if (url.pathname === '/_create') {
       const t = manual({ id: randomUUID(), project_id: PROJECT, number: (number += 1), kind: 'bug', title: 'Error en login (creada a mano)', description: '', state: 'new', priority: 1, created_at: now(), updated_at: now() });
       tasks.push(t); return send(res, 200, t);
@@ -124,10 +147,10 @@ http.createServer((req, res) => {
     const base = url.pathname.replace(/^\/api\/v1\/api/, '');
     if (req.method === 'GET' && base === '/me') {
       const projects = [{ id: PROJECT, name: 'Clientes', client_name: 'Almacenes Éxito', role: 'dev', is_lead: personal }, ...(personal ? [] : [{ id: OTHER, name: 'Facturación', client_name: 'Interno' }])];
-      return send(res, 200, { key: { id: personal ? 'key-laura' : KEY_ID, type: personal ? 'user' : 'company', name: personal ? 'Portátil de Laura' : 'CI', scopes: personal ? ['tasks:read', 'tasks:write', 'projects:read', 'projects:write'] : ['tasks:read', 'tasks:write', 'projects:read'] }, company: { id: 'c1', slug: 'softnexus', name: 'Softnexus' }, user: personal ? LAURA : null, projects });
+      return send(res, 200, { key: { id: personal ? 'key-laura' : KEY_ID, type: personal ? 'user' : 'company', name: personal ? 'Portátil de Laura' : 'CI', scopes: personal ? ['tasks:read', 'tasks:write', 'projects:read', 'projects:write'] : ['tasks:read', 'tasks:write', 'projects:read'] }, company: { id: 'c1', slug: 'softnexus', name: 'Softnexus' }, user: personal ? { ...LAURA, emails: [LAURA.email, 'laura.personal@gmail.com'], github_username: 'lauragomez' } : null, projects });
     }
     const pidOf = () => base.match(/^\/projects\/([^/]+)\//)?.[1] || url.searchParams.get('project_id') || (body ? JSON.parse(body).project_id : null) || tasks.find((t) => base === `/tasks/${t.id}`)?.project_id;
-    if (pidOf() && !allowed(pidOf())) return send(res, 403, { error: 'no estás asignado a este proyecto' });
+    if (pidOf() && !allowed(pidOf())) return send(res, 403, { detail: { error: 'No estás asignado a este proyecto' } });
     if (req.method === 'GET' && base === `/projects/${PROJECT}/config/estados`) return send(res, 200, STATES);
     if (req.method === 'GET' && base === `/projects/${PROJECT}/config/campos`) return send(res, 200, FIELDS);
     const repoDe = { [PROJECT]: process.env.MOCK_REPO || '', p3: null, p4: null, [OTHER]: null };
@@ -161,7 +184,7 @@ http.createServer((req, res) => {
       const page = Number(url.searchParams.get('page') || 1);
       const limit = Math.min(Number(url.searchParams.get('limit') || 50), MOCK_PAGE);
       const todos = [
-        { id: PROJECT, name: 'Clientes', client_name: 'Almacenes Éxito', status: 'active', repo_url: process.env.MOCK_REPO || '', members: [{ employee_id: 'e1', name: 'Marta Ríos', role: 'Líder técnico', is_lead: true, email: 'marta@softnexus.co', github_username: 'martarios', allocation_pct: 100 }] },
+        { id: PROJECT, name: 'Clientes', client_name: 'Almacenes Éxito', status: 'active', repo_url: process.env.MOCK_REPO || '', members: [{ employee_id: 'e1', name: 'Marta Ríos', role: 'Líder técnico', is_lead: true, email: 'marta@softnexus.co', emails: ['marta@softnexus.co', 'marta.rios.personal@gmail.com'], github_username: 'martarios', allocation_pct: 100 }] },
         { id: 'p3', name: 'Clientes VIP', client_name: 'Almacenes Éxito', status: 'active', repo_url: null, members: [] },
         { id: 'p4', name: 'Tienda', client_name: 'Almacenes Éxito', status: 'active', repo_url: null, members: [] },
         { id: OTHER, name: 'Facturación', client_name: 'Interno', status: 'active', repo_url: null, members: [] },
@@ -169,6 +192,27 @@ http.createServer((req, res) => {
       ].filter((p) => allowed(p.id) || p.id === 'p3' || p.id === 'p4' || p.id === 'p5')
         .map((p) => ({ ...p, repo_url: p.id in repos ? repos[p.id] : (repoDe[p.id] ?? null), repos: (listaRepos[p.id] || []).map(conUrl) }));
       return send(res, 200, { total: todos.length, page, limit, items: todos.slice((page - 1) * limit, page * limit) });
+    }
+    const sprintsDe = base.match(/^\/projects\/([^/]+)\/sprints$/);
+    if (req.method === 'GET' && sprintsDe) return send(res, 200, { items: SPRINTS });
+    const deps = base.match(/^\/tasks\/([^/]+)\/dependencies(?:\/([^/]+))?$/);
+    if (deps) {
+      const id = decodeURIComponent(deps[1]);
+      const lista = () => ({ items: (dependencias.get(id) || []).map((b2) => { const t = tasks.find((x) => x.id === b2) || {}; return { id: b2, number: t.number, title: t.title, state: t.state }; }) });
+      if (req.method === 'GET') return send(res, 200, lista());
+      if (req.method === 'POST') {
+        const { blocker_id: bloqueador } = JSON.parse(body);
+        if (bloqueador === id) return send(res, 422, { error: 'una tarea no se bloquea a sí misma' });
+        if (!tasks.some((t) => t.id === bloqueador)) return send(res, 422, { error: 'ese bloqueador no es de este proyecto' });
+        if ((dependencias.get(bloqueador) || []).includes(id)) return send(res, 422, { error: 'ya se bloquean en el otro sentido' });
+        const actuales = dependencias.get(id) || [];
+        if (!actuales.includes(bloqueador)) dependencias.set(id, [...actuales, bloqueador]);
+        return send(res, 201, lista());
+      }
+      if (req.method === 'DELETE') {
+        dependencias.set(id, (dependencias.get(id) || []).filter((b2) => b2 !== decodeURIComponent(deps[2] || '')));
+        res.writeHead(204); return res.end();
+      }
     }
     if (req.method === 'GET' && base === '/tasks') {
       const q = url.searchParams;
@@ -193,6 +237,8 @@ http.createServer((req, res) => {
       const data = JSON.parse(body);
       if (!data.project_id || !data.title) return send(res, 400, { error: 'project_id y title obligatorios' });
       if (badField(data.custom_fields)) return send(res, 422, { error: `campo ${badField(data.custom_fields)[0]} no válido` });
+      if (malDato(data)) return send(res, 422, { error: malDato(data) });
+      if (planearProhibido(data).length) return send(res, 403, { detail: { error: 'Eso lo decide quien lleva el proyecto', campos: planearProhibido(data) } });
       if (data.external_ref && tasks.some((t) => t.project_id === data.project_id && t.external_ref === data.external_ref)) return send(res, 409, { error: 'external_ref ya existe' });
       const { assignee_email: email, ...rest } = data;
       if (email && !USERS[email]) return send(res, 404, { error: 'no hay nadie con ese correo' });
@@ -216,6 +262,8 @@ http.createServer((req, res) => {
       if (!task) return send(res, 404, {});
       const data = JSON.parse(body);
       if (badField(data.custom_fields)) return send(res, 422, { error: `campo ${badField(data.custom_fields)[0]} no válido` });
+      if (malDato(data)) return send(res, 422, { error: malDato(data) });
+      if (planearProhibido(data).length) return send(res, 403, { detail: { error: 'Eso lo decide quien lleva el proyecto', campos: planearProhibido(data) } });
       if (data.state && !STATES.some((s) => s.key === data.state)) return send(res, 422, { error: `estado "${data.state}" no existe en el proyecto` });
       if (data.state === 'closed' && task.title.includes(BLOCKED_TITLE)) return send(res, 409, { error: 'Hay bloqueadores sin resolver', bloqueadores: [{ id: 'b1', number: 12, title: 'Configurar pasarela', state: 'en_desarrollo' }] });
       Object.assign(task, data, { updated_at: now(), updated_by: author });

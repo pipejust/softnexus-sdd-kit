@@ -3,14 +3,16 @@
 import { createHash } from 'node:crypto';
 
 // story y criteria: cambiar la historia o los criterios de aceptación también se lleva a Altum.
-const TRACKED_FIELDS = ['title', 'type', 'risk', 'size', 'assignee', 'branch', 'change', 'pr_url', 'tasks_done', 'tasks_total', 'commit_count', 'story', 'criteria', 'start', 'due', 'started', 'finished'];
+const TRACKED_FIELDS = ['title', 'type', 'risk', 'size', 'assignee', 'branch', 'change', 'pr_url', 'tasks_done', 'tasks_total', 'commit_count', 'story', 'criteria', 'start', 'due', 'started', 'finished', 'parent', 'blockers'];
+
+const mismoValor = (a, b) => JSON.stringify(a ?? '') === JSON.stringify(b ?? '');
 
 function eventId(parts) {
   return createHash('sha256').update(parts.join('|')).digest('hex').slice(0, 24);
 }
 
 function event(type, snapshot, item, extra = {}) {
-  const key = [type, item.id, item.stage, item.flag, ...TRACKED_FIELDS.map((f) => item[f] ?? '')];
+  const key = [type, item.id, item.stage, item.flag, ...TRACKED_FIELDS.map((f) => JSON.stringify(item[f] ?? ''))];
   return {
     specversion: '1.0',
     id: eventId(key),
@@ -41,7 +43,9 @@ export function diffSnapshots(previous, current) {
         : (old.flag === 'awaiting_validation' ? 'sn.validation.decided' : 'sn.item.flag_changed');
       events.push(event(type, current, item, { previous: { flag: old.flag } }));
     }
-    const changed = TRACKED_FIELDS.filter((f) => (old[f] ?? '') !== (item[f] ?? ''));
+    // Comparar por VALOR: hay campos que son listas (bloqueadores) y dos listas iguales no son
+    // el mismo objeto. Compararlas por identidad hacía que cada sincronización pareciera un cambio.
+    const changed = TRACKED_FIELDS.filter((f) => !mismoValor(old[f], item[f]));
     if (changed.length) events.push(event('sn.item.updated', current, item, { changed }));
   }
   return events;

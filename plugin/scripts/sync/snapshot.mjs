@@ -100,7 +100,9 @@ export function takeSnapshot(projectName = '', { solo = null } = {}) {
       commit_count: commits.length,
       // Fechas reales, no planeadas: cuándo se empezó de verdad (primer commit) y cuándo se unió el PR.
       started: (commits[commits.length - 1]?.date || '').slice(0, 10),
+      started_at: commits[commits.length - 1]?.date || '',
       finished: (pr.pr_merged_at || '').slice(0, 10),
+      finished_at: pr.pr_merged_at || '',
       commits: commits.slice(0, RECENT_COMMITS).map(({ short, date, author, subject }) => ({ short, date, author, subject })),
     };
   });

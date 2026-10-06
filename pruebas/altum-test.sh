@@ -42,7 +42,7 @@ cp .sn/connectors.json .sn/connectors.orig.json
 sed -i '' 's/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222/' .sn/connectors.json
 out=$(SN_ALTUM_KEY_PRUEBA=sk_user_test_laura sn test 2>&1 || true)
 mv .sn/connectors.orig.json .sn/connectors.json
-check "Clave personal en un proyecto no asignado: 403 que dice que no estás asignado" "echo \"\$out\" | grep -q 'estés asignado a ese proyecto'"
+check "Clave personal en un proyecto no asignado: 403 que dice que no estás asignado y qué hacer" "echo \"\$out\" | grep -q 'No estás asignado a este proyecto' && echo \"\$out\" | grep -q 'Pídele al líder'"
 mv .sn/connectors.json .sn/apagado.json
 out=$(SN_ALTUM_BASE_URL="http://localhost:$PORT/api/v1/api" SN_ALTUM_KEY=sk_user_test_laura node scripts/sn/sn-sync.mjs whoami 2>&1 || true)  # sin conector se usa el nombre por defecto
 mv .sn/apagado.json .sn/connectors.json
@@ -185,7 +185,7 @@ check "asegurar lo confirma en ese punto (PR unido, plano aún sin archivar)" "P
 echo "== Historial limpio en Altum y commits que de verdad son del ítem"
 patches() { grep -c '"method":"PATCH"' "$LOG"; }
 sn sync >/dev/null 2>&1; p0=$(patches); sn sync >/dev/null 2>&1; sn sync >/dev/null 2>&1
-check "Sincronizar sin cambios NO toca la tarea (no ensucia el historial de Altum)" "[ \$(patches) -eq $p0 ]"
+tail -n +1 "$LOG" | python3 -c "import json,sys; L=[json.loads(l) for l in sys.stdin if l.strip()]; P=[e for e in L if e['method']=='PATCH']; [print('  DBG', e['path'][-12:], json.dumps(e.get('body'))[:90]) for e in P[-3:]]"; check "Sincronizar sin cambios NO toca la tarea (no ensucia el historial de Altum)" "[ \$(patches) -eq $p0 ]"
 printf -- '---\nid: CLI-0011\ntype: feature\ntitle: Tarea nueva limpia\nrisk: R1\n---\n## Historia\nComo cliente quiero ver mi saldo.\n### Contexto\nHoy no se ve.\n' > docs/items/CLI-0011.md
 p0=$(patches); sn sync >/dev/null 2>&1
 check "Crear una tarea es UNA entrada: POST y ningún PATCH detrás (antes salían dos)" "[ \$(patches) -eq $p0 ] && grep -q '\"external_ref\":\"CLI-0011\"' '$LOG'"
@@ -233,20 +233,16 @@ check "Firmado por el líder de Altum: sí cuenta" "node scripts/sn/validation-s
 estado() { node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x["change"]=="add-firma"][0]; print(e["status"])'; }
 detalle() { node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x["change"]=="add-firma"][0]; print(e.get("detail",""))'; }
 # El caso real: el líder firma desde su computador con su correo PERSONAL (nadie commitea con el de la empresa)
-sed -i '' 's|Valida: Marta Ríos <marta@softnexus.co>|Valida: Marta Ríos <marta.rios.personal@gmail.com>|' openspec/changes/add-firma/validacion.md
+sed -i '' 's|Valida: Marta Ríos <marta@softnexus.co>|Valida: Marta Ríos <marta.otro.correo@gmail.com>|' openspec/changes/add-firma/validacion.md
 check "Correo personal suelto, que Altum no conoce: sigue sin valer, y dice cómo se reconoce al líder" "[ \"\$(estado)\" = 'firma inválida' ] && detalle | grep -q 'GitHub @martarios'"
-sed -i '' 's|Valida: Marta Ríos <marta.rios.personal@gmail.com>|Valida: Marta Ríos <marta.rios.personal@gmail.com> · GitHub @martarios|' openspec/changes/add-firma/validacion.md
+sed -i '' 's|Valida: Marta Ríos <marta.otro.correo@gmail.com>|Valida: Marta Ríos <marta.otro.correo@gmail.com> · GitHub @martarios|' openspec/changes/add-firma/validacion.md
 check "Correo personal + usuario de GitHub del líder: la firma vale" "[ \"\$(estado)\" != 'firma inválida' ]"
-python3 - <<'PY2'
-import json, pathlib
-p = pathlib.Path('.sn/state/altum-lider.json')
-d = json.loads(p.read_text())
-d['emails'] = ['marta.rios.personal@gmail.com']   # correo alterno registrado en Altum
-p.write_text(json.dumps(d))
-PY2
-sed -i '' 's| · GitHub @martarios||' openspec/changes/add-firma/validacion.md
-check "Correo alterno registrado en Altum: la firma vale sin poner el usuario de GitHub" "[ \"\$(estado)\" != 'firma inválida' ]"
-sed -i '' 's|Valida: Marta Ríos <marta.rios.personal@gmail.com>|Valida: Pedro <pedro@x.com> · GitHub @pedrox|' openspec/changes/add-firma/validacion.md
+# Altum devuelve los correos alternos de la persona (contrato del 6-oct): con ese correo basta.
+sn lead >/dev/null 2>&1
+sed -i '' 's|Valida: Marta Ríos <marta.otro.correo@gmail.com> · GitHub @martarios|Valida: Marta Ríos <marta.rios.personal@gmail.com>|' openspec/changes/add-firma/validacion.md
+check "Correo alterno que Altum devuelve en emails: la firma vale sin poner el usuario de GitHub" "[ \"\$(estado)\" != 'firma inválida' ]"
+sed -i '' 's|Valida: Marta Ríos <marta.rios.personal@gmail.com>|Valida: Marta Ríos <marta.otro.correo@gmail.com>|' openspec/changes/add-firma/validacion.md
+sed -i '' 's|Valida: Marta Ríos <marta.otro.correo@gmail.com>|Valida: Pedro <pedro@x.com> · GitHub @pedrox|' openspec/changes/add-firma/validacion.md
 check "Otra persona, con su propio usuario de GitHub: no vale (el candado sigue puesto)" "[ \"\$(estado)\" = 'firma inválida' ]"
 rm -rf openspec/changes/add-firma
 
@@ -317,6 +313,7 @@ check "Con updated_since también aparece: el vigilante ya la ve" "[ \"\$(backlo
 rm -f .sn/state/pull-altum.json
 check "pull la trae al repositorio con un id propio (ACT-…)" "out=\$(sn pull altum --apply 2>&1); echo \"\$out\" | grep -q 'ACT-abc123' && echo \"\$out\" | grep -q 'nacidas en reuniones' && [ -f docs/items/ACT-abc123.md ]"
 check "link contra una tarea de reunión se acepta y avisa qué se le puede cambiar" "sn link CLI-0001 altum acten:abc123 | grep -q 'solo se le pueden cambiar estado'"
+sed -i '' '/^ext.altum: acten:abc123$/d' docs/items/CLI-0001.md   # se deshace el enlace de prueba
 sn sync >/dev/null 2>&1
 check "sync escribe título y descripción en la tarea de la reunión" "api \"\$ACTEN\" | grep -q 'ACT-abc123'"
 check "El estado enviado es de Acten (pending|blocked|done|cancelled), no uno del proyecto" "api \"\$ACTEN\" | grep -qE '\"state\":\"(pending|blocked|done|cancelled)\"'"
@@ -363,8 +360,11 @@ echo "== Fechas y etiquetas de la tarea"
 printf -- '---\nid: CLI-0050\ntype: bug\ntitle: Recibo sin IVA\nrisk: R2\nsize: M\ninicio: 2026-10-05\nfin: 2026-10-12\n---\n## Historia\nEl recibo no muestra el IVA.\n' > docs/items/CLI-0050.md
 sn sync >/dev/null 2>&1
 tarea() { state | python3 -c 'import json,sys; print(json.dumps([x for x in json.load(sys.stdin) if x["title"].startswith("[CLI-0050]")][0]))'; }
-check "Las fechas previstas de la ficha llegan a los campos de fecha del proyecto" "tarea | python3 -c 'import json,sys; t=json.load(sys.stdin); cf=t[\"custom_fields\"]; assert cf.get(\"fecha_inicio\")==\"2026-10-05\" and cf.get(\"fecha_fin\")==\"2026-10-12\", cf'"
-check "Y también se leen en la descripción, sin depender de que el proyecto tenga esos campos" "tarea | python3 -c 'import json,sys; d=json.load(sys.stdin)[\"description\"]; assert \"Fechas: inicio previsto 2026-10-05 · entrega prevista 2026-10-12\" in d, d'"
+check "Las fechas previstas de la ficha van a los campos propios de Altum (start_date, due_date)" "tarea | python3 -c 'import json,sys; t=json.load(sys.stdin); assert t[\"start_date\"]==\"2026-10-05\" and t[\"due_date\"]==\"2026-10-12\", t'"
+check "La tarea nueva entra al sprint activo del proyecto" "tarea | python3 -c 'import json,sys; t=json.load(sys.stdin); assert t[\"sprint_id\"]==\"sp-1\", t[\"sprint_id\"]'"
+git commit -q --allow-empty -m "feat: recibo con IVA" -m "Refs: CLI-0050" && sn sync >/dev/null 2>&1
+check "La fecha real de inicio sale del primer commit del ítem (started_at)" "tarea | python3 -c 'import json,sys; t=json.load(sys.stdin); assert (t[\"started_at\"] or \"\").startswith(\"20\"), t[\"started_at\"]'"
+check "Una fecha mal escrita no se manda (y Altum la rechazaría con 422)" "printf -- '---\\nid: CLI-0051\\ntype: bug\\ntitle: Fecha rara\\nfin: 12/10/2026\\n---\\n## Historia\\nx\\n' > docs/items/CLI-0051.md; sn sync >/dev/null 2>&1; ! grep -q '12/10/2026' '$LOG'"
 check "La tarea nace etiquetada por tipo, riesgo y tamaño" "tarea | python3 -c 'import json,sys; g=set(json.load(sys.stdin)[\"tags\"]); assert {\"sn:bug\",\"sn:r2\",\"sn:tamano-m\"} <= g, g'"
 curl -s "localhost:$PORT/_tag?ref=CLI-0050&tag=urgente" >/dev/null
 sed -i '' 's/^risk: R2/risk: R3/' docs/items/CLI-0050.md
@@ -374,6 +374,24 @@ antes=$(curl -s "localhost:$PORT/_patches?ref=CLI-0050")
 sn sync >/dev/null 2>&1
 despues=$(curl -s "localhost:$PORT/_patches?ref=CLI-0050")
 check "Sincronizar otra vez no reescribe las etiquetas (el orden no es un cambio)" "[ \"\$despues\" = \"\$antes\" ]"
+
+echo "== Permisos del 6-oct: planear es del líder; lo demás sigue llegando"
+printf -- '---\nid: CLI-0060\ntype: bug\ntitle: Error al pagar\nrisk: R2\nfin: 2026-11-30\n---\n## Historia\nNo deja pagar.\n' > docs/items/CLI-0060.md
+curl -s "localhost:$PORT/_permisos?modo=no-lider" >/dev/null; out=$(sn sync 2>&1)
+check "Si la persona no lidera, Altum rechaza planear y el plugin lo dice en claro" "echo \"\$out\" | grep -q 'Eso lo decide quien lleva el proyecto'"
+check "Y la tarea se crea igual, sin las fechas: su trabajo no se queda sin registrar" "state | python3 -c 'import json,sys; t=[x for x in json.load(sys.stdin) if x[\"title\"].startswith(\"[CLI-0060]\")][0]; assert t[\"due_date\"] is None, t; assert \"No deja pagar\" in t[\"description\"]'"
+sed -i '' 's/^title: Error al pagar/title: Error al pagar en efectivo/' docs/items/CLI-0060.md
+curl -s "localhost:$PORT/_permisos?modo=no-lider" >/dev/null; out=$(sn sync 2>&1)
+check "Un cambio suyo (el título) sí llega, aunque las fechas sigan siendo del líder" "state | python3 -c 'import json,sys; t=[x for x in json.load(sys.stdin) if \"CLI-0060\" in x[\"title\"]][0]; assert \"en efectivo\" in t[\"title\"], t[\"title\"]'"
+curl -s "localhost:$PORT/_permisos?modo=lider" >/dev/null
+check "Cuando lo mira el líder (asegurar), las fechas que faltaban sí entran" "sn asegurar CLI-0060 >/dev/null 2>&1; state | python3 -c 'import json,sys; t=[x for x in json.load(sys.stdin) if \"CLI-0060\" in x[\"title\"]][0]; assert t[\"due_date\"]==\"2026-11-30\", t'"
+
+echo "== Padre y bloqueadores"
+printf -- '---\nid: CLI-0061\ntype: feature\ntitle: Pagos\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0061.md
+printf -- '---\nid: CLI-0062\ntype: historia\ntitle: Pago con tarjeta\nrisk: R1\nparent: CLI-0061\nbloqueado_por: CLI-0061\n---\n## Historia\nx\n' > docs/items/CLI-0062.md
+sn sync >/dev/null 2>&1; sn sync >/dev/null 2>&1
+check "El ítem cuelga de su padre en Altum (parent_id)" "state | python3 -c 'import json,sys; d=json.load(sys.stdin); hijo=[x for x in d if \"CLI-0062\" in x[\"title\"]][0]; padre=[x for x in d if \"CLI-0061\" in x[\"title\"]][0]; assert hijo[\"parent_id\"]==padre[\"id\"], hijo[\"parent_id\"]'"
+check "Lo que la ficha dice que la bloquea queda declarado en Altum" "node -e \"const h=require('fs').readFileSync('docs/items/CLI-0062.md','utf8').match(/^ext.altum: (.*)$/m)[1]; fetch('http://localhost:$PORT/api/v1/api/tasks/'+h+'/dependencies',{headers:{'X-API-Key':process.env.SN_ALTUM_KEY_PRUEBA}}).then(r=>r.json()).then(d=>process.exit(d.items.length===1?0:1))\""
 
 echo "== Fichas guardadas en Windows (CRLF y BOM): se leen igual"
 printf -- '---\r\nid: CLI-0040\r\ntype: feature\r\ntitle: Pago con tarjeta\r\nrisk: R2\r\n---\r\n## Historia\r\nComo cliente quiero pagar con tarjeta\r\n\r\n## Criterios de aceptación\r\n- Dado un pago aprobado, entonces veo el recibo\r\n' > docs/items/CLI-0040.md
