@@ -25,7 +25,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSy
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hasKey, keyName, listTasks, NotRetryable, projectStates } from './sync/altum.mjs';
-import { addProjectRepo, backlogMarkdown, identificarRepo, checkProjectRepo, fetchAltumTask, leadText, listProjects, listRepos, projectLead, pullAltum, readBacklog, removeProjectRepo, repoReminder, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
+import { addProjectRepo, backlogMarkdown, identificarRepo, nombreParaGit, checkProjectRepo, fetchAltumTask, leadText, listProjects, listRepos, projectLead, pullAltum, readBacklog, removeProjectRepo, repoReminder, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
 import { alreadyThere, cloneProject, findProject, findRepo, projectsForRepo, targetDir } from './sync/altum-clone.mjs';
 import { clearInbox, describe, isWatching, readInbox, stopWatch, watch } from './sync/altum-watch.mjs';
 import { deliver, fetchExternal } from './sync/connectors.mjs';
@@ -862,7 +862,10 @@ else if (command === 'repo-check') {
 else if (command === 'whoami') {
   const connector = config?.connectors.find((c) => c.kind === 'altum' && (!args[1] || c.name === args[1]))
     || { name: 'altum', kind: 'altum' };
-  process.stdout.write(whoAmIText(await whoAmI(connector), connector.project_id));
+  const yo = await whoAmI(connector);
+  process.stdout.write(whoAmIText(yo, connector.project_id));
+  const aviso = nombreParaGit(yo, gitOut(['config', 'user.name']));
+  if (aviso) console.log(`\n${aviso}`);
 }
 else if (!config || !config.connectors.length) {
   if (command !== 'sync') console.log('Proyecto sin conectores. Configúralos con /sn-connect.');

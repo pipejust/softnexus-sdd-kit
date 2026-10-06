@@ -11,7 +11,8 @@ origin: persona
 created: <AAAA-MM-DDTHH:MM:SS-05:00>
 inicio:            # opcional, AAAA-MM-DD: cuándo se empieza
 fin:               # opcional, AAAA-MM-DD: para cuándo se necesita
-parent:
+bloqueado_por:     # opcional, ids de otras fichas que tienen que cerrar primero
+parent:            # opcional, id de la ficha de la que cuelga (épica, feature, historia)
 ---
 ## Historia
 Como <rol> quiero <acción> para <beneficio>.

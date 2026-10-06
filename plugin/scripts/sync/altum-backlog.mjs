@@ -166,9 +166,24 @@ export async function whoAmI(connector) {
   }
 }
 
+// El nombre con el que la persona aparece en Altum es el que debe quedar como autor en el
+// repositorio (contrato del 6-oct). Si git tiene otro, se dice: es lo que hace que un commit
+// se le reconozca a quien lo hizo, sin que nadie configure nada a mano.
+export function nombreParaGit(me, nombreDeGit) {
+  const altum = me?.user?.name || '';
+  if (!altum || !nombreDeGit || altum === nombreDeGit) return '';
+  return `En Altum te llamas "${altum}" y en este computador git firma como "${nombreDeGit}".`
+    + ` Para que tus commits se vean con tu nombre: git config --global user.name "${altum}"`;
+}
+
 export function whoAmIText(me, projectId) {
   if (!me) return 'Altum todavía no dice de quién es la clave (falta GET /me, pedido F). La conexión funciona igual.\n';
-  const who = me.user ? `Clave personal de ${me.user.name || ''} <${me.user.email || '?'}>` : `Clave de la empresa (${me.key?.name || 'CI / servidores'})`;
+  const otros = (me.user?.emails || []).filter((c) => c && c !== me.user.email);
+  const who = me.user
+    ? `Clave personal de ${me.user.name || ''} <${me.user.email || '?'}>`
+      + `${me.user.github_username ? ` · GitHub @${me.user.github_username}` : ''}`
+      + `${otros.length ? `\nTambién te reconoce por: ${otros.join(', ')}` : ''}`
+    : `Clave de la empresa (${me.key?.name || 'CI / servidores'})`;
   const projects = me.projects || [];
   const lines = projects.map((p) => `  ${p.name || ''}${p.client_name ? `  · cliente: ${p.client_name}` : ''}${p.is_lead ? '  [líder]' : ''}${p.repo_url ? '' : '  (sin repositorio en Altum)'}`);
   // Las claves anteriores a "projects:write" no pueden registrar el repositorio: se avisa antes del 403.

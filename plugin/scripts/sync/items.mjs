@@ -61,6 +61,8 @@ export function readItems(root = '.') {
         // Fechas planeadas, opcionales: cuándo se empieza y para cuándo se necesita (AAAA-MM-DD).
         start: fecha(data.inicio || data.start),
         due: fecha(data.fin || data.due || data.vence),
+        // "bloqueado_por: ID-1, ID-2": otras fichas que tienen que cerrar primero.
+        blockers: String(data.bloqueado_por || data.blocked_by || '').split(/[,\s]+/).filter(Boolean),
         parent: data.parent || '',
         // "descartado: <motivo>": se decidió no hacerlo. Queda escrito por qué y la tarea se cancela en Altum.
         discarded: data.descartado || '',
