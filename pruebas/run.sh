@@ -218,6 +218,9 @@ const { ejecutarPasos } = await import(process.env.SN_VERSION_MJS);
 const r = ejecutarPasos([{ cmd: 'sh', args: ['-c', 'echo "   ✗ NO SE PUDO: ✘ Failed to uninstall: permiso denegado"; exit 1'], nota: 'limpiar-copias' }]);
 console.log(r[0].motivo === '✘ Failed to uninstall: permiso denegado' ? 'motivo-ok' : `motivo-mal: ${r[0].motivo}`);
 JS
+check "Solo se refresca NUESTRO catálogo (si otro ajeno falla, no es problema nuestro)" "ver \"import {pasosInstalacionGeneral} from '$PLUGIN/sync/version.mjs'; const p=pasosInstalacionGeneral(); const m=p.find(x=>x.args && x.args.includes('marketplace')); process.exit(m && m.args[m.args.length-1]==='softnexus' ? 0 : 1)\""
+check "Y si aun así se queja de otros catálogos, no cuenta como fallo" "ver \"import {esBenigno} from '$PLUGIN/sync/version.mjs'; process.exit(esBenigno('✘ Updated 11 marketplaces, but not all') ? 0 : 1)\""
+check "El script muestra el MOTIVO y guarda todo en un archivo" "grep -q 'MOTIVO' \"$T/../herramientas/plugin-general.sh\" && grep -q 'BITACORA' \"$T/../herramientas/plugin-general.sh\""
 check "El motivo de verdad sube al resumen, no el genérico \"Command failed\"" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/motivo.mjs\" 2>/dev/null | grep -q motivo-ok"
 check "Lo que el comando dice por la salida normal también cuenta para saber si fue un fallo" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/salida-normal.mjs\" 2>/dev/null | grep -q salida-ok"
 check "Un paso que termina en \"ya estaba\" se cuenta como hecho" "ver \"import {ejecutarPasos} from '$PLUGIN/sync/version.mjs'; const r=ejecutarPasos([{cmd:'claude',args:['plugin','enable'],opcional:true,nota:'x'}], { correr: () => { const e=new Error('Failed to enable plugin: Plugin is already enabled at user scope'); throw e; } }); process.exit(r[0].ok && r[0].yaEstaba ? 0 : 1)\""

@@ -10,6 +10,7 @@ import path from 'node:path';
 
 const REPO = 'pipejust/softnexus-sdd-kit';
 const PLUGIN = 'softnexus-sdd@softnexus';
+const CATALOGO = 'softnexus';
 const MANIFIESTO = `https://raw.githubusercontent.com/${REPO}/main/plugin/.claude-plugin/plugin.json`;
 const CADA = 12 * 60 * 60 * 1000;   // no se pregunta más de dos veces al día
 const CACHE = path.join(os.homedir(), '.claude', 'sn-version.json');
@@ -167,7 +168,7 @@ export function pasosInstalacionGeneral({ cat = catalogo(), installs = instalaci
   if (cat.tipo === 'carpeta' && cat.carpeta) {
     pasos.push({ cmd: 'git', args: ['-C', cat.carpeta, 'pull', '--ff-only'], nota: 'el catálogo es una carpeta de este computador: traerla al día' });
   }
-  pasos.push({ cmd: 'claude', args: ['plugin', 'marketplace', 'update'], nota: 'refrescar el catálogo' });
+  pasos.push({ cmd: 'claude', args: ['plugin', 'marketplace', 'update', CATALOGO], nota: 'refrescar el catálogo de Softnexus' });
   const tieneUsuario = installs.some((i) => i.scope === 'user');
   pasos.push(tieneUsuario
     ? { cmd: 'claude', args: ['plugin', 'update', PLUGIN], nota: 'dejar al día la copia general (la de tu usuario)' }
@@ -192,7 +193,7 @@ export function pasosParaActualizar({ cat = catalogo(), installs = instalaciones
       nota: 'el catálogo de este computador es una carpeta, no GitHub: "marketplace update" no la trae al día',
     });
   }
-  pasos.push({ cmd: 'claude', args: ['plugin', 'marketplace', 'update'], nota: 'refrescar el catálogo' });
+  pasos.push({ cmd: 'claude', args: ['plugin', 'marketplace', 'update', CATALOGO], nota: 'refrescar el catálogo de Softnexus' });
   pasos.push({ cmd: 'claude', args: ['plugin', 'update', 'softnexus-sdd@softnexus'], nota: 'la copia de tu usuario' });
   for (const i of installs.filter((x) => x.scope !== 'user' && x.proyecto)) {
     pasos.push({
@@ -212,7 +213,7 @@ export function comoActualizar(opciones = {}) {
 // Hay "fallos" que en realidad son el resultado que queríamos: la copia ya estaba encendida, o el
 // proyecto ya no tenía copia que quitar. No son problemas y no deben asustar a nadie.
 export function esBenigno(motivo) {
-  return /already enabled|ya está (habilitado|activado|encendid)|not installed|no está instalad|installed in user scope|not found|no such plugin|ya no existe|ENOENT/i.test(String(motivo || ''));
+  return /already enabled|ya está (habilitado|activado|encendid)|not installed|no está instalad|installed in user scope|not found|no such plugin|ya no existe|ENOENT|but not all|could not be refreshed/i.test(String(motivo || ''));
 }
 
 export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
