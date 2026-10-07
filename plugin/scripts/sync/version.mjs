@@ -92,19 +92,50 @@ export function instalacionesDeAqui(carpeta, installs = instalaciones()) {
     || (i.proyecto && (aqui === path.resolve(i.proyecto) || aqui.startsWith(`${path.resolve(i.proyecto)}${path.sep}`))));
 }
 
-// Los comandos exactos para esta máquina, en orden.
-export function comoActualizar({ cat = catalogo(), installs = instalaciones() } = {}) {
+// Todo lo que hay que correr en esta máquina, en orden y listo para ejecutar.
+// Cada paso dice por qué está: así la persona ve lo mismo que se va a hacer.
+export function pasosParaActualizar({ cat = catalogo(), installs = instalaciones() } = {}) {
   const pasos = [];
   if (cat.tipo === 'carpeta' && cat.carpeta) {
-    pasos.push(`git -C "${cat.carpeta}" pull --ff-only   # el catálogo es una carpeta de este computador: hay que traerla al día`);
+    pasos.push({
+      cmd: 'git', args: ['-C', cat.carpeta, 'pull', '--ff-only'],
+      nota: 'el catálogo de este computador es una carpeta, no GitHub: "marketplace update" no la trae al día',
+    });
   }
-  pasos.push('claude plugin marketplace update');
-  pasos.push('claude plugin update softnexus-sdd@softnexus');
-  const porProyecto = installs.filter((i) => i.scope !== 'user');
-  for (const i of porProyecto) {
-    pasos.push(`cd "${i.proyecto}" && claude plugin update softnexus-sdd@softnexus --scope project   # esta copia (${i.version}) manda dentro de ese proyecto`);
+  pasos.push({ cmd: 'claude', args: ['plugin', 'marketplace', 'update'], nota: 'refrescar el catálogo' });
+  pasos.push({ cmd: 'claude', args: ['plugin', 'update', 'softnexus-sdd@softnexus'], nota: 'la copia de tu usuario' });
+  for (const i of installs.filter((x) => x.scope !== 'user' && x.proyecto)) {
+    pasos.push({
+      cmd: 'claude', args: ['plugin', 'update', 'softnexus-sdd@softnexus', '--scope', 'project'], cwd: i.proyecto,
+      nota: `la copia de ${path.basename(i.proyecto)} (${i.version}), que manda dentro de ese proyecto`,
+    });
   }
   return pasos;
+}
+
+export function comoActualizar(opciones = {}) {
+  return pasosParaActualizar(opciones).map((p) => `${p.cwd ? `cd "${p.cwd}" && ` : ''}${p.cmd} ${p.args.join(' ')}   # ${p.nota}`);
+}
+
+// Correrlos de una. Se muestra cada comando antes de ejecutarlo y, si uno falla, se sigue con los
+// demás: que una carpeta borrada o un proyecto movido no deje el resto sin actualizar.
+export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
+  const resultados = [];
+  for (const paso of pasos) {
+    console.log(`\n→ ${paso.cmd} ${paso.args.join(' ')}${paso.cwd ? `   (en ${paso.cwd})` : ''}`);
+    try {
+      correr(paso);
+      resultados.push({ paso, ok: true });
+    } catch (error) {
+      console.log(`   No se pudo: ${String(error.message || error).split('\n')[0]}`);
+      resultados.push({ paso, ok: false });
+    }
+  }
+  return resultados;
+}
+
+function ejecutar(paso) {
+  execFileSync(paso.cmd, paso.args, { stdio: 'inherit', cwd: paso.cwd || process.cwd(), timeout: 180000, windowsHide: true });
 }
 
 export function gitAtrasado(carpeta) {
