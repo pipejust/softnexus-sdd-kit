@@ -224,8 +224,14 @@ export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
       resultados.push({ paso, ok: true });
     } catch (error) {
       const todo = String(error.todo || error.message || error);
-      const motivo = (todo.split('\n').map((l) => l.trim()).filter(Boolean).find((l) => /✘|error|fail|no se|cannot/i.test(l))
-        || String(error.message || error).split('\n')[0]).slice(0, 300);
+      // El motivo de verdad: la última línea del comando que explica algo. Se buscan las dos cruces
+      // (✘ la de claude, ✗ la nuestra cuando el que falló fue otro paso nuestro) y los errores comunes.
+      // Solo lo que IMPRIMIÓ el comando, no el "Command failed: ..." que agrega Node y no explica nada.
+      const impreso = `${error.stdout || ''}\n${error.stderr || ''}`;
+      const pistas = impreso.split('\n').map((l) => l.trim()).filter(Boolean)
+        .filter((l) => /✘|✗|error|fail|no se pudo|cannot|denied|ENOENT|EINVAL|EACCES/i.test(l));
+      const motivo = (pistas[pistas.length - 1] || String(error.message || error).split('\n')[0])
+        .replace(/^✗\s*NO SE PUDO:\s*/, '').slice(0, 300);
       if (esBenigno(todo)) {
         console.log('   (ya estaba así: nada que hacer)');
         resultados.push({ paso, ok: true, yaEstaba: true });

@@ -212,6 +212,13 @@ const ok = ejecutarPasos([{ cmd: 'sh', args: ['-c', 'echo "Failed: is already en
 const malo = ejecutarPasos([{ cmd: 'sh', args: ['-c', 'echo "Failed: disco lleno"; exit 1'], nota: 'y' }]);
 console.log(ok[0].ok && ok[0].yaEstaba && !malo[0].ok && malo[0].motivo.includes('disco lleno') ? 'salida-ok' : 'salida-mal');
 JS
+cat > "$W/motivo.mjs" <<'JS'
+const { ejecutarPasos } = await import(process.env.SN_VERSION_MJS);
+// el fallo real viene anidado (un comando nuestro que por dentro corre otro)
+const r = ejecutarPasos([{ cmd: 'sh', args: ['-c', 'echo "   ✗ NO SE PUDO: ✘ Failed to uninstall: permiso denegado"; exit 1'], nota: 'limpiar-copias' }]);
+console.log(r[0].motivo === '✘ Failed to uninstall: permiso denegado' ? 'motivo-ok' : `motivo-mal: ${r[0].motivo}`);
+JS
+check "El motivo de verdad sube al resumen, no el genérico \"Command failed\"" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/motivo.mjs\" 2>/dev/null | grep -q motivo-ok"
 check "Lo que el comando dice por la salida normal también cuenta para saber si fue un fallo" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/salida-normal.mjs\" 2>/dev/null | grep -q salida-ok"
 check "Un paso que termina en \"ya estaba\" se cuenta como hecho" "ver \"import {ejecutarPasos} from '$PLUGIN/sync/version.mjs'; const r=ejecutarPasos([{cmd:'claude',args:['plugin','enable'],opcional:true,nota:'x'}], { correr: () => { const e=new Error('Failed to enable plugin: Plugin is already enabled at user scope'); throw e; } }); process.exit(r[0].ok && r[0].yaEstaba ? 0 : 1)\""
 check "El script tampoco lo cuenta como fallo" "grep -q 'already enabled' \"$T/../herramientas/plugin-general.sh\""
