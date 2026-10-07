@@ -36,7 +36,7 @@ import { takeSnapshot } from './sync/snapshot.mjs';
 import { mensajeValidacion } from './sync/validacion-mensaje.mjs';
 import { aprobacionesPr, firmaDelLider, origenRepo, prDeRama } from './sync/pr.mjs';
 import { siguientePaso } from './sync/siguiente.mjs';
-import { catalogo, comoActualizar, ejecutarPasos, esMasNueva, gitAtrasado, instalaciones, pasosParaActualizar, ultimaPublicada, versionInstalada } from './sync/version.mjs';
+import { catalogo, comoActualizar, ejecutarPasos, esMasNueva, gitAtrasado, instalaciones, pasosGenerales, pasosInstalacionGeneral, pasosLimpieza, pasosParaActualizar, proyectosConCopia, ultimaPublicada, versionInstalada } from './sync/version.mjs';
 import { parseLog } from './validation-state.mjs';
 import { leerTexto } from './sync/texto.mjs';
 import {
@@ -534,6 +534,20 @@ async function actualizar() {
       + ' Dentro de un proyecto, la copia del proyecto manda sobre la del usuario.');
   }
   if (ultima && !esMasNueva(ultima, actual) && !viejas.length) return console.log('Todo al día. No hay nada que hacer.');
+  // --general: dejar el plugin UNA sola vez en este computador. Quita las copias que viven dentro de
+  // proyectos (y la línea que las pedía) y deja al día la general, la que sirve para todos.
+  if (flag('--general')) {
+    const generales = pasosGenerales({ cat, installs });
+    const copias = proyectosConCopia(installs);
+    console.log(copias.length
+      ? `\n${copias.length} proyecto(s) tienen su propia copia del plugin. Se quitan y queda una sola, la de tu usuario:`
+      : '\nNo hay copias dentro de proyectos. Solo dejo al día la general:');
+    const hechos = ejecutarPasos(generales);
+    const fallaron = hechos.filter((h) => !h.ok).length;
+    console.log(`\n${fallaron ? `Quedaron ${fallaron} paso(s) sin hacer (arriba dice cuáles).` : 'Listo: una sola instalación, para todos los proyectos.'}`);
+    console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir.');
+    return;
+  }
   const pasos = pasosParaActualizar({ cat, installs });
   if (flag('--arreglar')) {
     console.log(`\nActualizando todo en esta máquina (${pasos.length} pasos):`);
@@ -546,6 +560,10 @@ async function actualizar() {
   console.log('\nPara ponerlo al día en esta máquina, en este orden:');
   comoActualizar({ cat, installs }).forEach((paso) => console.log(`  ${paso}`));
   console.log('\nO deja que lo haga solo:  node "' + SELF + '" actualizar --arreglar');
+  if (installs.some((i) => i.scope !== 'user')) {
+    console.log('Y para no repetir esto nunca más (una sola instalación para todos los proyectos):');
+    console.log('  node "' + SELF + '" actualizar --general');
+  }
   console.log('Y al final, cierra Claude Code y vuélvelo a abrir: hasta que no reinicies sigue corriendo la versión vieja.');
   if (cat.tipo === 'carpeta') {
     console.log('\nPara no repetir esto cada vez, se puede registrar el catálogo desde GitHub:'
@@ -553,6 +571,32 @@ async function actualizar() {
       + '\n  claude plugin marketplace add pipejust/softnexus-sdd-kit'
       + '\n  claude plugin install softnexus-sdd@softnexus');
   }
+}
+
+// limpiar-copias: quita el plugin de TODOS los proyectos de este computador (las copias instaladas
+// dentro de cada carpeta y la línea que las pedía). Después manda una sola: la del computador.
+function limpiarCopias() {
+  const installs = instalaciones();
+  const copias = proyectosConCopia(installs);
+  if (!copias.length) return console.log('Ningún proyecto tiene copia propia del plugin: ya manda una sola, la de tu usuario.');
+  console.log(`${copias.length} proyecto(s) tienen su propia copia. Las quito:`);
+  const hechos = ejecutarPasos(pasosLimpieza({ installs }));
+  const fallaron = hechos.filter((h) => !h.ok).length;
+  console.log(`\n${fallaron ? `Quedaron ${fallaron} paso(s) sin hacer (arriba dice cuáles).` : 'Listo: ya no hay copias dentro de proyectos.'}`);
+  console.log('Ahora instala la general si no la tienes: instalar-general.');
+}
+
+// instalar-general: deja la copia del computador (ámbito de usuario), la que sirve en TODOS los
+// proyectos. Si ya está, la deja al día.
+async function instalarGeneral() {
+  const cat = catalogo();
+  const installs = instalaciones();
+  const hechos = ejecutarPasos(pasosInstalacionGeneral({ cat, installs }));
+  const fallaron = hechos.filter((h) => !h.ok).length;
+  const copias = proyectosConCopia(installs);
+  console.log(`\n${fallaron ? `Quedaron ${fallaron} paso(s) sin hacer (arriba dice cuáles).` : 'Listo: el plugin queda instalado para todos tus proyectos.'}`);
+  if (copias.length) console.log(`OJO: ${copias.length} proyecto(s) todavía tienen copia propia y esa manda dentro de ellos. Quítalas con: limpiar-copias.`);
+  console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir.');
 }
 
 // El conector de Altum de este repositorio, con proyecto y clave listos.
@@ -952,6 +996,8 @@ else if (command === 'set-repo') await setRepo(config);
 else if (command === 'conectar') await conectar(config);
 else if (command === 'motor') motor();
 else if (command === 'actualizar' || command === 'version') await actualizar();
+else if (command === 'limpiar-copias') limpiarCopias();
+else if (command === 'instalar-general') await instalarGeneral();
 else if (command === 'sin-asignar') await sinAsignar(config);
 else if (command === 'asignar') await asignar(config);
 // repo-check: mira si el proyecto ya tiene repositorio registrado y lo deja anotado para el aviso.
@@ -986,6 +1032,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|pedir-config|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|conectar|motor|actualizar|sin-asignar|asignar|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|pedir-config|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|conectar|motor|actualizar|limpiar-copias|instalar-general|sin-asignar|asignar|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }

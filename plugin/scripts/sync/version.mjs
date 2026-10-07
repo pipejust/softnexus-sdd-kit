@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const REPO = 'pipejust/softnexus-sdd-kit';
+const PLUGIN = 'softnexus-sdd@softnexus';
 const MANIFIESTO = `https://raw.githubusercontent.com/${REPO}/main/plugin/.claude-plugin/plugin.json`;
 const CADA = 12 * 60 * 60 * 1000;   // no se pregunta más de dos veces al día
 const CACHE = path.join(os.homedir(), '.claude', 'sn-version.json');
@@ -92,6 +93,77 @@ export function instalacionesDeAqui(carpeta, installs = instalaciones()) {
     || (i.proyecto && (aqui === path.resolve(i.proyecto) || aqui.startsWith(`${path.resolve(i.proyecto)}${path.sep}`))));
 }
 
+// Los proyectos de este computador que se guardaron su propia copia del plugin: los que lo tienen
+// instalado por proyecto y los que lo declaran en su .claude/settings.json (de ahí sale la copia).
+export function proyectosConCopia(installs = instalaciones()) {
+  const carpetas = new Set(installs.filter((i) => i.scope !== 'user' && i.proyecto).map((i) => i.proyecto));
+  try {
+    const abiertos = JSON.parse(readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8')).projects || {};
+    for (const carpeta of Object.keys(abiertos)) {
+      if (declaraElPlugin(carpeta)) carpetas.add(carpeta);
+    }
+  } catch { /* sin lista de proyectos: basta con los instalados */ }
+  return [...carpetas];
+}
+
+const AJUSTES = (carpeta) => path.join(carpeta, '.claude', 'settings.json');
+
+export function declaraElPlugin(carpeta) {
+  try {
+    const d = JSON.parse(readFileSync(AJUSTES(carpeta), 'utf8'));
+    return Boolean((d.enabledPlugins || {})[PLUGIN]);
+  } catch {
+    return false;
+  }
+}
+
+// Quitar la línea que hace que ese proyecto se guarde su propia copia. Lo demás del archivo no se toca.
+export function dejarDeDeclarar(carpeta) {
+  if (!declaraElPlugin(carpeta)) return false;
+  const archivo = AJUSTES(carpeta);
+  const d = JSON.parse(readFileSync(archivo, 'utf8'));
+  delete d.enabledPlugins[PLUGIN];
+  if (!Object.keys(d.enabledPlugins).length) delete d.enabledPlugins;
+  writeFileSync(archivo, `${JSON.stringify(d, null, 2)}\n`);
+  return true;
+}
+
+// 1) Quitar el plugin de TODOS los proyectos: las copias instaladas dentro de cada carpeta y la
+// línea de su settings.json que las pedía. Después de esto manda una sola, la del computador.
+export function pasosLimpieza({ installs = instalaciones() } = {}) {
+  const pasos = [];
+  for (const carpeta of proyectosConCopia(installs)) {
+    pasos.push({
+      cmd: 'claude', args: ['plugin', 'uninstall', PLUGIN, '--scope', 'project'], cwd: carpeta, opcional: true,
+      nota: `quitar la copia de ${path.basename(carpeta)}`,
+    });
+    pasos.push({
+      fn: () => dejarDeDeclarar(carpeta), opcional: true,
+      nota: `que ${path.basename(carpeta)} deje de pedir su propia copia (.claude/settings.json)`,
+    });
+  }
+  return pasos;
+}
+
+// 2) Instalar (o dejar al día) la copia general: la del usuario, que sirve en todos los proyectos.
+export function pasosInstalacionGeneral({ cat = catalogo(), installs = instalaciones() } = {}) {
+  const pasos = [];
+  if (cat.tipo === 'carpeta' && cat.carpeta) {
+    pasos.push({ cmd: 'git', args: ['-C', cat.carpeta, 'pull', '--ff-only'], nota: 'el catálogo es una carpeta de este computador: traerla al día' });
+  }
+  pasos.push({ cmd: 'claude', args: ['plugin', 'marketplace', 'update'], nota: 'refrescar el catálogo' });
+  const tieneUsuario = installs.some((i) => i.scope === 'user');
+  pasos.push(tieneUsuario
+    ? { cmd: 'claude', args: ['plugin', 'update', PLUGIN], nota: 'dejar al día la copia general (la de tu usuario)' }
+    : { cmd: 'claude', args: ['plugin', 'install', PLUGIN], nota: 'instalar la copia general, la que sirve para todos los proyectos' });
+  return pasos;
+}
+
+// Las dos cosas de una: limpiar y dejar la general al día.
+export function pasosGenerales(opciones = {}) {
+  return [...pasosLimpieza(opciones), ...pasosInstalacionGeneral(opciones)];
+}
+
 // Todo lo que hay que correr en esta máquina, en orden y listo para ejecutar.
 // Cada paso dice por qué está: así la persona ve lo mismo que se va a hacer.
 export function pasosParaActualizar({ cat = catalogo(), installs = instalaciones() } = {}) {
@@ -122,7 +194,7 @@ export function comoActualizar(opciones = {}) {
 export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
   const resultados = [];
   for (const paso of pasos) {
-    console.log(`\n→ ${paso.cmd} ${paso.args.join(' ')}${paso.cwd ? `   (en ${paso.cwd})` : ''}`);
+    console.log(`\n→ ${paso.fn ? paso.nota : `${paso.cmd} ${paso.args.join(' ')}`}${paso.cwd ? `   (en ${paso.cwd})` : ''}`);
     try {
       correr(paso);
       resultados.push({ paso, ok: true });
@@ -135,7 +207,8 @@ export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
 }
 
 function ejecutar(paso) {
-  execFileSync(paso.cmd, paso.args, { stdio: 'inherit', cwd: paso.cwd || process.cwd(), timeout: 180000, windowsHide: true });
+  if (paso.fn) return paso.fn();
+  return execFileSync(paso.cmd, paso.args, { stdio: 'inherit', cwd: paso.cwd || process.cwd(), timeout: 180000, windowsHide: true });
 }
 
 export function gitAtrasado(carpeta) {
