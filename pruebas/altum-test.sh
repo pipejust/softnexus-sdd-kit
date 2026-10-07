@@ -375,6 +375,21 @@ sn sync >/dev/null 2>&1
 despues=$(curl -s "localhost:$PORT/_patches?ref=CLI-0050")
 check "Sincronizar otra vez no reescribe las etiquetas (el orden no es un cambio)" "[ \"\$despues\" = \"\$antes\" ]"
 
+echo "== Las tareas no se devuelven solas: el estado nunca retrocede"
+printf -- '---\nid: CLI-0080\ntype: feature\ntitle: Reportes nuevos\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0080.md
+sn sync >/dev/null 2>&1
+tarea80() { state | python3 -c 'import json,sys; print(json.dumps([x for x in json.load(sys.stdin) if x["title"].startswith("[CLI-0080]")][0]))'; }
+check "Nace como nueva" "tarea80 | grep -q '\"state\": \"new\"'"
+curl -s "localhost:$PORT/_edit?ref=CLI-0080" >/dev/null   # alguien la mueve en Altum (queda en_revision)
+printf -- '---\nid: CLI-0080\ntype: feature\ntitle: Reportes nuevos\nrisk: R1\nassignee: Laura <laura@x>\n---\n## Historia\nx\n' > docs/items/CLI-0080.md
+out=$(sn sync 2>&1)
+check "Si en Altum va más adelante, el plugin NO la devuelve a nueva" "tarea80 | grep -q '\"state\": \"en_revision\"'"
+check "Y lo dice en vez de callarse" "echo \"\$out\" | grep -q 'No la devuelvo atrás'"
+check "Pero lo demás del ítem sí se actualiza" "tarea80 | grep -q 'Laura'"
+mkdir -p openspec/changes/archive/2026-10-06-rep-80 && sed -i '' 's/^risk: R1/risk: R1\nchange: rep-80/' docs/items/CLI-0080.md
+sn sync >/dev/null 2>&1
+check "Hacia adelante sí viaja: al archivar, la tarea se cierra" "tarea80 | grep -q '\"state\": \"closed\"'"
+
 echo "== Permisos del 6-oct: planear es del líder; lo demás sigue llegando"
 printf -- '---\nid: CLI-0060\ntype: bug\ntitle: Error al pagar\nrisk: R2\nfin: 2026-11-30\n---\n## Historia\nNo deja pagar.\n' > docs/items/CLI-0060.md
 curl -s "localhost:$PORT/_permisos?modo=no-lider" >/dev/null; out=$(sn sync 2>&1)
