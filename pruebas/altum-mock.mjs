@@ -15,7 +15,7 @@ const LAURA = { id: 'user-laura', email: 'laura@x', name: 'Laura Gómez' };
 const PROJECT = '11111111-1111-1111-1111-111111111111';
 const OTHER = '22222222-2222-2222-2222-222222222222';
 const MOCK_PAGE = 2;
-const USERS = { 'laura@x': 'user-laura' };
+const USERS = { 'laura@x': 'e2' };   // correo -> employee_id (así identifica Altum al responsable)
 const STATES = [
   { key: 'new', label: 'Nuevo', kind: 'open', position: 0 },
   { key: 'en_desarrollo', label: 'En desarrollo', kind: 'in_progress', position: 10 },
@@ -83,7 +83,9 @@ function malDato(data) {
   return '';
 }
 // Permisos del 6-oct: con PERMISOS=lider la clave personal puede planear; si no, 403 con los campos.
-const CAMPOS_DE_PLANEACION = ['start_date', 'due_date', 'started_at', 'completed_at', 'parent_id', 'sprint_id', 'priority'];
+const CAMPOS_DE_PLANEACION = ['start_date', 'due_date', 'started_at', 'completed_at', 'parent_id', 'sprint_id', 'priority', 'assignee_id'];
+const E1 = 'e1';            // Marta Ríos (líder)
+const E2 = 'e2';            // Laura Gómez
 let permisos = process.env.MOCK_PERMISOS || 'lider';   // se cambia en caliente con /_permisos
 const planearProhibido = (data) => (permisos === 'no-lider'
   ? CAMPOS_DE_PLANEACION.filter((k) => data[k] !== undefined) : []);
@@ -184,7 +186,7 @@ http.createServer((req, res) => {
       const page = Number(url.searchParams.get('page') || 1);
       const limit = Math.min(Number(url.searchParams.get('limit') || 50), MOCK_PAGE);
       const todos = [
-        { id: PROJECT, name: 'Clientes', client_name: 'Almacenes Éxito', status: 'active', repo_url: process.env.MOCK_REPO || '', members: [{ employee_id: 'e1', name: 'Marta Ríos', role: 'Líder técnico', is_lead: true, email: 'marta@softnexus.co', emails: ['marta@softnexus.co', 'marta.rios.personal@gmail.com'], github_username: 'martarios', allocation_pct: 100 }] },
+        { id: PROJECT, name: 'Clientes', client_name: 'Almacenes Éxito', status: 'active', repo_url: process.env.MOCK_REPO || '', members: [{ employee_id: E1, name: 'Marta Ríos', role: 'Líder técnico', is_lead: true, email: 'marta@softnexus.co', emails: ['marta@softnexus.co', 'marta.rios.personal@gmail.com'], github_username: 'martarios', allocation_pct: 100 }, { employee_id: E2, name: 'Laura Gómez', role: 'Desarrolladora', is_lead: false, email: 'laura@x', emails: ['laura@x', 'laura.personal@gmail.com'], github_username: 'lauragomez', allocation_pct: 100 }] },
         { id: 'p3', name: 'Clientes VIP', client_name: 'Almacenes Éxito', status: 'active', repo_url: null, members: [] },
         { id: 'p4', name: 'Tienda', client_name: 'Almacenes Éxito', status: 'active', repo_url: null, members: [] },
         { id: OTHER, name: 'Facturación', client_name: 'Interno', status: 'active', repo_url: null, members: [] },

@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { findMark, itemPlainBody } from './body.mjs';
+import { miEmpleado } from './altum-backlog.mjs';
 import { setExternalId } from './items.mjs';
 import { readState, writeState } from './store.mjs';
 
@@ -294,18 +295,19 @@ export async function sprintActivo(connector) {
 const runCache = new Map();
 async function projectContext(connector) {
   if (runCache.has(connector.name)) return runCache.get(connector.name);
-  const [{ valid, list: estados = valid.map((key) => ({ key })) }, fields, { items }, sprint] = await Promise.all([
+  const [{ valid, list: estados = valid.map((key) => ({ key })) }, fields, { items }, sprint, yo] = await Promise.all([
     projectStates(connector, { fresh: true }),
     projectFields(connector),
     listTasks(connector, { project_id: connector.project_id }),
     connector.sprints === false ? '' : sprintActivo(connector),
+    miEmpleado(connector).catch(() => null),
   ]);
   const byRef = new Map(items.map((t) => [t.external_ref || findMark(t.description), t.id]).filter(([id]) => id));
   // En un PATCH, custom_fields REEMPLAZA el objeto: se guarda lo que ya tiene cada tarea para mezclarlo.
   const currentFields = new Map(items.map((t) => [t.id, t.custom_fields || {}]));
   // Cómo está cada tarea hoy en Altum: solo se envía lo que cambió (cada PATCH queda en el historial).
   const current = new Map(items.map((t) => [t.id, t]));
-  const context = { validStates: valid, estados, fields, byRef, currentFields, current, sprint };
+  const context = { validStates: valid, estados, fields, byRef, currentFields, current, sprint, yo };
   runCache.set(connector.name, context);
   return context;
 }
@@ -445,6 +447,14 @@ export function fechasDe(item) {
   };
 }
 
+// Cada quien trabaja sus tareas: si una tarea ya tiene responsable y no soy yo, el plugin no la
+// toca. La única excepción es el cierre explícito (`asegurar`, cuando se une el PR), que es una
+// decisión de una persona y se anuncia. Las tareas sin responsable sí se pueden tomar.
+export function esAjena(tarea, yo) {
+  if (!tarea?.assignee_id || !yo?.id) return false;
+  return tarea.assignee_id !== yo.id;
+}
+
 // Lo que la ficha declara como bloqueadores ("bloqueado_por: ID-1, ID-2") se declara en Altum.
 // Solo se agregan: quitar una dependencia es una decisión que se toma en Altum, no un efecto de
 // haber borrado una línea. Si la clave no puede declararlas (403), se dice y se sigue.
@@ -474,7 +484,7 @@ export async function deliverAltum(connector, evt) {
     return;
   }
   const { item } = evt;
-  const { estados, fields, byRef, currentFields, current, sprint } = await projectContext(connector);
+  const { estados, fields, byRef, currentFields, current, sprint, yo } = await projectContext(connector);
   const description = itemPlainBody(evt);
   const email = item.assignee.match(/<([^>]+@[^>]+)>/)?.[1] || '';
   const assignee = connector.assignee_map?.[email || item.assignee];
@@ -507,7 +517,14 @@ export async function deliverAltum(connector, evt) {
     recordPush(connector, created); // también es un cambio nuestro: el vigilante no debe avisarlo
     if (item.file) setExternalId(item.file, connector.name, taskId); // queda en el repo con el siguiente commit
   }
-  const estadoActual = current.get(taskId)?.state || '';
+  const tareaActual = current.get(taskId);
+  if (esAjena(tareaActual, yo) && !evt.forzado) {
+    if (process.env.SN_SYNC_SILENCIO !== '1') {
+      console.log(`[altum] ${item.id}: la tarea #${tareaActual.number ?? ''} es de otra persona, no la toco. Si te toca a ti, que el líder te la asigne.`);
+    }
+    return;
+  }
+  const estadoActual = tareaActual?.state || '';
   const state = estadoQueViaja(connector, item, estados, estadoActual);
   if (!state && estadoActual && process.env.SN_SYNC_SILENCIO !== '1') {
     const pretendido = stateFor(connector, item, estados);

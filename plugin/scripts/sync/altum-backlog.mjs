@@ -166,6 +166,37 @@ export async function whoAmI(connector) {
   }
 }
 
+// Quién soy YO dentro de este proyecto: Altum identifica al responsable de una tarea por el
+// employee_id del integrante, no por el id de la cuenta. Se busca por cualquiera de mis correos
+// (todos los que Altum reconoce) o por mi usuario de GitHub.
+export async function miEmpleado(connector, projectId = connector.project_id) {
+  const [me, proyectos] = await Promise.all([whoAmI(connector).catch(() => null), listProjectsCrudos(connector)]);
+  const proyecto = proyectos.find((p) => p.id === projectId);
+  if (!me?.user || !proyecto) return null;
+  const mios = [me.user.email, ...(me.user.emails || [])].filter(Boolean).map((c) => c.toLowerCase());
+  const yo = (proyecto.members || []).find((m) => {
+    const suyos = [m.email, ...(m.emails || [])].filter(Boolean).map((c) => c.toLowerCase());
+    if (suyos.some((c) => mios.includes(c))) return true;
+    return me.user.github_username && m.github_username
+      && m.github_username.toLowerCase() === me.user.github_username.toLowerCase();
+  });
+  return yo ? { id: yo.employee_id, name: yo.name || me.user.name || '', is_lead: Boolean(yo.is_lead) } : null;
+}
+
+// Los proyectos tal como vienen de Altum (con members completos), sin la forma simplificada.
+async function listProjectsCrudos(connector) {
+  const raw = await api(connector, 'GET', '/projects?page=1&limit=200');
+  return Array.isArray(raw) ? raw : raw?.items || [];
+}
+
+// Quién es cada integrante del proyecto, para asignar por nombre o por correo desde el chat.
+export async function integrantes(connector, projectId = connector.project_id) {
+  const proyecto = (await listProjectsCrudos(connector)).find((p) => p.id === projectId);
+  return (proyecto?.members || []).map((m) => ({
+    id: m.employee_id, name: m.name || '', email: m.email || '', github: m.github_username || '', is_lead: Boolean(m.is_lead),
+  }));
+}
+
 // El nombre con el que la persona aparece en Altum es el que debe quedar como autor en el
 // repositorio (contrato del 6-oct). Si git tiene otro, se dice: es lo que hace que un commit
 // se le reconozca a quien lo hizo, sin que nadie configure nada a mano.
@@ -308,13 +339,18 @@ export function fetchAltumTask(connector, taskId) {
   return api(connector, 'GET', `/tasks/${encodeURIComponent(taskId)}`);
 }
 
-export function backlogMarkdown(backlog, { all = false } = {}) {
+export function backlogMarkdown(backlog, { all = false, equipo = [], yo = null } = {}) {
   const rows = backlog.filter((b) => all || b.open);
   if (!rows.length) return 'No hay tareas pendientes en el proyecto de Altum.\n';
   const open = backlog.filter((b) => b.open).length;
   const unlinked = backlog.filter((b) => b.open && !b.item).length;
-  const lines = rows.map((b) => `| ${b.number ?? '—'} | ${b.kind || (b.external ? 'reunión' : '')} | ${b.title.replace(/\|/g, '\\|')} | ${b.state} | ${b.priority ?? '—'} | ${b.target_date || '—'} | ${b.item || 'sin traer'}${b.external ? ' · de una reunión' : ''} |`);
-  return `# Tareas en Altum (${open} pendientes · ${unlinked} sin traer al proyecto)\n\n`
-    + '| # | Tipo | Título | Estado | Prioridad | Fecha objetivo | Ítem en el repo |\n|---|---|---|---|---|---|---|\n'
-    + `${lines.join('\n')}\n`;
+  // Quién tiene cada tarea: cada quien trabaja las suyas, y las que no tienen dueño las reparte el líder.
+  const nombre = new Map(equipo.map((m) => [m.id, m.name]));
+  const quien = (b) => (b.assignee_id ? `${nombre.get(b.assignee_id) || 'otra persona'}${yo && b.assignee_id === yo.id ? ' (tú)' : ''}` : '**sin asignar**');
+  const sinDuenio = backlog.filter((b) => b.open && !b.assignee_id).length;
+  const lines = rows.map((b) => `| ${b.number ?? '—'} | ${b.kind || (b.external ? 'reunión' : '')} | ${b.title.replace(/\|/g, '\\|')} | ${b.state} | ${quien(b)} | ${b.priority ?? '—'} | ${b.item || 'sin traer'}${b.external ? ' · de una reunión' : ''} |`);
+  return `# Tareas en Altum (${open} pendientes · ${unlinked} sin traer al proyecto · ${sinDuenio} sin asignar)\n\n`
+    + '| # | Tipo | Título | Estado | Responsable | Prioridad | Ítem en el repo |\n|---|---|---|---|---|---|---|\n'
+    + `${lines.join('\n')}\n`
+    + (sinDuenio ? `\n${sinDuenio} tarea(s) sin responsable. El líder las reparte desde aquí: "asigna la #<número> a <persona>".\n` : '');
 }

@@ -20,7 +20,7 @@ La persona puede no saber nada del proceso. No expliques la metodología: **dile
 4. Me respondieron una validación → `git pull` y `/sn-status`.
 5. Tengo un ítem a medias → el siguiente paso exacto de `sn-status`.
 6. Estoy esperando validación → "espera; mientras, puedes tomar algo pequeño (texto, color) con `/sn`".
-7. No tengo nada abierto → si hay conector `altum`, muestra las 3 tareas pendientes de mayor prioridad del proyecto (`… backlog altum --json`) como opciones ("`/sn ALT-77`"); si no, "`/sn` y cuéntame lo que tengas: una idea, un bug, un correo del cliente".
+7. No tengo nada abierto → si hay conector `altum`, muestra las 3 tareas pendientes de mayor prioridad **suyas o sin asignar** (`… backlog altum --json`, columna Responsable) como opciones ("`/sn ALT-77`"); las de otras personas no se proponen. Si es el líder y hay tareas sin responsable, ofrécele repartirlas (`… sin-asignar`, `… asignar <número> <nombre>`); si no, "`/sn` y cuéntame lo que tengas: una idea, un bug, un correo del cliente".
 
 ## 3. Responder con este formato
 ```

@@ -24,8 +24,8 @@ import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { hasKey, keyName, listTasks, NotRetryable, projectStates } from './sync/altum.mjs';
-import { addProjectRepo, backlogMarkdown, identificarRepo, nombreParaGit, checkProjectRepo, fetchAltumTask, leadText, listProjects, listRepos, projectLead, pullAltum, readBacklog, removeProjectRepo, repoReminder, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
+import { api, esDeActen, hasKey, keyName, listTasks, NotRetryable, projectStates } from './sync/altum.mjs';
+import { addProjectRepo, backlogMarkdown, identificarRepo, integrantes, miEmpleado, nombreParaGit, checkProjectRepo, fetchAltumTask, leadText, listProjects, listRepos, projectLead, pullAltum, readBacklog, removeProjectRepo, repoReminder, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
 import { alreadyThere, cloneProject, findProject, findRepo, projectsForRepo, targetDir } from './sync/altum-clone.mjs';
 import { clearInbox, describe, isWatching, readInbox, stopWatch, watch } from './sync/altum-watch.mjs';
 import { deliver, fetchExternal } from './sync/connectors.mjs';
@@ -510,6 +510,54 @@ async function projects(config) {
   console.log('\nPara empezar a trabajar en uno: clone "<nombre>"');
 }
 
+// El conector de Altum de este repositorio, con proyecto y clave listos.
+function altumDelRepo(config) {
+  const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
+  if (!connector) throw new Error('este repositorio no está unido a un proyecto de Altum: únelo con "conectar".');
+  if (!hasKey(connector)) throw new Error(`falta la clave de Altum (${keyName(connector)}) en este computador: guárdala siguiendo references/clave-altum.md.`);
+  return connector;
+}
+
+// sin-asignar: las tareas del proyecto que no tienen responsable. Es la lista que mira el líder
+// para repartir trabajo desde el chat ("asigna la #45 a Danny").
+async function sinAsignar(config) {
+  const connector = altumDelRepo(config);
+  const [{ items }, gente] = await Promise.all([
+    listTasks(connector, { project_id: connector.project_id }),
+    integrantes(connector),
+  ]);
+  const abiertas = items.filter((t) => !t.assignee_id && !esDeActen(t));
+  if (!abiertas.length) return console.log('Todas las tareas del proyecto tienen responsable.');
+  console.log(`${abiertas.length} tarea(s) sin responsable:`);
+  abiertas.sort((a, b) => (a.priority ?? 9) - (b.priority ?? 9) || (a.number ?? 0) - (b.number ?? 0));
+  abiertas.forEach((t) => console.log(`  #${String(t.number ?? '?').padEnd(5)} ${String(t.state).padEnd(12)} ${t.title}`));
+  console.log(`\nPara repartirlas: asignar <número> <nombre o correo>. Equipo: ${gente.map((m) => m.name).join(', ')}.`);
+}
+
+// asignar <número> <nombre o correo>: le pone responsable a una tarea. Altum solo deja hacerlo a
+// quien lleva el proyecto; si no, responde 403 y aquí se dice con sus palabras.
+async function asignar(config) {
+  const connector = altumDelRepo(config);
+  const libres = textoLibre(args.slice(1));
+  const numero = libres.find((a) => /^#?\d+$/.test(a))?.replace('#', '');
+  const quien = libres.filter((a) => a !== `#${numero}` && a !== numero).join(' ').trim();
+  if (!numero || !quien) throw new Error('uso: asignar <número de la tarea> <nombre o correo de la persona>');
+  const [{ items }, gente] = await Promise.all([
+    listTasks(connector, { project_id: connector.project_id }),
+    integrantes(connector),
+  ]);
+  const tarea = items.find((t) => String(t.number) === numero);
+  if (!tarea) throw new Error(`no encuentro la tarea #${numero} en este proyecto.`);
+  const buscado = quien.toLowerCase();
+  const candidatos = gente.filter((m) => m.email.toLowerCase() === buscado || m.name.toLowerCase().includes(buscado));
+  if (!candidatos.length) throw new Error(`"${quien}" no está en el equipo del proyecto. Son: ${gente.map((m) => m.name).join(', ')}.`);
+  if (candidatos.length > 1) throw new Error(`hay varios parecidos a "${quien}": ${candidatos.map((m) => m.name).join(', ')}. Dime cuál.`);
+  const persona = candidatos[0];
+  if (tarea.assignee_id === persona.id) return console.log(`La tarea #${numero} ya es de ${persona.name}.`);
+  await api(connector, 'PATCH', `/tasks/${tarea.id}`, { assignee_id: persona.id });
+  console.log(`Listo: la tarea #${numero} "${tarea.title}" queda a cargo de ${persona.name}.`);
+}
+
 // motor [--actualizar]: la copia del motor dentro del repositorio (scripts/sn) es la que usa el CI y
 // viaja en las ramas del proyecto, así que puede quedarse atrás del plugin que cada persona actualiza.
 // Esto compara las dos y, con --actualizar, deja la copia igual a la del plugin (es código generado).
@@ -665,7 +713,9 @@ async function asegurar(config) {
   let tarea = await existente(item.external?.[connector.name]);
   if (tarea) {
     // Ya existe: se le lleva la etapa actual del ítem (al cerrar, esto la deja terminada en Altum).
-    await deliver(connector, { specversion: '1.0', id: `${item.id}:asegurar`, type: 'sn.item.upserted', project: config.project, time: new Date().toISOString(), actor: localActor(), item });
+    // forzado: "asegurar" lo corre una persona a propósito (antes de construir, o al unir el PR),
+    // así que puede tocar una tarea de otro —por ejemplo, cerrarla cuando su PR se unió—.
+    await deliver(connector, { specversion: '1.0', id: `${item.id}:asegurar`, type: 'sn.item.upserted', project: config.project, time: new Date().toISOString(), actor: localActor(), item, forzado: true });
     tarea = await existente(item.external?.[connector.name]);
   } else {
     // Si el ítem apuntaba a una tarea que ya no existe (se borró en Altum), se olvida ese enlace y se crea de nuevo.
@@ -761,9 +811,14 @@ async function clone(config) {
 }
 
 async function backlog(config) {
-  const list = await readBacklog(altumConnector(config, args[1]));
+  const connector = altumConnector(config, args[1]);
+  const [list, equipo, yo] = await Promise.all([
+    readBacklog(connector),
+    integrantes(connector).catch(() => []),
+    miEmpleado(connector).catch(() => null),
+  ]);
   if (flag('--json')) process.stdout.write(`${JSON.stringify(list.map(({ task, ...rest }) => rest), null, 2)}\n`);
-  else process.stdout.write(backlogMarkdown(list, { all: flag('--all') }));
+  else process.stdout.write(backlogMarkdown(list, { all: flag('--all'), equipo, yo }));
 }
 
 function link(config) {
@@ -851,6 +906,8 @@ else if (command === 'clone') await clone(config);
 else if (command === 'set-repo') await setRepo(config);
 else if (command === 'conectar') await conectar(config);
 else if (command === 'motor') motor();
+else if (command === 'sin-asignar') await sinAsignar(config);
+else if (command === 'asignar') await asignar(config);
 // repo-check: mira si el proyecto ya tiene repositorio registrado y lo deja anotado para el aviso.
 else if (command === 'repo-check') {
   const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
@@ -883,6 +940,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|pedir-config|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|conectar|motor|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|pedir-config|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|conectar|motor|sin-asignar|asignar|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }
