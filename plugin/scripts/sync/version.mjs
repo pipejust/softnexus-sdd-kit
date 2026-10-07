@@ -95,12 +95,21 @@ export function instalacionesDeAqui(carpeta, installs = instalaciones()) {
 
 // Los proyectos de este computador que se guardaron su propia copia del plugin: los que lo tienen
 // instalado por proyecto y los que lo declaran en su .claude/settings.json (de ahí sale la copia).
+// La carpeta del usuario (C:\\Users\\x, /Users/x) NUNCA es un proyecto: ahí vive la configuración
+// GENERAL. Tratarla como proyecto borraba el plugin de ~/.claude/settings.json y dejaba apagada la
+// copia que acababa de instalarse.
+export function esCarpetaDelUsuario(carpeta) {
+  const casa = path.resolve(os.homedir());
+  const c = path.resolve(carpeta || '');
+  return c === casa || c === path.join(casa, '.claude');
+}
+
 export function proyectosConCopia(installs = instalaciones()) {
-  const carpetas = new Set(installs.filter((i) => i.scope !== 'user' && i.proyecto).map((i) => i.proyecto));
+  const carpetas = new Set(installs.filter((i) => i.scope !== 'user' && i.proyecto && !esCarpetaDelUsuario(i.proyecto)).map((i) => i.proyecto));
   try {
     const abiertos = JSON.parse(readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8')).projects || {};
     for (const carpeta of Object.keys(abiertos)) {
-      if (declaraElPlugin(carpeta)) carpetas.add(carpeta);
+      if (!esCarpetaDelUsuario(carpeta) && declaraElPlugin(carpeta)) carpetas.add(carpeta);
     }
   } catch { /* sin lista de proyectos: basta con los instalados */ }
   return [...carpetas];
@@ -119,6 +128,7 @@ export function declaraElPlugin(carpeta) {
 
 // Quitar la línea que hace que ese proyecto se guarde su propia copia. Lo demás del archivo no se toca.
 export function dejarDeDeclarar(carpeta) {
+  if (esCarpetaDelUsuario(carpeta)) return false;   // esa es la configuración general: no se toca
   if (!declaraElPlugin(carpeta)) return false;
   const archivo = AJUSTES(carpeta);
   const d = JSON.parse(readFileSync(archivo, 'utf8'));
@@ -156,6 +166,8 @@ export function pasosInstalacionGeneral({ cat = catalogo(), installs = instalaci
   pasos.push(tieneUsuario
     ? { cmd: 'claude', args: ['plugin', 'update', PLUGIN], nota: 'dejar al día la copia general (la de tu usuario)' }
     : { cmd: 'claude', args: ['plugin', 'install', PLUGIN], nota: 'instalar la copia general, la que sirve para todos los proyectos' });
+  // Por si quedó apagada (pasaba cuando la limpieza tocaba por error la configuración del usuario).
+  pasos.push({ cmd: 'claude', args: ['plugin', 'enable', PLUGIN, '--scope', 'user'], opcional: true, nota: 'dejarla encendida' });
   return pasos;
 }
 
@@ -208,7 +220,19 @@ export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
 
 function ejecutar(paso) {
   if (paso.fn) return paso.fn();
-  return execFileSync(paso.cmd, paso.args, { stdio: 'inherit', cwd: paso.cwd || process.cwd(), timeout: 180000, windowsHide: true });
+  const opciones = { stdio: 'inherit', cwd: paso.cwd || process.cwd(), timeout: 180000, windowsHide: true };
+  try {
+    return execFileSync(paso.cmd, paso.args, { ...opciones, windowsHide: true });
+  } catch (error) {
+    // En Windows, "claude" es en realidad claude.cmd y execFile no lo encuentra (ENOENT).
+    if (error.code !== 'ENOENT' || process.platform !== 'win32') throw error;
+    try {
+      return execFileSync(`${paso.cmd}.cmd`, paso.args, { ...opciones, windowsHide: true });
+    } catch (otro) {
+      if (otro.code !== 'ENOENT') throw otro;
+      return execFileSync(paso.cmd, paso.args, { ...opciones, shell: true, windowsHide: true });
+    }
+  }
 }
 
 export function gitAtrasado(carpeta) {

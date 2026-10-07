@@ -50,6 +50,9 @@ else
 fi
 
 # 3) Ya con la versión nueva instalada, ella sabe quitar las copias que viven dentro de proyectos.
+paso "Me aseguro de que quede encendida"
+claude plugin enable "$PLUGIN" --scope user >/dev/null 2>&1 || true
+
 motor=$(ls -d "$HOME/.claude/plugins/cache/$CATALOGO/softnexus-sdd"/*/scripts/sn-sync.mjs 2>/dev/null | sort -V | tail -1)
 if [ -n "${motor:-}" ]; then
   paso "Quito las copias que vivan dentro de proyectos"
