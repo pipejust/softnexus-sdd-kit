@@ -188,6 +188,16 @@ JSON
 out2=$(HOME="$CASA" printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$W" | HOME="$CASA" node "$PLUGIN/../hooks/altum-watch.mjs" 2>/dev/null)
 check "Y si está al día, no dice nada de versiones (no molesta)" "! echo \"\$out2\" | grep -q 'última publicada'"
 
+cat > "$W/comillas.mjs" <<'JS'
+const { entrecomillar } = await import(process.env.SN_VERSION_MJS);
+const conEspacios = 'C:\\Mis Proyectos\\x';
+console.log(entrecomillar(conEspacios) === `"${conEspacios}"` && entrecomillar('--scope') === '--scope' ? 'comillas-ok' : 'comillas-mal');
+JS
+check "En Windows los argumentos se entrecomillan: una ruta con espacios no parte el comando" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/comillas.mjs\" | grep -q comillas-ok"
+HOME="$CASA" node "$PLUGIN/sn-sync.mjs" actualizar --general >"$W/salida-general.txt" 2>&1; codigo=$?
+check "Si un paso falla, el comando sale con error, lo dice y no invita a reiniciar como si nada" "[ \$codigo -ne 0 ] && grep -q 'NO SE PUDO' \"$W/salida-general.txt\" && grep -q 'ATENCIÓN' \"$W/salida-general.txt\" && ! grep -q 'AHORA SÍ' \"$W/salida-general.txt\""
+check "El script tampoco esconde errores: cuenta los fallos y sale con error" "grep -q 'fallos + 1' \"$T/../herramientas/plugin-general.sh\" && grep -q 'exit 1' \"$T/../herramientas/plugin-general.sh\""
+
 echo "== Windows: clave del sistema y sin ventanas de consola"
 cat > "$W/win.mjs" <<'JS'
 Object.defineProperty(process, 'platform', { value: 'win32' });

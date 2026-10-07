@@ -211,28 +211,29 @@ export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
       correr(paso);
       resultados.push({ paso, ok: true });
     } catch (error) {
-      console.log(`   No se pudo: ${String(error.message || error).split('\n')[0]}`);
-      resultados.push({ paso, ok: false });
+      const motivo = String(error.message || error).split('\n')[0];
+      console.log(`   ✗ NO SE PUDO: ${motivo}`);
+      resultados.push({ paso, ok: false, motivo });
     }
   }
   return resultados;
 }
 
+// En Windows, "claude" es claude.cmd y Node ya NO deja ejecutar archivos .cmd directamente (EINVAL,
+// por seguridad): hay que pasar por el shell. Y al pasar por el shell, los argumentos no se escapan
+// solos, así que las rutas con espacios ("C:\\Mis Proyectos\\x") se comillan aquí.
+export function entrecomillar(argumento) {
+  const a = String(argumento);
+  return /[\s&|<>^()"]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a;
+}
+
 function ejecutar(paso) {
   if (paso.fn) return paso.fn();
   const opciones = { stdio: 'inherit', cwd: paso.cwd || process.cwd(), timeout: 180000, windowsHide: true };
-  try {
-    return execFileSync(paso.cmd, paso.args, { ...opciones, windowsHide: true });
-  } catch (error) {
-    // En Windows, "claude" es en realidad claude.cmd y execFile no lo encuentra (ENOENT).
-    if (error.code !== 'ENOENT' || process.platform !== 'win32') throw error;
-    try {
-      return execFileSync(`${paso.cmd}.cmd`, paso.args, { ...opciones, windowsHide: true });
-    } catch (otro) {
-      if (otro.code !== 'ENOENT') throw otro;
-      return execFileSync(paso.cmd, paso.args, { ...opciones, shell: true, windowsHide: true });
-    }
+  if (process.platform === 'win32') {
+    return execFileSync(paso.cmd, paso.args.map(entrecomillar), { ...opciones, shell: true, windowsHide: true });
   }
+  return execFileSync(paso.cmd, paso.args, { ...opciones, windowsHide: true });
 }
 
 export function gitAtrasado(carpeta) {
