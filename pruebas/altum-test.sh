@@ -135,7 +135,7 @@ check "POST /tasks con project_id, kind=bug, prioridad 3 (R2) y X-API-Key" "stat
 check "Descripción en texto plano (Altum no interpreta Markdown): historia y trazabilidad, sin ** ni marca oculta" "state | python3 -c 'import json,sys; d=[x for x in json.load(sys.stdin) if x[\"title\"].startswith(\"[CLI-0001]\")][0][\"description\"]; assert \"TRAZABILIDAD\" in d and \"HISTORIA\" in d and \"Commits (\" not in d and \"**\" not in d and \"<!--\" not in d and \"\x60\" not in d, d'"
 check "El id de Altum quedó guardado en el ítem (ext.altum)" "grep -qE '^ext.altum: [0-9a-f-]{36}$' docs/items/CLI-0001.md"
 check "POST con external_ref=CLI-0001 e Idempotency-Key (no duplica si la red falla)" "grep '\"method\":\"POST\"' '$LOG' | grep -q '\"external_ref\":\"CLI-0001\"' && grep '\"method\":\"POST\"' '$LOG' | grep -q '\"idem\":\"sn-$PROJECT-CLI-0001\"'"
-check "Responsable por correo de git (assignee_email) sin mapear UUIDs" "state | python3 -c 'import json,sys; t=[x for x in json.load(sys.stdin) if x[\"title\"].startswith(\"[CLI-0001]\")][0]; assert t[\"assignee_id\"]==\"user-laura\", t[\"assignee_id\"]'"
+check "Responsable por correo de git (assignee_email) sin mapear UUIDs" "state | python3 -c 'import json,sys; t=[x for x in json.load(sys.stdin) if x[\"title\"].startswith(\"[CLI-0001]\")][0]; assert t[\"assignee_id\"]==\"e2\", t[\"assignee_id\"]'"
 
 check "Campos propios: riesgo y tamaño en custom_fields; etapa no se envía (el proyecto no la definió)" "state | python3 -c 'import json,sys; t=[x for x in json.load(sys.stdin) if x[\"title\"].startswith(\"[CLI-0001]\")][0]; cf=t[\"custom_fields\"]; assert cf.get(\"riesgo\")==\"R2\" and cf.get(\"tamano\")==\"XS\" and \"etapa\" not in cf, cf'"
 curl -s "localhost:$PORT/_setfield?ref=CLI-0001" >/dev/null
@@ -374,6 +374,20 @@ antes=$(curl -s "localhost:$PORT/_patches?ref=CLI-0050")
 sn sync >/dev/null 2>&1
 despues=$(curl -s "localhost:$PORT/_patches?ref=CLI-0050")
 check "Sincronizar otra vez no reescribe las etiquetas (el orden no es un cambio)" "[ \"\$despues\" = \"\$antes\" ]"
+
+echo "== Cada quien trabaja lo suyo, y el líder reparte"
+printf -- '---\nid: CLI-0090\ntype: feature\ntitle: Panel de ventas\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0090.md
+sn sync >/dev/null 2>&1
+t90() { state | python3 -c 'import json,sys; print(json.dumps([x for x in json.load(sys.stdin) if x["title"].startswith("[CLI-0090]")][0]))'; }
+num90=$(t90 | python3 -c 'import json,sys; print(json.load(sys.stdin)["number"])')
+check "sin-asignar lista las tareas que no tienen responsable" "SN_ALTUM_KEY_PRUEBA=sk_user_test_laura sn sin-asignar | grep -q '#$num90'"
+check "asignar se la pone a alguien del equipo, por nombre" "SN_ALTUM_KEY_PRUEBA=sk_user_test_laura sn asignar $num90 Marta | grep -q 'queda a cargo de Marta Ríos'"
+check "Y en Altum queda con ese responsable" "t90 | grep -q '\"assignee_id\": \"e1\"'"
+check "asignar a alguien que no está en el equipo: lo dice y no inventa" "(SN_ALTUM_KEY_PRUEBA=sk_user_test_laura sn asignar $num90 Fulanito 2>&1 || true) | grep -q 'no está en el equipo'"
+sed -i '' 's/^title: Panel de ventas/title: Panel de ventas por mes/' docs/items/CLI-0090.md
+out=$(SN_ALTUM_KEY_PRUEBA=sk_user_test_laura sn sync 2>&1)
+check "La tarea es de Marta: el plugin de Laura NO la toca" "t90 | grep -q 'Panel de ventas\"' && echo \"\$out\" | grep -q 'es de otra persona, no la toco'"
+check "Pero cerrar al unir el PR sí se puede: asegurar es una decisión de una persona" "SN_ALTUM_KEY_PRUEBA=sk_user_test_laura sn asegurar CLI-0090 >/dev/null 2>&1; t90 | grep -q 'por mes'"
 
 echo "== Las tareas no se devuelven solas: el estado nunca retrocede"
 printf -- '---\nid: CLI-0080\ntype: feature\ntitle: Reportes nuevos\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0080.md
