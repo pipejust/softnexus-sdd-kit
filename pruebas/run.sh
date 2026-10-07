@@ -144,6 +144,33 @@ check "motor --actualizar deja la copia igual" "plugmotor motor --actualizar | g
 check "Los hooks ejecutan el motor del PLUGIN, no la copia del repositorio" "! grep -n \"spawn(process.execPath, \\[script\" $PLUGIN/../hooks/*.mjs | grep -q 'scripts/sn/sn-sync' && grep -q 'const script = MOTOR_DEL_PLUGIN' $PLUGIN/../hooks/altum-watch.mjs"
 unset CLAUDE_PLUGIN_ROOT
 
+echo "== Avisar cuando el plugin de este computador está viejo"
+CASA="$W/casa-falsa"; rm -rf "$CASA"; mkdir -p "$CASA/.claude/plugins"
+cat > "$CASA/.claude/sn-version.json" <<JSON
+{"at": $(node -e 'console.log(Date.now())'), "ultima": "9.9.9"}
+JSON
+cat > "$CASA/.claude/plugins/known_marketplaces.json" <<'JSON'
+{"softnexus": {"source": {"source": "local", "path": "/Users/alguien/claude-skills/softnexus-sdd-kit"}, "installLocation": "/Users/alguien/claude-skills/softnexus-sdd-kit"}}
+JSON
+cat > "$CASA/.claude/plugins/installed_plugins.json" <<'JSON'
+{"version": 2, "plugins": {"softnexus-sdd@softnexus": [
+  {"scope": "user", "version": "0.38.1"},
+  {"scope": "project", "version": "0.31.0", "projectPath": "/tmp/proyecto-de-otro"}
+]}}
+JSON
+ver() { HOME="$CASA" node --input-type=module -e "$1"; }
+check "Compara versiones por número, no por texto (0.49.0 > 0.38.1 y 0.10 > 0.9)" "ver \"import {esMasNueva} from '$PLUGIN/sync/version.mjs'; process.exit(esMasNueva('0.49.0','0.38.1') && esMasNueva('0.10','0.9') && !esMasNueva('0.38.1','0.49.0') ? 0 : 1)\""
+check "Si el catálogo es una carpeta local, el primer paso es traerla al día con git" "ver \"import {comoActualizar} from '$PLUGIN/sync/version.mjs'; const p=comoActualizar(); process.exit(p[0].startsWith('git -C') && p[0].includes('claude-skills/softnexus-sdd-kit') ? 0 : 1)\""
+check "Las copias de OTROS proyectos no estorban en esta sesión" "ver \"import {instalacionesDeAqui} from '$PLUGIN/sync/version.mjs'; const i=instalacionesDeAqui('/tmp/otra-carpeta'); process.exit(i.length===1 && i[0].scope==='user' ? 0 : 1)\""
+check "La copia del proyecto abierto sí cuenta" "ver \"import {instalacionesDeAqui} from '$PLUGIN/sync/version.mjs'; const i=instalacionesDeAqui('/tmp/proyecto-de-otro/sub'); process.exit(i.length===2 ? 0 : 1)\""
+out=$(HOME="$CASA" printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$W" | HOME="$CASA" node "$PLUGIN/../hooks/altum-watch.mjs" 2>/dev/null)
+check "Al abrir sesión con una versión vieja, el aviso lo dice y manda al comando que da los pasos" "echo \"\$out\" | grep -q 'la última publicada es 9.9.9' && echo \"\$out\" | grep -q 'catálogo es una carpeta local' && echo \"\$out\" | grep -q 'actualizar'"
+cat > "$CASA/.claude/sn-version.json" <<JSON
+{"at": $(node -e 'console.log(Date.now())'), "ultima": "0.0.1"}
+JSON
+out2=$(HOME="$CASA" printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$W" | HOME="$CASA" node "$PLUGIN/../hooks/altum-watch.mjs" 2>/dev/null)
+check "Y si está al día, no dice nada de versiones (no molesta)" "! echo \"\$out2\" | grep -q 'última publicada'"
+
 echo "== Windows: clave del sistema y sin ventanas de consola"
 cat > "$W/win.mjs" <<'JS'
 Object.defineProperty(process, 'platform', { value: 'win32' });
