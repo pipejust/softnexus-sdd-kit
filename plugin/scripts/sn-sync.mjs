@@ -36,6 +36,7 @@ import { takeSnapshot } from './sync/snapshot.mjs';
 import { mensajeValidacion } from './sync/validacion-mensaje.mjs';
 import { aprobacionesPr, firmaDelLider, origenRepo, prDeRama } from './sync/pr.mjs';
 import { siguientePaso } from './sync/siguiente.mjs';
+import { catalogo, comoActualizar, esMasNueva, gitAtrasado, instalaciones, ultimaPublicada, versionInstalada } from './sync/version.mjs';
 import { parseLog } from './validation-state.mjs';
 import { leerTexto } from './sync/texto.mjs';
 import {
@@ -510,6 +511,40 @@ async function projects(config) {
   console.log('\nPara empezar a trabajar en uno: clone "<nombre>"');
 }
 
+// actualizar: ¿está al día el plugin en ESTE computador? Cada máquina lo instaló distinto —desde
+// GitHub o desde una carpeta clonada a mano, para el usuario o dentro de un proyecto— y por eso
+// "ya estás en la última" a veces miente. Aquí se dice la verdad y qué correr, en orden.
+async function actualizar() {
+  const raiz = path.join(path.dirname(SELF), '..');
+  // --solo-revisar: lo corre el hook en segundo plano para dejar la última versión consultada en caché.
+  if (flag('--solo-revisar')) { await ultimaPublicada(); return; }
+  const actual = versionInstalada(raiz);
+  const ultima = await ultimaPublicada();
+  const cat = catalogo();
+  const installs = instalaciones();
+  console.log(`Plugin Softnexus: tienes ${actual || '?'}${ultima ? ` · publicada ${ultima}` : ' (no pude consultar la última: sin red)'}`);
+  if (cat.tipo === 'carpeta') {
+    const atrasado = gitAtrasado(cat.carpeta);
+    console.log(`El catálogo de este computador es una CARPETA (${cat.carpeta}), no GitHub:`
+      + ` "claude plugin marketplace update" solo la revalida, no la actualiza${atrasado ? ` (está ${atrasado} commits atrás)` : ''}.`);
+  }
+  const viejas = installs.filter((i) => ultima && esMasNueva(ultima, i.version));
+  if (installs.length > 1) {
+    console.log(`Está instalado ${installs.length} veces: ${installs.map((i) => `${i.scope} ${i.version}`).join(', ')}.`
+      + ' Dentro de un proyecto, la copia del proyecto manda sobre la del usuario.');
+  }
+  if (ultima && !esMasNueva(ultima, actual) && !viejas.length) return console.log('Todo al día. No hay nada que hacer.');
+  console.log('\nPara ponerlo al día en esta máquina, en este orden:');
+  comoActualizar({ cat, installs }).forEach((paso) => console.log(`  ${paso}`));
+  console.log('\nY al final, cierra Claude Code y vuélvelo a abrir: hasta que no reinicies sigue corriendo la versión vieja.');
+  if (cat.tipo === 'carpeta') {
+    console.log('\nPara no repetir esto cada vez, se puede registrar el catálogo desde GitHub:'
+      + '\n  claude plugin marketplace remove softnexus'
+      + '\n  claude plugin marketplace add pipejust/softnexus-sdd-kit'
+      + '\n  claude plugin install softnexus-sdd@softnexus');
+  }
+}
+
 // El conector de Altum de este repositorio, con proyecto y clave listos.
 function altumDelRepo(config) {
   const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
@@ -906,6 +941,7 @@ else if (command === 'clone') await clone(config);
 else if (command === 'set-repo') await setRepo(config);
 else if (command === 'conectar') await conectar(config);
 else if (command === 'motor') motor();
+else if (command === 'actualizar' || command === 'version') await actualizar();
 else if (command === 'sin-asignar') await sinAsignar(config);
 else if (command === 'asignar') await asignar(config);
 // repo-check: mira si el proyecto ya tiene repositorio registrado y lo deja anotado para el aviso.
@@ -940,6 +976,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|pedir-config|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|conectar|motor|sin-asignar|asignar|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|pedir-config|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|conectar|motor|actualizar|sin-asignar|asignar|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }

@@ -71,6 +71,28 @@ function orientacion(tieneClave, esRepo = false) {
   return lineas.join('\n');
 }
 
+// Aviso de versión vieja. La comprobación de red la hace otro proceso en segundo plano (como mucho
+// dos veces al día): aquí solo se lee lo último que se supo, así que nunca retrasa la sesión.
+async function avisoDeVersion(root) {
+  try {
+    const { versionInstalada, ultimaPublicada, esMasNueva, catalogo, instalacionesDeAqui } =
+      await import(pathToFileURL(path.join(path.dirname(MOTOR_DEL_PLUGIN), 'sync/version.mjs')).href);
+    const actual = versionInstalada(path.join(path.dirname(MOTOR_DEL_PLUGIN), '..'));
+    const ultima = await ultimaPublicada({ rapido: true });
+    // Solo lo que manda aquí: la copia del usuario y la de este proyecto, si tiene una propia.
+    const viejas = instalacionesDeAqui(root).filter((i) => ultima && esMasNueva(ultima, i.version) && i.scope !== 'user');
+    if (!ultima || (!esMasNueva(ultima, actual) && !viejas.length)) return '';   // al día: no se dice nada
+    const cat = catalogo();
+    return `[Softnexus] El plugin de este computador está en ${actual} y la última publicada es ${ultima}.`
+      + `${cat.tipo === 'carpeta' ? ' OJO: aquí el catálogo es una carpeta local, así que "claude plugin marketplace update" NO lo actualiza solo.' : ''}`
+      + `${viejas.length ? ` Además este proyecto tiene su propia copia (${viejas[0].version}), y esa manda sobre la del usuario.` : ''}`
+      + ' Díselo a la persona en UNA línea y ofrécele los comandos exactos para su máquina:'
+      + ` \`node "${MOTOR_DEL_PLUGIN}" actualizar\` los imprime en orden. Al final hay que cerrar Claude Code y volver a abrirlo.`;
+  } catch {
+    return '';
+  }
+}
+
 const FALTA_CLAVE = '[Altum] Esta persona todavía no tiene guardada su clave personal de Altum, así que no verá sus proyectos ni sus tareas. '
   + 'En una línea, ofrécele guardarla ahora (un solo paso, siguiendo references/clave-altum.md del plugin; la clave nunca se escribe en el chat). Si dice que no, sigue con lo suyo.';
 
@@ -83,6 +105,13 @@ try {
   const preparado = path.join(root, 'scripts/sn/sn-sync.mjs');
   const script = MOTOR_DEL_PLUGIN;
   const event = payload.hook_event_name;
+  if (event === 'SessionStart') {
+    // Primero se lee lo último que se supo (sin red, instantáneo) y después se manda a refrescar en
+    // segundo plano: al revés, el refresco podría pisar el dato justo antes de leerlo.
+    const aviso = await avisoDeVersion(root);
+    if (aviso) context(aviso, 'SessionStart');
+    spawn(process.execPath, [MOTOR_DEL_PLUGIN, 'actualizar', '--solo-revisar'], { windowsHide: true, cwd: root, detached: process.platform !== 'win32', stdio: 'ignore' }).unref();
+  }
   if (!existsSync(preparado)) {
     // Sin proyecto preparado no hay vigilante ni bandeja: solo la orientación de apertura.
     if (event === 'SessionStart') {

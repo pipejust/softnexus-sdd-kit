@@ -20,6 +20,7 @@ La persona puede no saber nada del proceso. No expliques la metodología: **dile
 4. Me respondieron una validación → `git pull` y `/sn-status`.
 5. Tengo un ítem a medias → el siguiente paso exacto de `sn-status`.
 6. Estoy esperando validación → "espera; mientras, puedes tomar algo pequeño (texto, color) con `/sn`".
+6b. "¿estoy al día?", "¿tengo la última versión?", o el sistema avisó de una versión vieja → corre `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" actualizar` y **muéstrale los comandos tal cual los imprime**: no son los mismos en todas las máquinas (el catálogo puede ser una carpeta local, y puede haber copias instaladas dentro de proyectos). Recuérdale al final cerrar Claude Code y volver a abrirlo.
 7. No tengo nada abierto → si hay conector `altum`, muestra las 3 tareas pendientes de mayor prioridad **suyas o sin asignar** (`… backlog altum --json`, columna Responsable) como opciones ("`/sn ALT-77`"); las de otras personas no se proponen. Si es el líder y hay tareas sin responsable, ofrécele repartirlas (`… sin-asignar`, `… asignar <número> <nombre>`); si no, "`/sn` y cuéntame lo que tengas: una idea, un bug, un correo del cliente".
 
 ## 3. Responder con este formato
