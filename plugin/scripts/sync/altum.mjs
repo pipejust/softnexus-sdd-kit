@@ -343,6 +343,25 @@ export function estadoPara(stage, estados, statusMap = {}) {
   return (['merged', 'done', 'discarded'].includes(stage) ? mismos[mismos.length - 1] : mismos[0]).key;
 }
 
+// Qué tan adelante va un estado en el flujo: abierto < en progreso < terminado/cancelado.
+const RANGO = { open: 0, in_progress: 1, done: 2, cancelled: 2 };
+
+function rangoDe(clave, estados) {
+  const kind = estados.find((s) => s.key === clave)?.kind;
+  return RANGO[kind] ?? 0;
+}
+
+// El estado que le toca al ítem según el repositorio. PERO nunca se devuelve una tarea hacia atrás:
+// la etapa se deduce de lo que hay en ESTE computador (rama, plano, PR), y eso cambia de una persona
+// a otra. Si en Altum la tarea ya va más adelante —alguien la movió, o la empezó otra persona—, lo
+// de allá manda y aquí no se toca. Hacia adelante sí: terminar, cerrar o descartar siempre viaja.
+export function estadoQueViaja(connector, item, estados, actual) {
+  const quiero = estadoPara(item.stage, estados, connector.status_map);
+  if (!quiero || !actual || quiero === actual) return quiero;
+  if (item.discarded) return quiero; // descartar es una decisión escrita en el repositorio
+  return rangoDe(quiero, estados) < rangoDe(actual, estados) ? null : quiero;
+}
+
 function stateFor(connector, item, estados) {
   return estadoPara(item.stage, estados, connector.status_map);
 }
@@ -488,7 +507,14 @@ export async function deliverAltum(connector, evt) {
     recordPush(connector, created); // también es un cambio nuestro: el vigilante no debe avisarlo
     if (item.file) setExternalId(item.file, connector.name, taskId); // queda en el repo con el siguiente commit
   }
-  const state = stateFor(connector, item, estados);
+  const estadoActual = current.get(taskId)?.state || '';
+  const state = estadoQueViaja(connector, item, estados, estadoActual);
+  if (!state && estadoActual && process.env.SN_SYNC_SILENCIO !== '1') {
+    const pretendido = stateFor(connector, item, estados);
+    if (pretendido && pretendido !== estadoActual) {
+      console.log(`[altum] ${item.id}: en Altum va en "${estadoActual}" y aquí se ve "${pretendido}". No la devuelvo atrás: si de verdad hay que retroceder, cámbiala en Altum.`);
+    }
+  }
   const customFields = Object.keys(ours).length ? { custom_fields: { ...(currentFields.get(taskId) || {}), ...ours } } : {};
   const criterios = criteriosDe(item);
   const etiquetas = etiquetasPara(connector, item, current.get(taskId)?.tags || []);
