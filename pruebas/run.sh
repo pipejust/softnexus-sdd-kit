@@ -194,6 +194,14 @@ const conEspacios = 'C:\\Mis Proyectos\\x';
 console.log(entrecomillar(conEspacios) === `"${conEspacios}"` && entrecomillar('--scope') === '--scope' ? 'comillas-ok' : 'comillas-mal');
 JS
 check "\"Ya estaba encendido\" o \"no estaba instalado\" NO cuentan como fallo" "ver \"import {esBenigno} from '$PLUGIN/sync/version.mjs'; const si=['Plugin x is already enabled at user scope','is installed in user scope, not project']; const no=['Command failed: claude plugin update x','spawnSync claude.cmd EINVAL']; process.exit(si.every(esBenigno) && !no.some(esBenigno) ? 0 : 1)\""
+cat > "$W/salida-normal.mjs" <<'JS'
+const { ejecutarPasos } = await import(process.env.SN_VERSION_MJS);
+// claude escribe sus mensajes por la salida NORMAL, no por la de errores
+const ok = ejecutarPasos([{ cmd: 'sh', args: ['-c', 'echo "Failed: is already enabled at user scope"; exit 1'], opcional: true, nota: 'x' }]);
+const malo = ejecutarPasos([{ cmd: 'sh', args: ['-c', 'echo "Failed: disco lleno"; exit 1'], nota: 'y' }]);
+console.log(ok[0].ok && ok[0].yaEstaba && !malo[0].ok && malo[0].motivo.includes('disco lleno') ? 'salida-ok' : 'salida-mal');
+JS
+check "Lo que el comando dice por la salida normal también cuenta para saber si fue un fallo" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/salida-normal.mjs\" 2>/dev/null | grep -q salida-ok"
 check "Un paso que termina en \"ya estaba\" se cuenta como hecho" "ver \"import {ejecutarPasos} from '$PLUGIN/sync/version.mjs'; const r=ejecutarPasos([{cmd:'claude',args:['plugin','enable'],opcional:true,nota:'x'}], { correr: () => { const e=new Error('Failed to enable plugin: Plugin is already enabled at user scope'); throw e; } }); process.exit(r[0].ok && r[0].yaEstaba ? 0 : 1)\""
 check "El script tampoco lo cuenta como fallo" "grep -q 'already enabled' \"$T/../herramientas/plugin-general.sh\""
 check "En Windows los argumentos se entrecomillan: una ruta con espacios no parte el comando" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/comillas.mjs\" | grep -q comillas-ok"

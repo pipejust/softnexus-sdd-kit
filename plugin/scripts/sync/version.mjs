@@ -217,15 +217,16 @@ export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
       correr(paso);
       resultados.push({ paso, ok: true });
     } catch (error) {
-      const motivo = String(error.message || error).split('\n')[0];
-      if (esBenigno(motivo) || (paso.opcional && esBenigno(error.stderr?.toString() || ''))) {
+      const todo = String(error.todo || error.message || error);
+      const motivo = (todo.split('\n').map((l) => l.trim()).filter(Boolean).find((l) => /✘|error|fail|no se|cannot/i.test(l))
+        || String(error.message || error).split('\n')[0]).slice(0, 300);
+      if (esBenigno(todo)) {
         console.log('   (ya estaba así: nada que hacer)');
         resultados.push({ paso, ok: true, yaEstaba: true });
         continue;
       }
-      const detalle = (error.stderr?.toString() || '').trim().split('\n').slice(-2).join(' ');
-      console.log(`   ✗ NO SE PUDO: ${motivo}${detalle ? `\n     ${detalle}` : ''}`);
-      resultados.push({ paso, ok: false, motivo: detalle || motivo });
+      console.log(`   ✗ NO SE PUDO: ${motivo}`);
+      resultados.push({ paso, ok: false, motivo });
     }
   }
   return resultados;
@@ -239,15 +240,22 @@ export function entrecomillar(argumento) {
   return /[\s&|<>^()"]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a;
 }
 
+// Se captura TODO lo que escribe el comando (salida y errores) y después se imprime. claude manda
+// sus mensajes por la salida normal, no por la de errores: mirando solo "stderr" no había forma de
+// distinguir un fallo de verdad de un "ya estaba así".
 function ejecutar(paso) {
   if (paso.fn) return paso.fn();
-  // stderr se captura (además de mostrarse) para poder distinguir un fallo de verdad de un
-  // "ya estaba así", que claude también reporta como error.
-  const opciones = { stdio: ['inherit', 'inherit', 'pipe'], cwd: paso.cwd || process.cwd(), timeout: 180000, windowsHide: true };
-  if (process.platform === 'win32') {
-    return execFileSync(paso.cmd, paso.args.map(entrecomillar), { ...opciones, shell: true, windowsHide: true });
+  const opciones = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], cwd: paso.cwd || process.cwd(), timeout: 180000, windowsHide: true };
+  try {
+    const salida = process.platform === 'win32'
+      ? execFileSync(paso.cmd, paso.args.map(entrecomillar), { ...opciones, shell: true, windowsHide: true })
+      : execFileSync(paso.cmd, paso.args, { ...opciones, windowsHide: true });
+    if (salida?.trim()) console.log(`   ${salida.trim().split('\n').join('\n   ')}`);
+    return salida;
+  } catch (error) {
+    error.todo = `${error.stdout || ''}\n${error.stderr || ''}\n${error.message || ''}`;
+    throw error;
   }
-  return execFileSync(paso.cmd, paso.args, { ...opciones, windowsHide: true });
 }
 
 export function gitAtrasado(carpeta) {
