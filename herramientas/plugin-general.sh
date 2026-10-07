@@ -13,7 +13,14 @@ PLUGIN="softnexus-sdd@softnexus"
 REPO="pipejust/softnexus-sdd-kit"
 CATALOGO="softnexus"
 
+fallos=0
 paso() { printf '\n→ %s\n' "$1"; }
+intentar() {   # corre el comando y, si falla, lo deja anotado en vez de disimularlo
+  if ! "$@"; then
+    printf '   ✗ NO SE PUDO: %s\n' "$*"
+    fallos=$((fallos + 1))
+  fi
+}
 
 # 1) El catálogo. Si en este computador quedó registrado como una CARPETA, "marketplace update" solo
 #    la revalida: hay que traerla al día con git, o nunca verá las versiones nuevas.
@@ -29,35 +36,42 @@ PY
 )
 if [ -n "${carpeta:-}" ] && [ -d "$carpeta/.git" ]; then
   paso "Tu catálogo es una carpeta de este computador: la traigo al día"
-  git -C "$carpeta" pull --ff-only || echo "   (no se pudo; sigue)"
+  intentar git -C "$carpeta" pull --ff-only
 fi
 
 if ! claude plugin marketplace list 2>/dev/null | grep -q "$CATALOGO"; then
   paso "Registro el catálogo de Softnexus"
-  claude plugin marketplace add "$REPO" || true
+  intentar claude plugin marketplace add "$REPO"
 fi
 
 paso "Refresco el catálogo"
-claude plugin marketplace update || true
+intentar claude plugin marketplace update
 
 # 2) La copia general: la del usuario, la que sirve en TODOS los proyectos.
 if claude plugin list 2>/dev/null | grep -q "$PLUGIN"; then
   paso "Pongo al día la copia general"
-  claude plugin update "$PLUGIN" || true
+  intentar claude plugin update "$PLUGIN"
 else
   paso "Instalo la copia general"
-  claude plugin install "$PLUGIN" || true
+  intentar claude plugin install "$PLUGIN"
 fi
 
 # 3) Ya con la versión nueva instalada, ella sabe quitar las copias que viven dentro de proyectos.
 paso "Me aseguro de que quede encendida"
-claude plugin enable "$PLUGIN" --scope user >/dev/null 2>&1 || true
+intentar claude plugin enable "$PLUGIN" --scope user
 
 motor=$(ls -d "$HOME/.claude/plugins/cache/$CATALOGO/softnexus-sdd"/*/scripts/sn-sync.mjs 2>/dev/null | sort -V | tail -1)
 if [ -n "${motor:-}" ]; then
   paso "Quito las copias que vivan dentro de proyectos"
-  node "$motor" limpiar-copias || true
+  intentar node "$motor" limpiar-copias
+fi
+
+if [ "$fallos" -gt 0 ]; then
+  printf '\n⚠️  ATENCIÓN: %s paso(s) NO se pudieron hacer (están marcados con ✗ arriba).\n' "$fallos"
+  printf 'NO quedó completo: pásale esta salida al líder técnico antes de seguir.\n'
+  exit 1
 fi
 
 printf '\nListo. AHORA SÍ: cierra Claude Code y vuélvelo a abrir.\n'
+printf 'Comprueba con: claude plugin list   (tiene que decir activo y la última versión)\n'
 printf 'Desde aquí, para actualizar basta con decirle al robot: "actualízame el plugin".\n'

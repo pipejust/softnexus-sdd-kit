@@ -522,6 +522,19 @@ async function actualizar() {
   const ultima = await ultimaPublicada();
   const cat = catalogo();
   const installs = instalaciones();
+  // --general: dejar el plugin UNA sola vez en este computador. Quita las copias que viven dentro de
+  // proyectos (y la línea que las pedía) y deja al día la general, la que sirve para todos.
+  if (flag('--general')) {
+    const generales = pasosGenerales({ cat, installs });
+    const copias = proyectosConCopia(installs);
+    console.log(copias.length
+      ? `\n${copias.length} proyecto(s) tienen su propia copia del plugin. Se quitan y queda una sola, la de tu usuario:`
+      : '\nNo hay copias dentro de proyectos. Solo dejo al día la general:');
+    resumen(ejecutarPasos(generales), 'Listo: una sola instalación, para todos los proyectos.');
+    if (!process.exitCode) console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir.');
+    return;
+  }
+
   console.log(`Plugin Softnexus: tienes ${actual || '?'}${ultima ? ` · publicada ${ultima}` : ' (no pude consultar la última: sin red)'}`);
   if (cat.tipo === 'carpeta') {
     const atrasado = gitAtrasado(cat.carpeta);
@@ -534,27 +547,11 @@ async function actualizar() {
       + ' Dentro de un proyecto, la copia del proyecto manda sobre la del usuario.');
   }
   if (ultima && !esMasNueva(ultima, actual) && !viejas.length) return console.log('Todo al día. No hay nada que hacer.');
-  // --general: dejar el plugin UNA sola vez en este computador. Quita las copias que viven dentro de
-  // proyectos (y la línea que las pedía) y deja al día la general, la que sirve para todos.
-  if (flag('--general')) {
-    const generales = pasosGenerales({ cat, installs });
-    const copias = proyectosConCopia(installs);
-    console.log(copias.length
-      ? `\n${copias.length} proyecto(s) tienen su propia copia del plugin. Se quitan y queda una sola, la de tu usuario:`
-      : '\nNo hay copias dentro de proyectos. Solo dejo al día la general:');
-    const hechos = ejecutarPasos(generales);
-    const fallaron = hechos.filter((h) => !h.ok).length;
-    console.log(`\n${fallaron ? `Quedaron ${fallaron} paso(s) sin hacer (arriba dice cuáles).` : 'Listo: una sola instalación, para todos los proyectos.'}`);
-    console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir.');
-    return;
-  }
   const pasos = pasosParaActualizar({ cat, installs });
   if (flag('--arreglar')) {
     console.log(`\nActualizando todo en esta máquina (${pasos.length} pasos):`);
-    const hechos = ejecutarPasos(pasos);
-    const fallaron = hechos.filter((h) => !h.ok).length;
-    console.log(`\n${fallaron ? `Listo con ${fallaron} paso(s) que no se pudieron (arriba dice cuáles).` : 'Listo: todo quedó al día.'}`);
-    console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir. Hasta que no reinicies sigue corriendo la versión vieja.');
+    resumen(ejecutarPasos(pasos), 'Listo: todo quedó al día.');
+    if (!process.exitCode) console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir. Hasta que no reinicies sigue corriendo la versión vieja.');
     return;
   }
   console.log('\nPara ponerlo al día en esta máquina, en este orden:');
@@ -573,6 +570,20 @@ async function actualizar() {
   }
 }
 
+// Decir la verdad al final: si algo falló, se ve, se explica cómo terminarlo a mano y el comando
+// sale con error (quien lo llama no puede dar por bueno algo que no se hizo).
+function resumen(hechos, bien) {
+  const fallaron = hechos.filter((h) => !h.ok);
+  if (!fallaron.length) return console.log(`\n${bien}`);
+  process.exitCode = 1;
+  console.log(`\n⚠️  ATENCIÓN: ${fallaron.length} de ${hechos.length} pasos NO se pudieron hacer:`);
+  for (const { paso, motivo } of fallaron) {
+    const comando = paso.fn ? paso.nota : `${paso.cmd} ${paso.args.join(' ')}`;
+    console.log(`   ✗ ${comando}${paso.cwd ? `   (en ${paso.cwd})` : ''}\n     ${motivo}`);
+  }
+  console.log('\nLo que falló hay que hacerlo a mano (copia el comando de arriba) o decírselo al líder. NO quedó completo.');
+}
+
 // limpiar-copias: quita el plugin de TODOS los proyectos de este computador (las copias instaladas
 // dentro de cada carpeta y la línea que las pedía). Después manda una sola: la del computador.
 function limpiarCopias() {
@@ -581,8 +592,7 @@ function limpiarCopias() {
   if (!copias.length) return console.log('Ningún proyecto tiene copia propia del plugin: ya manda una sola, la de tu usuario.');
   console.log(`${copias.length} proyecto(s) tienen su propia copia. Las quito:`);
   const hechos = ejecutarPasos(pasosLimpieza({ installs }));
-  const fallaron = hechos.filter((h) => !h.ok).length;
-  console.log(`\n${fallaron ? `Quedaron ${fallaron} paso(s) sin hacer (arriba dice cuáles).` : 'Listo: ya no hay copias dentro de proyectos.'}`);
+  resumen(hechos, 'Listo: ya no hay copias dentro de proyectos.');
   console.log('Ahora instala la general si no la tienes: instalar-general.');
 }
 
@@ -592,11 +602,10 @@ async function instalarGeneral() {
   const cat = catalogo();
   const installs = instalaciones();
   const hechos = ejecutarPasos(pasosInstalacionGeneral({ cat, installs }));
-  const fallaron = hechos.filter((h) => !h.ok).length;
   const copias = proyectosConCopia(installs);
-  console.log(`\n${fallaron ? `Quedaron ${fallaron} paso(s) sin hacer (arriba dice cuáles).` : 'Listo: el plugin queda instalado para todos tus proyectos.'}`);
+  resumen(hechos, 'Listo: el plugin queda instalado para todos tus proyectos.');
   if (copias.length) console.log(`OJO: ${copias.length} proyecto(s) todavía tienen copia propia y esa manda dentro de ellos. Quítalas con: limpiar-copias.`);
-  console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir.');
+  if (!process.exitCode) console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir.');
 }
 
 // El conector de Altum de este repositorio, con proyecto y clave listos.
