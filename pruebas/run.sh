@@ -193,6 +193,9 @@ const { entrecomillar } = await import(process.env.SN_VERSION_MJS);
 const conEspacios = 'C:\\Mis Proyectos\\x';
 console.log(entrecomillar(conEspacios) === `"${conEspacios}"` && entrecomillar('--scope') === '--scope' ? 'comillas-ok' : 'comillas-mal');
 JS
+check "\"Ya estaba encendido\" o \"no estaba instalado\" NO cuentan como fallo" "ver \"import {esBenigno} from '$PLUGIN/sync/version.mjs'; const si=['Plugin x is already enabled at user scope','is installed in user scope, not project']; const no=['Command failed: claude plugin update x','spawnSync claude.cmd EINVAL']; process.exit(si.every(esBenigno) && !no.some(esBenigno) ? 0 : 1)\""
+check "Un paso que termina en \"ya estaba\" se cuenta como hecho" "ver \"import {ejecutarPasos} from '$PLUGIN/sync/version.mjs'; const r=ejecutarPasos([{cmd:'claude',args:['plugin','enable'],opcional:true,nota:'x'}], { correr: () => { const e=new Error('Failed to enable plugin: Plugin is already enabled at user scope'); throw e; } }); process.exit(r[0].ok && r[0].yaEstaba ? 0 : 1)\""
+check "El script tampoco lo cuenta como fallo" "grep -q 'already enabled' \"$T/../herramientas/plugin-general.sh\""
 check "En Windows los argumentos se entrecomillan: una ruta con espacios no parte el comando" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/comillas.mjs\" | grep -q comillas-ok"
 HOME="$CASA" node "$PLUGIN/sn-sync.mjs" actualizar --general >"$W/salida-general.txt" 2>&1; codigo=$?
 check "Si un paso falla, el comando sale con error, lo dice y no invita a reiniciar como si nada" "[ \$codigo -ne 0 ] && grep -q 'NO SE PUDO' \"$W/salida-general.txt\" && grep -q 'ATENCIÓN' \"$W/salida-general.txt\" && ! grep -q 'AHORA SÍ' \"$W/salida-general.txt\""
