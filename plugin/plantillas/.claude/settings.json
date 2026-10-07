@@ -19,10 +19,6 @@
       "Bash(supabase db reset --linked*)"
     ]
   },
-  "enabledPlugins": {
-    "softnexus-sdd@softnexus": true,
-    "superpowers@claude-plugins-official": true
-  },
   "hooks": {
     "PostToolUse": [
       {

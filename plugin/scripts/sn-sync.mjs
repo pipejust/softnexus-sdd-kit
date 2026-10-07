@@ -36,7 +36,7 @@ import { takeSnapshot } from './sync/snapshot.mjs';
 import { mensajeValidacion } from './sync/validacion-mensaje.mjs';
 import { aprobacionesPr, firmaDelLider, origenRepo, prDeRama } from './sync/pr.mjs';
 import { siguientePaso } from './sync/siguiente.mjs';
-import { catalogo, comoActualizar, esMasNueva, gitAtrasado, instalaciones, ultimaPublicada, versionInstalada } from './sync/version.mjs';
+import { catalogo, comoActualizar, ejecutarPasos, esMasNueva, gitAtrasado, instalaciones, pasosParaActualizar, ultimaPublicada, versionInstalada } from './sync/version.mjs';
 import { parseLog } from './validation-state.mjs';
 import { leerTexto } from './sync/texto.mjs';
 import {
@@ -534,9 +534,19 @@ async function actualizar() {
       + ' Dentro de un proyecto, la copia del proyecto manda sobre la del usuario.');
   }
   if (ultima && !esMasNueva(ultima, actual) && !viejas.length) return console.log('Todo al día. No hay nada que hacer.');
+  const pasos = pasosParaActualizar({ cat, installs });
+  if (flag('--arreglar')) {
+    console.log(`\nActualizando todo en esta máquina (${pasos.length} pasos):`);
+    const hechos = ejecutarPasos(pasos);
+    const fallaron = hechos.filter((h) => !h.ok).length;
+    console.log(`\n${fallaron ? `Listo con ${fallaron} paso(s) que no se pudieron (arriba dice cuáles).` : 'Listo: todo quedó al día.'}`);
+    console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir. Hasta que no reinicies sigue corriendo la versión vieja.');
+    return;
+  }
   console.log('\nPara ponerlo al día en esta máquina, en este orden:');
   comoActualizar({ cat, installs }).forEach((paso) => console.log(`  ${paso}`));
-  console.log('\nY al final, cierra Claude Code y vuélvelo a abrir: hasta que no reinicies sigue corriendo la versión vieja.');
+  console.log('\nO deja que lo haga solo:  node "' + SELF + '" actualizar --arreglar');
+  console.log('Y al final, cierra Claude Code y vuélvelo a abrir: hasta que no reinicies sigue corriendo la versión vieja.');
   if (cat.tipo === 'carpeta') {
     console.log('\nPara no repetir esto cada vez, se puede registrar el catálogo desde GitHub:'
       + '\n  claude plugin marketplace remove softnexus'
