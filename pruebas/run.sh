@@ -152,16 +152,18 @@ JSON
 cat > "$CASA/.claude/plugins/known_marketplaces.json" <<'JSON'
 {"softnexus": {"source": {"source": "local", "path": "/Users/alguien/claude-skills/softnexus-sdd-kit"}, "installLocation": "/Users/alguien/claude-skills/softnexus-sdd-kit"}}
 JSON
-cat > "$CASA/.claude/plugins/installed_plugins.json" <<'JSON'
+mkdir -p "$W/proyecto-de-otro/.claude"
+cat > "$CASA/.claude/plugins/installed_plugins.json" <<JSON
 {"version": 2, "plugins": {"softnexus-sdd@softnexus": [
   {"scope": "user", "version": "0.38.1"},
-  {"scope": "project", "version": "0.31.0", "projectPath": "/tmp/proyecto-de-otro"}
+  {"scope": "project", "version": "0.31.0", "projectPath": "$W/proyecto-de-otro"}
 ]}}
 JSON
-ver() { HOME="$CASA" node --input-type=module -e "$1"; }
+ver() { HOME="$CASA" W_PROY="${W_PROY:-$W/proyecto-de-otro}" node --input-type=module -e "$1"; }
 check "Compara versiones por número, no por texto (0.49.0 > 0.38.1 y 0.10 > 0.9)" "ver \"import {esMasNueva} from '$PLUGIN/sync/version.mjs'; process.exit(esMasNueva('0.49.0','0.38.1') && esMasNueva('0.10','0.9') && !esMasNueva('0.38.1','0.49.0') ? 0 : 1)\""
 check "Si el catálogo es una carpeta local, el primer paso es traerla al día con git" "ver \"import {comoActualizar} from '$PLUGIN/sync/version.mjs'; const p=comoActualizar(); process.exit(p[0].startsWith('git -C') && p[0].includes('claude-skills/softnexus-sdd-kit') ? 0 : 1)\""
-check "Un solo comando hace todos los pasos: catálogo, usuario y cada proyecto" "ver \"import {pasosParaActualizar} from '$PLUGIN/sync/version.mjs'; const p=pasosParaActualizar(); const resumen=p.map(x=>x.cmd+' '+x.args.join(' ')).join(' | '); process.exit(p.length===4 && p[0].cmd==='git' && resumen.includes('marketplace update') && p[3].args.includes('--scope') && p[3].cwd==='/tmp/proyecto-de-otro' ? 0 : 1)\""
+declara_otra_vez
+check "Un solo comando hace todos los pasos: catálogo, usuario y cada proyecto" "W_PROY=\"$W/proyecto-de-otro\" ver \"import {pasosParaActualizar} from '$PLUGIN/sync/version.mjs'; const p=pasosParaActualizar(); const resumen=p.map(x=>x.cmd+' '+x.args.join(' ')).join(' | '); process.exit(p.length===4 && p[0].cmd==='git' && resumen.includes('marketplace update') && p[3].args.includes('--scope') && p[3].cwd===process.env.W_PROY ? 0 : 1)\""
 mkdir -p "$W/proy-con-copia/.claude"
 cat > "$W/proy-con-copia/.claude/settings.json" <<'JSON'
 {"permissions": {"allow": []}, "enabledPlugins": {"softnexus-sdd@softnexus": true, "superpowers@claude-plugins-official": true}}
@@ -172,14 +174,23 @@ JSON
 check "Encuentra los proyectos que se guardan su propia copia (instalados o declarados)" "ver \"import {proyectosConCopia} from '$PLUGIN/sync/version.mjs'; const p=proyectosConCopia(); process.exit(p.length===2 && p.some(x=>x.endsWith('proy-con-copia')) ? 0 : 1)\""
 check "La carpeta del usuario NUNCA se trata como proyecto (en Windows borraba la copia general)" "ver \"import {esCarpetaDelUsuario, dejarDeDeclarar, proyectosConCopia} from '$PLUGIN/sync/version.mjs'; import os from 'node:os'; const casa=os.homedir(); process.exit(esCarpetaDelUsuario(casa) && esCarpetaDelUsuario(casa+'/.claude') && dejarDeDeclarar(casa)===false && !proyectosConCopia([{scope:'project',version:'1',proyecto:casa}]).includes(casa) ? 0 : 1)\""
 check "instalar-general deja el plugin encendido al final" "ver \"import {pasosInstalacionGeneral} from '$PLUGIN/sync/version.mjs'; const p=pasosInstalacionGeneral(); process.exit(p[p.length-1].args.includes('enable') ? 0 : 1)\""
+declara_otra_vez() { cat > "$W/proy-con-copia/.claude/settings.json" <<'JSON'
+{"permissions": {"allow": []}, "enabledPlugins": {"softnexus-sdd@softnexus": true, "superpowers@claude-plugins-official": true}}
+JSON
+}
+declara_otra_vez
+check "Un proyecto cuya carpeta ya no existe no se intenta limpiar (ni cuenta como fallo)" "ver \"import {pasosLimpieza, ejecutarPasos} from '$PLUGIN/sync/version.mjs'; const p=pasosLimpieza({installs:[{scope:'project',version:'0.3',proyecto:'/tmp/no-existe-sn-xyz'}]}); const suyos=p.filter(x=>x.nota.includes('no-existe-sn-xyz')); const r=ejecutarPasos(suyos); process.exit(suyos.length===1 && suyos[0].nota.includes('ya no existe') && !suyos.some(x=>x.args) && r.every(x=>x.ok) ? 0 : 1)\""
+declara_otra_vez
 check "limpiar-copias solo quita: una desinstalación y un ajuste por proyecto, nada más" "ver \"import {pasosLimpieza} from '$PLUGIN/sync/version.mjs'; const p=pasosLimpieza(); process.exit(p.length===4 && p.filter(x=>x.args&&x.args.includes('uninstall')).length===2 && p.filter(x=>x.fn).length===2 ? 0 : 1)\""
 check "instalar-general solo instala o actualiza la copia del computador" "ver \"import {pasosInstalacionGeneral} from '$PLUGIN/sync/version.mjs'; const p=pasosInstalacionGeneral(); const t=p.map(x=>x.args.join(' ')).join('|'); process.exit(!t.includes('uninstall') && t.includes('marketplace update') && /plugin (install|update) softnexus-sdd@softnexus/.test(t) ? 0 : 1)\""
 check "Sin copia de usuario, instalar-general instala (no actualiza)" "ver \"import {pasosInstalacionGeneral} from '$PLUGIN/sync/version.mjs'; const p=pasosInstalacionGeneral({installs: []}); process.exit(p.some(x=>x.args.includes('install')) && !p.some(x=>x.args.includes('update') && x.args.includes('softnexus-sdd@softnexus')) ? 0 : 1)\""
-check "El comando general quita cada copia, borra la línea que la pedía y deja la de usuario al día" "ver \"import {pasosGenerales} from '$PLUGIN/sync/version.mjs'; const p=pasosGenerales(); const quita=p.filter(x=>x.args && x.args.includes('uninstall')).length; const ajustes=p.filter(x=>x.fn).length; const pasos=p.map(x=>x.args?x.args.join(' '):'ajuste'); process.exit(quita===2 && ajustes===2 && pasos.includes('plugin update softnexus-sdd@softnexus') ? 0 : 1)\""
+declara_otra_vez
+check "El comando general quita cada copia, borra la línea que la pedía y deja la de usuario al día" "W_PROY=\"$W/proyecto-de-otro\" ver \"import {pasosGenerales} from '$PLUGIN/sync/version.mjs'; const p=pasosGenerales(); const quita=p.filter(x=>x.args && x.args.includes('uninstall')).length; const ajustes=p.filter(x=>x.fn).length; const pasos=p.map(x=>x.args?x.args.join(' '):'ajuste'); process.exit(quita===2 && ajustes===2 && pasos.includes('plugin update softnexus-sdd@softnexus') ? 0 : 1)\""
+declara_otra_vez
 check "Deja de declararlo en el proyecto, sin tocar lo demás del archivo" "ver \"import {dejarDeDeclarar, declaraElPlugin} from '$PLUGIN/sync/version.mjs'; import {readFileSync} from 'node:fs'; const c='$W/proy-con-copia'; const cambio=dejarDeDeclarar(c); const d=JSON.parse(readFileSync(c+'/.claude/settings.json','utf8')); process.exit(cambio && !declaraElPlugin(c) && d.enabledPlugins['superpowers@claude-plugins-official'] && d.permissions ? 0 : 1)\""
 check "Si un paso falla, los demás se siguen corriendo" "ver \"import {pasosParaActualizar, ejecutarPasos} from '$PLUGIN/sync/version.mjs'; let n=0; const r=ejecutarPasos(pasosParaActualizar(), { correr: (p) => { n+=1; if (n===1) throw new Error('carpeta borrada'); } }); process.exit(n===4 && r.filter(x=>x.ok).length===3 ? 0 : 1)\""
 check "Las copias de OTROS proyectos no estorban en esta sesión" "ver \"import {instalacionesDeAqui} from '$PLUGIN/sync/version.mjs'; const i=instalacionesDeAqui('/tmp/otra-carpeta'); process.exit(i.length===1 && i[0].scope==='user' ? 0 : 1)\""
-check "La copia del proyecto abierto sí cuenta" "ver \"import {instalacionesDeAqui} from '$PLUGIN/sync/version.mjs'; const i=instalacionesDeAqui('/tmp/proyecto-de-otro/sub'); process.exit(i.length===2 ? 0 : 1)\""
+check "La copia del proyecto abierto sí cuenta" "W_PROY=\"$W/proyecto-de-otro\" ver \"import {instalacionesDeAqui} from '$PLUGIN/sync/version.mjs'; const i=instalacionesDeAqui(process.env.W_PROY+'/sub'); process.exit(i.length===2 ? 0 : 1)\""
 out=$(HOME="$CASA" printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$W" | HOME="$CASA" node "$PLUGIN/../hooks/altum-watch.mjs" 2>/dev/null)
 check "Al abrir sesión con una versión vieja, el aviso lo dice y manda al comando que da los pasos" "echo \"\$out\" | grep -q 'la última publicada es 9.9.9' && echo \"\$out\" | grep -q 'catálogo es una carpeta local' && echo \"\$out\" | grep -q 'actualizar'"
 cat > "$CASA/.claude/sn-version.json" <<JSON

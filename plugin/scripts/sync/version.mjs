@@ -143,6 +143,12 @@ export function dejarDeDeclarar(carpeta) {
 export function pasosLimpieza({ installs = instalaciones() } = {}) {
   const pasos = [];
   for (const carpeta of proyectosConCopia(installs)) {
+    // La carpeta pudo moverse o borrarse (pasa mucho con OneDrive o proyectos viejos). Entonces no
+    // hay nada que limpiar ahí: intentarlo solo produce un error que no le sirve a nadie.
+    if (!existsSync(carpeta)) {
+      pasos.push({ fn: () => true, opcional: true, nota: `${path.basename(carpeta)} ya no existe en el disco: nada que limpiar` });
+      continue;
+    }
     pasos.push({
       cmd: 'claude', args: ['plugin', 'uninstall', PLUGIN, '--scope', 'project'], cwd: carpeta, opcional: true,
       nota: `quitar la copia de ${path.basename(carpeta)}`,
@@ -206,7 +212,7 @@ export function comoActualizar(opciones = {}) {
 // Hay "fallos" que en realidad son el resultado que queríamos: la copia ya estaba encendida, o el
 // proyecto ya no tenía copia que quitar. No son problemas y no deben asustar a nadie.
 export function esBenigno(motivo) {
-  return /already enabled|ya está (habilitado|activado|encendid)|not installed|no está instalad|installed in user scope|not found|no such plugin/i.test(String(motivo || ''));
+  return /already enabled|ya está (habilitado|activado|encendid)|not installed|no está instalad|installed in user scope|not found|no such plugin|ya no existe|ENOENT/i.test(String(motivo || ''));
 }
 
 export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
@@ -254,6 +260,7 @@ function ejecutar(paso) {
     return salida;
   } catch (error) {
     error.todo = `${error.stdout || ''}\n${error.stderr || ''}\n${error.message || ''}`;
+    if (paso.cwd && !existsSync(paso.cwd)) error.todo += '\nesa carpeta ya no existe';
     throw error;
   }
 }

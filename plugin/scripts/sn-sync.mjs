@@ -582,6 +582,7 @@ function resumen(hechos, bien) {
     console.log(`   ✗ ${comando}${paso.cwd ? `   (en ${paso.cwd})` : ''}\n     ${motivo}`);
   }
   console.log('\nLo que falló hay que hacerlo a mano (copia el comando de arriba) o decírselo al líder. NO quedó completo.');
+  console.log('Para mandar el detalle completo: node "' + SELF + '" actualizar --general > /tmp/sn-plugin.txt 2>&1   y pasa ese archivo.');
 }
 
 // limpiar-copias: quita el plugin de TODOS los proyectos de este computador (las copias instaladas
