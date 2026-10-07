@@ -203,6 +203,12 @@ export function comoActualizar(opciones = {}) {
 
 // Correrlos de una. Se muestra cada comando antes de ejecutarlo y, si uno falla, se sigue con los
 // demás: que una carpeta borrada o un proyecto movido no deje el resto sin actualizar.
+// Hay "fallos" que en realidad son el resultado que queríamos: la copia ya estaba encendida, o el
+// proyecto ya no tenía copia que quitar. No son problemas y no deben asustar a nadie.
+export function esBenigno(motivo) {
+  return /already enabled|ya está (habilitado|activado|encendid)|not installed|no está instalad|installed in user scope|not found|no such plugin/i.test(String(motivo || ''));
+}
+
 export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
   const resultados = [];
   for (const paso of pasos) {
@@ -212,8 +218,14 @@ export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
       resultados.push({ paso, ok: true });
     } catch (error) {
       const motivo = String(error.message || error).split('\n')[0];
-      console.log(`   ✗ NO SE PUDO: ${motivo}`);
-      resultados.push({ paso, ok: false, motivo });
+      if (esBenigno(motivo) || (paso.opcional && esBenigno(error.stderr?.toString() || ''))) {
+        console.log('   (ya estaba así: nada que hacer)');
+        resultados.push({ paso, ok: true, yaEstaba: true });
+        continue;
+      }
+      const detalle = (error.stderr?.toString() || '').trim().split('\n').slice(-2).join(' ');
+      console.log(`   ✗ NO SE PUDO: ${motivo}${detalle ? `\n     ${detalle}` : ''}`);
+      resultados.push({ paso, ok: false, motivo: detalle || motivo });
     }
   }
   return resultados;
@@ -229,7 +241,9 @@ export function entrecomillar(argumento) {
 
 function ejecutar(paso) {
   if (paso.fn) return paso.fn();
-  const opciones = { stdio: 'inherit', cwd: paso.cwd || process.cwd(), timeout: 180000, windowsHide: true };
+  // stderr se captura (además de mostrarse) para poder distinguir un fallo de verdad de un
+  // "ya estaba así", que claude también reporta como error.
+  const opciones = { stdio: ['inherit', 'inherit', 'pipe'], cwd: paso.cwd || process.cwd(), timeout: 180000, windowsHide: true };
   if (process.platform === 'win32') {
     return execFileSync(paso.cmd, paso.args.map(entrecomillar), { ...opciones, shell: true, windowsHide: true });
   }

@@ -15,11 +15,21 @@ CATALOGO="softnexus"
 
 fallos=0
 paso() { printf '\n→ %s\n' "$1"; }
-intentar() {   # corre el comando y, si falla, lo deja anotado en vez de disimularlo
-  if ! "$@"; then
-    printf '   ✗ NO SE PUDO: %s\n' "$*"
-    fallos=$((fallos + 1))
+# Corre el comando y, si falla, lo deja anotado en vez de disimularlo. Hay respuestas que parecen
+# error pero son el resultado que queríamos ("ya está encendido", "no estaba instalado"): esas pasan.
+intentar() {
+  local salida
+  if salida=$("$@" 2>&1); then
+    [ -n "$salida" ] && printf '%s\n' "$salida"
+    return 0
   fi
+  printf '%s\n' "$salida"
+  if printf '%s' "$salida" | grep -qiE 'already enabled|ya está (habilitado|activado|encendid)|not installed|no está instalad|installed in user scope'; then
+    printf '   (ya estaba así: nada que hacer)\n'
+    return 0
+  fi
+  printf '   ✗ NO SE PUDO: %s\n' "$*"
+  fallos=$((fallos + 1))
 }
 
 # 1) El catálogo. Si en este computador quedó registrado como una CARPETA, "marketplace update" solo
