@@ -554,6 +554,17 @@ export async function deliverAltum(connector, evt) {
   recordPush(connector, { ...updated, id: taskId });
 }
 
+// Altum IGNORA el filtro external_ref en GET /tasks: devuelve TODAS las tareas del proyecto. Tomar
+// la primera enlazaba la ficha a una tarea ajena y el siguiente PATCH la sobrescribía (pasó en Mi
+// Boleta: varias fichas quedaron apuntando a una tarea de reunión, que terminó con otro título,
+// otro estado y otro responsable). Aquí se exige coincidencia EXACTA, y nunca una tarea de reunión:
+// esas no llevan external_ref, así que jamás son la tarea de una ficha.
+export async function tareaDeLaFicha(connector, externalRef) {
+  if (!externalRef) return null;
+  const { items } = await listTasks(connector, { project_id: connector.project_id, external_ref: externalRef });
+  return items.find((t) => t.external_ref === externalRef && !esDeActen(t)) || null;
+}
+
 // POST con external_ref (enlace firme) e Idempotency-Key (un reintento por corte de red no duplica).
 // Responsable: el UUID de assignee_map o, si no está, el correo de git (assignee_email); si ese correo
 // no existe en la empresa (404), la tarea se crea sin responsable. Si external_ref ya existe (409), se reutiliza.
@@ -583,8 +594,11 @@ async function createTask(connector, item, description, { assignee, email, custo
     });
   } catch (error) {
     if (error.status === 409) {
-      const { items } = await listTasks(connector, { project_id: connector.project_id, external_ref: item.id });
-      if (items[0]) return items[0];
+      // 409 = "ese external_ref ya existe": la tarea está, hay que encontrar LA suya, no una cualquiera.
+      const suya = await tareaDeLaFicha(connector, item.id);
+      if (suya) return suya;
+      throw new NotRetryable(`Altum dice que ya existe una tarea para ${item.id}, pero no aparece ninguna con ese enlace.`
+        + ' No enlazo el ítem a otra tarea para no pisarla: búscala en Altum y enlázala a mano con "link", o quita el external_ref allá.', 409);
     }
     if (body.assignee_email && /HTTP 404/.test(error.message)) {
       const { assignee_email: _, ...withoutAssignee } = body;

@@ -90,6 +90,7 @@ let permisos = process.env.MOCK_PERMISOS || 'lider';   // se cambia en caliente 
 const planearProhibido = (data) => (permisos === 'no-lider'
   ? CAMPOS_DE_PLANEACION.filter((k) => data[k] !== undefined) : []);
 const dependencias = new Map(); // tarea -> [ids que la bloquean]
+let forzar409 = '';
 const idempotent = new Map();
 let number = 100;
 
@@ -121,6 +122,8 @@ http.createServer((req, res) => {
         .filter((l) => { const e = JSON.parse(l); return e.method === 'PATCH' && e.path === `/api/v1/api/tasks/${t.id}`; }).length;
       return send(res, 200, { patches: n });
     }
+    // Forzar el 409 "ese external_ref ya existe" aunque no exista: es lo que pasó en producción.
+    if (url.pathname === '/_409') { forzar409 = url.searchParams.get('ref') || ''; return send(res, 200, { forzar409 }); }
     if (url.pathname === '/_stripmark') { tasks.forEach((t) => { t.description = String(t.description || '').replace(/<!--[^>]*-->/g, ''); }); return send(res, 200, {}); }
     // --- Azure DevOps (mismo servidor falso): PR de ramas y sus aprobaciones ---
     const az = url.pathname.match(/^\/([^/]+)\/([^/]+)\/_apis\/git\/repositories\/([^/]+)\/pullrequests(?:\/(\d+))?$/);
@@ -219,7 +222,9 @@ http.createServer((req, res) => {
     if (req.method === 'GET' && base === '/tasks') {
       const q = url.searchParams;
       const since = q.get('updated_since');
-      const match = (t) => allowed(t.project_id) && (!q.get('project_id') || t.project_id === q.get('project_id')) && (!q.get('external_ref') || t.external_ref === q.get('external_ref'));
+      // OJO: el Altum real IGNORA external_ref en este filtro y devuelve TODAS las tareas del
+      // proyecto. Se copia ese comportamiento para que las pruebas vean lo que ve la gente.
+      const match = (t) => allowed(t.project_id) && (!q.get('project_id') || t.project_id === q.get('project_id'));
       const nativas = tasks.map((t) => ({ ...t, source: 'altum' }));
       // Las de Acten ya traen updated_at: se filtran igual que las nativas (su fecha viaja sin zona).
       const fecha = (t) => String(t.updated_at || '').replace(/(\d)$/, '$1Z').replace(/ZZ$/, 'Z');
@@ -241,7 +246,7 @@ http.createServer((req, res) => {
       if (badField(data.custom_fields)) return send(res, 422, { error: `campo ${badField(data.custom_fields)[0]} no válido` });
       if (malDato(data)) return send(res, 422, { error: malDato(data) });
       if (planearProhibido(data).length) return send(res, 403, { detail: { error: 'Eso lo decide quien lleva el proyecto', campos: planearProhibido(data) } });
-      if (data.external_ref && tasks.some((t) => t.project_id === data.project_id && t.external_ref === data.external_ref)) return send(res, 409, { error: 'external_ref ya existe' });
+      if (data.external_ref && (data.external_ref === forzar409 || tasks.some((t) => t.project_id === data.project_id && t.external_ref === data.external_ref))) return send(res, 409, { error: 'external_ref ya existe' });
       const { assignee_email: email, ...rest } = data;
       if (email && !USERS[email]) return send(res, 404, { error: 'no hay nadie con ese correo' });
       const task = manual({ id: randomUUID(), number: (number += 1), state: 'new', created_at: now(), updated_at: now(), ...rest, ...(email ? { assignee_id: USERS[email] } : {}), updated_by: author });

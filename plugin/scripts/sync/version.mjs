@@ -150,9 +150,12 @@ export function pasosLimpieza({ installs = instalaciones() } = {}) {
       pasos.push({ fn: () => true, opcional: true, nota: `${path.basename(carpeta)} ya no existe en el disco: nada que limpiar` });
       continue;
     }
+    // El ámbito puede ser "project" o "local" (una copia solo para esa persona en esa carpeta).
+    // Desinstalar con el ámbito equivocado falla, así que se usa el que dice la instalación.
+    const ambito = installs.find((i) => i.proyecto === carpeta && i.scope !== 'user')?.scope || 'project';
     pasos.push({
-      cmd: 'claude', args: ['plugin', 'uninstall', PLUGIN, '--scope', 'project'], cwd: carpeta, opcional: true,
-      nota: `quitar la copia de ${path.basename(carpeta)}`,
+      cmd: 'claude', args: ['plugin', 'uninstall', PLUGIN, '--scope', ambito], cwd: carpeta, opcional: true,
+      nota: `quitar la copia de ${path.basename(carpeta)} (ámbito ${ambito})`,
     });
     pasos.push({
       fn: () => dejarDeDeclarar(carpeta), opcional: true,
@@ -212,6 +215,11 @@ export function comoActualizar(opciones = {}) {
 // demás: que una carpeta borrada o un proyecto movido no deje el resto sin actualizar.
 // Hay "fallos" que en realidad son el resultado que queríamos: la copia ya estaba encendida, o el
 // proyecto ya no tenía copia que quitar. No son problemas y no deben asustar a nadie.
+// Cuando claude dice "está instalado en X, no en Y", ahí mismo viene el ámbito correcto.
+export function ambitoQuePide(texto) {
+  return String(texto || '').match(/installed in (\w+) scope/i)?.[1] || '';
+}
+
 export function esBenigno(motivo) {
   return /already enabled|ya está (habilitado|activado|encendid)|not installed|no está instalad|installed in user scope|not found|no such plugin|ya no existe|ENOENT|but not all|could not be refreshed/i.test(String(motivo || ''));
 }
@@ -233,6 +241,14 @@ export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
         .filter((l) => /✘|✗|error|fail|no se pudo|cannot|denied|ENOENT|EINVAL|EACCES/i.test(l));
       const motivo = (pistas[pistas.length - 1] || String(error.message || error).split('\n')[0])
         .replace(/^✗\s*NO SE PUDO:\s*/, '').slice(0, 300);
+      // "está instalado en local, no en project": se reintenta con el ámbito que pide, una sola vez.
+      const otroAmbito = ambitoQuePide(todo);
+      if (otroAmbito && paso.args?.includes('uninstall') && !paso.reintentado && otroAmbito !== 'user') {
+        const conOtro = { ...paso, reintentado: true, args: paso.args.map((a, i) => (paso.args[i - 1] === '--scope' ? otroAmbito : a)) };
+        console.log(`   (esa copia es de ámbito ${otroAmbito}: lo intento así)`);
+        resultados.push(...ejecutarPasos([conOtro], { correr }));
+        continue;
+      }
       if (esBenigno(todo)) {
         console.log('   (ya estaba así: nada que hacer)');
         resultados.push({ paso, ok: true, yaEstaba: true });
