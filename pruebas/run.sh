@@ -221,6 +221,20 @@ JS
 mkdir -p "$W/con tildes ñ/scripts"
 cp "$PLUGIN/validation-state.mjs" "$W/con tildes ñ/scripts/"
 check "Una ruta con tildes o espacios no rompe los comandos (se decodifica bien)" "cd \"$W/con tildes ñ\" && node scripts/validation-state.mjs | grep -q '^\\[' ; cd \"$T\""
+cat > "$W/ambito.mjs" <<'JS'
+const { ejecutarPasos, ambitoQuePide } = await import(process.env.SN_VERSION_MJS);
+const intentos = [];
+const r = ejecutarPasos([{ cmd: 'claude', args: ['plugin', 'uninstall', 'x', '--scope', 'project'], cwd: '/tmp', opcional: true, nota: 'quitar' }], {
+  correr: (p) => {
+    intentos.push(p.args.join(' '));
+    if (p.args.includes('project')) { const e = new Error('falló'); e.todo = 'Plugin is installed in local scope, not project'; throw e; }
+  },
+});
+const bien = ambitoQuePide('is installed in local scope, not project') === 'local'
+  && intentos.length === 2 && intentos[1].includes('--scope local') && r.every((x) => x.ok);
+console.log(bien ? 'ambito-ok' : `ambito-mal ${JSON.stringify(intentos)}`);
+JS
+check "Si la copia es de ámbito local, se desinstala con ese ámbito (no se da por fallida)" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/ambito.mjs\" 2>/dev/null | grep -q ambito-ok"
 check "Solo se refresca NUESTRO catálogo (si otro ajeno falla, no es problema nuestro)" "ver \"import {pasosInstalacionGeneral} from '$PLUGIN/sync/version.mjs'; const p=pasosInstalacionGeneral(); const m=p.find(x=>x.args && x.args.includes('marketplace')); process.exit(m && m.args[m.args.length-1]==='softnexus' ? 0 : 1)\""
 check "Y si aun así se queja de otros catálogos, no cuenta como fallo" "ver \"import {esBenigno} from '$PLUGIN/sync/version.mjs'; process.exit(esBenigno('✘ Updated 11 marketplaces, but not all') ? 0 : 1)\""
 check "El script muestra el MOTIVO y guarda todo en un archivo" "grep -q 'MOTIVO' \"$T/../herramientas/plugin-general.sh\" && grep -q 'BITACORA' \"$T/../herramientas/plugin-general.sh\""

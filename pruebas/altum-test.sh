@@ -432,6 +432,21 @@ printf -- '\xef\xbb\xbf---\r\nid: CLI-0041\r\ntype: bug\r\ntitle: Recibo sin IVA
 check "Ficha con BOM al inicio (editores de Windows): también se lee" "sn asegurar CLI-0041 2>&1 | grep -qE 'Tarea en Altum #[0-9]+: \\[CLI-0041\\] Recibo sin IVA'"
 check "El plano y la validación también se leen con finales de Windows" "node -e \"import('./scripts/sn/validation-state.mjs').then(m => { const log = m.parseLog('## 2026-09-30 10:00 · APROBADO · sello: plano\\r\\n- Valida: Marta <marta@softnexus.co>\\r\\n- Commit validado: abc1234\\r\\n'); if (log.length !== 1 || !log[0].fields.Valida.includes('marta@softnexus.co')) process.exit(1); })\""
 
+echo "== Nunca enlazar una ficha a una tarea ajena (caso Mi Boleta)"
+printf -- '---\nid: CLI-0100\ntype: feature\ntitle: Cobro con PSE\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0100.md
+antes=$(state | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))')
+# Altum responde 409 "ese external_ref ya existe" aunque no exista ninguna tarea con ese enlace
+curl -s "localhost:$PORT/_409?ref=CLI-0100" >/dev/null
+out=$(sn asegurar CLI-0100 2>&1 || true)
+check "Si Altum dice 409 y no aparece la tarea de la ficha, NO se enlaza a otra" "! grep -q '^ext.altum:' docs/items/CLI-0100.md"
+check "Y se explica qué hacer en vez de pisar una tarea ajena" "echo \"\$out\" | grep -q 'no aparece ninguna con ese enlace'"
+check "Ninguna tarea ajena fue tocada" "[ \$(state | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))') -eq $antes ]"
+curl -s "localhost:$PORT/_409?ref=" >/dev/null
+printf -- '---\nid: CLI-0101\ntype: feature\ntitle: Enlace torcido\nrisk: R1\next.altum: acten:abc123\n---\n## Historia\nx\n' > docs/items/CLI-0101.md
+out=$(sn asegurar CLI-0101 2>&1 || true)
+check "Una ficha normal enlazada por error a una tarea de reunión: no se toca y se dice cómo arreglarlo" "echo \"\$out\" | grep -q 'nacida en una reunión y no le corresponde' && echo \"\$out\" | grep -q 'Quita la línea'"
+check "La tarea de la reunión sigue con su título" "api \"\$ACTEN\" | grep -q 'Acuerdo de la reunión'"
+
 echo "== Firma de webhooks de Altum"
 cat > /tmp/sn-verify-$$.mjs <<'JS'
 import { createHmac } from 'node:crypto';

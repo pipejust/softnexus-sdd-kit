@@ -24,7 +24,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { api, esDeActen, hasKey, keyName, listTasks, NotRetryable, projectStates } from './sync/altum.mjs';
+import { api, esDeActen, hasKey, keyName, listTasks, NotRetryable, projectStates, tareaDeLaFicha } from './sync/altum.mjs';
 import { addProjectRepo, backlogMarkdown, identificarRepo, integrantes, miEmpleado, nombreParaGit, checkProjectRepo, fetchAltumTask, leadText, listProjects, listRepos, projectLead, pullAltum, readBacklog, removeProjectRepo, repoReminder, whoAmI, whoAmIText } from './sync/altum-backlog.mjs';
 import { alreadyThere, cloneProject, findProject, findRepo, projectsForRepo, targetDir } from './sync/altum-clone.mjs';
 import { clearInbox, describe, isWatching, readInbox, stopWatch, watch } from './sync/altum-watch.mjs';
@@ -797,9 +797,11 @@ async function asegurar(config) {
   const existente = async (taskId) => {
     // Sin enlace en el ítem (p. ej. otro computador), se busca por external_ref = ID del ítem.
     if (!taskId) {
-      const { items } = await listTasks(connector, { project_id: connector.project_id, external_ref: item.id });
-      if (items[0] && item.file) setExternalId(item.file, connector.name, items[0].id);
-      return items[0] || null;
+      // Coincidencia EXACTA: Altum devuelve todas las tareas del proyecto aunque se filtre por
+      // external_ref, y enlazar la ficha a la primera que venga sobrescribe una tarea ajena.
+      const suya = await tareaDeLaFicha(connector, item.id);
+      if (suya && item.file) setExternalId(item.file, connector.name, suya.id);
+      return suya;
     }
     try {
       const tarea = await fetchAltumTask(connector, taskId);
@@ -809,7 +811,14 @@ async function asegurar(config) {
       throw error;
     }
   };
-  let tarea = await existente(item.external?.[connector.name]);
+  // Un enlace mal puesto (a una tarea de reunión que no es suya) no se sigue: antes de tocar nada,
+  // se revisa. Las fichas traídas de Acten (ACT-…) sí son de reunión y esas pasan.
+  const enlazada = item.external?.[connector.name] || '';
+  if (esDeActen({ id: enlazada }) && !/^ACT-/i.test(item.id)) {
+    throw new NotRetryable(`${item.id} está enlazado a ${enlazada}, que es una tarea nacida en una reunión y no le corresponde.`
+      + ' No la toco. Quita la línea "ext.altum:" de la ficha y vuelve a correr "asegurar": se creará su propia tarea.');
+  }
+  let tarea = await existente(enlazada);
   if (tarea) {
     // Ya existe: se le lleva la etapa actual del ítem (al cerrar, esto la deja terminada en Altum).
     // forzado: "asegurar" lo corre una persona a propósito (antes de construir, o al unir el PR),
