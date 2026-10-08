@@ -6,6 +6,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { leerTexto, normalizarTexto } from './sync/texto.mjs';
 import { comoSeIdentifica, esElLider, identidadFirmante } from './sync/lider.mjs';
 
@@ -150,7 +151,10 @@ export function validationFor(change, root = '.') {
   return statusOf(existsSync(file) ? parseLog(leerTexto(file)) : [], change);
 }
 
-const isMain = process.argv[1] && path.resolve(process.argv[1]) === new URL(import.meta.url).pathname;
+// fileURLToPath y no URL().pathname: una ruta con tildes o espacios ("/Volumes/Información/…")
+// viaja codificada en la URL (Informaci%C3%B3n) y la comparación fallaba, así que el comando
+// no imprimía nada y parecía que no había validaciones.
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
   const result = process.argv.includes('--pending') ? pendingRemote() : localStates();
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

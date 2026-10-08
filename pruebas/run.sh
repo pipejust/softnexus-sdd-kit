@@ -218,6 +218,9 @@ const { ejecutarPasos } = await import(process.env.SN_VERSION_MJS);
 const r = ejecutarPasos([{ cmd: 'sh', args: ['-c', 'echo "   ✗ NO SE PUDO: ✘ Failed to uninstall: permiso denegado"; exit 1'], nota: 'limpiar-copias' }]);
 console.log(r[0].motivo === '✘ Failed to uninstall: permiso denegado' ? 'motivo-ok' : `motivo-mal: ${r[0].motivo}`);
 JS
+mkdir -p "$W/con tildes ñ/scripts"
+cp "$PLUGIN/validation-state.mjs" "$W/con tildes ñ/scripts/"
+check "Una ruta con tildes o espacios no rompe los comandos (se decodifica bien)" "cd \"$W/con tildes ñ\" && node scripts/validation-state.mjs | grep -q '^\\[' ; cd \"$T\""
 check "Solo se refresca NUESTRO catálogo (si otro ajeno falla, no es problema nuestro)" "ver \"import {pasosInstalacionGeneral} from '$PLUGIN/sync/version.mjs'; const p=pasosInstalacionGeneral(); const m=p.find(x=>x.args && x.args.includes('marketplace')); process.exit(m && m.args[m.args.length-1]==='softnexus' ? 0 : 1)\""
 check "Y si aun así se queja de otros catálogos, no cuenta como fallo" "ver \"import {esBenigno} from '$PLUGIN/sync/version.mjs'; process.exit(esBenigno('✘ Updated 11 marketplaces, but not all') ? 0 : 1)\""
 check "El script muestra el MOTIVO y guarda todo en un archivo" "grep -q 'MOTIVO' \"$T/../herramientas/plugin-general.sh\" && grep -q 'BITACORA' \"$T/../herramientas/plugin-general.sh\""
