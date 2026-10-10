@@ -44,6 +44,11 @@ export function puedeAbrirPr(item) {
   if (['plan_written', 'planning', 'ready', 'triaged'].includes(item.stage) || ['awaiting_validation', 'invalid_signature', 'validation_expired'].includes(item.flag)) {
     return { puede: false, motivo: `el plano de ${item.id} no tiene su sello 1 (${siguientePaso(item).paso}). Siguiente: ${siguientePaso(item).siguiente}` };
   }
+  // Marcar tareas no reemplaza la firma: sin sello 1 en el plano no hay PR, aunque ya se haya construido.
+  if (item.plan_sealed === false && !['in_review', 'merged', 'done', 'discarded'].includes(item.stage)) {
+    const quien = nivel(item.risk) >= 3 ? 'por ser R3+, lo firma el líder: /sn-request (sello plano)' : 'la persona lo aprueba y queda en validacion.md';
+    return { puede: false, motivo: `el plano de ${item.id} nunca tuvo su sello 1 (${quien}). Se construyó sin él: pide el sello antes de abrir el PR.` };
+  }
   if (['plan_approved', 'building', 'built'].includes(item.stage)) {
     return { puede: false, motivo: `${item.id} todavía no tiene evidencia completa (${siguientePaso(item).paso}). Siguiente: ${siguientePaso(item).siguiente}` };
   }

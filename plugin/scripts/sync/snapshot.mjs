@@ -1,10 +1,10 @@
 // Foto del estado de todos los ítems: combina docs/items, openspec/changes, validaciones y git/PR.
 // La etapa se DERIVA de lo que existe (principio P7); nadie la escribe a mano.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { readItems } from './items.mjs';
-import { validationFor } from '../validation-state.mjs';
+import { planoSellado, validationFor } from '../validation-state.mjs';
 import { commitsFor } from './trace.mjs';
 import { prDeRama } from './pr.mjs';
 import { leerTexto } from './texto.mjs';
@@ -84,10 +84,32 @@ function lastActor(item) {
   return git(['log', '-1', '--format=%an <%ae>', '--', ...paths]);
 }
 
+// Cuándo cambió de verdad el contenido de la ficha. Es lo que permite saber si una ficha es más nueva
+// que lo que ya está en Altum o una versión vieja (otra rama, un checkout atrasado).
+// Se usa la fecha del último commit que tocó la ficha; si tiene cambios sin guardar, la hora del
+// archivo. La hora del archivo a secas no sirve: git la pone en "ahora" en cada checkout.
+function modificadoDe(file, sucios) {
+  if (!file) return '';
+  if (sucios.has(file)) {
+    try {
+      return new Date(statSync(file).mtimeMs).toISOString();
+    } catch {
+      return '';
+    }
+  }
+  return git(['log', '-1', '--format=%cI', '--', file]);
+}
+
+function fichasSinGuardar() {
+  const salida = git(['status', '--porcelain', '--', 'docs/items']);
+  return new Set(salida.split('\n').filter(Boolean).map((l) => l.slice(3).replace(/^"|"$/g, '').split(' -> ').pop()));
+}
+
 export function takeSnapshot(projectName = '', { solo = null } = {}) {
   const archived = archivedChanges();
   const project = projectName || path.basename(git(['rev-parse', '--show-toplevel']) || process.cwd());
   const source = git(['config', '--get', 'remote.origin.url']) || project;
+  const sucios = fichasSinGuardar();
   const items = readItems().filter((item) => !solo || solo(item)).map((item) => {
     const pr = prInfo(item.branch);
     const stage = deriveStage(item, archived, pr);
@@ -96,8 +118,10 @@ export function takeSnapshot(projectName = '', { solo = null } = {}) {
     const { body, file, ...rest } = item;
     return {
       ...rest, file, stage, stage_label: STAGES[stage], flag: flagOf(item), ...pr,
+      plan_sealed: item.change ? planoSellado(item.change) : null,
       tasks_done: progress?.done ?? null, tasks_total: progress?.total ?? null, actor: lastActor(item),
       commit_count: commits.length,
+      modificado: modificadoDe(file, sucios),
       // Fechas reales, no planeadas: cuándo se empezó de verdad (primer commit) y cuándo se unió el PR.
       started: (commits[commits.length - 1]?.date || '').slice(0, 10),
       started_at: commits[commits.length - 1]?.date || '',

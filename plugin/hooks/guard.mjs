@@ -1,66 +1,78 @@
 #!/usr/bin/env node
 // PreToolUse guard for Softnexus SDD. Exit code 2 blocks the tool call and shows stderr to the agent.
 // Deterministic rules only: things that must never depend on the agent "remembering".
+// Es prevención de accidentes, no un encierro: las reglas de comandos viven en comando.mjs.
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { abreUnPr, comandos, esSumidero, motivoParaBloquear, uneUnPr } from './comando.mjs';
 
-const BLOCKED_COMMANDS = [
-  { pattern: /\brm\s+-[a-z]*r[a-z]*f?\s+(\/|~|\$HOME|\.\.?)(\s|$)/i, reason: 'Borrado recursivo de raíz, home o directorio actual.' },
-  { pattern: /\bgit\s+push\b.*(--force|-f)\b/i, reason: 'git push --force está prohibido. Abre un PR.' },
-  { pattern: /\bgit\s+push\b.*\b(main|master|production)\b/i, reason: 'Push directo a rama protegida. Usa un PR.' },
-  { pattern: /\bgit\s+reset\s+--hard\b/i, reason: 'git reset --hard destruye trabajo. Pide confirmación humana.' },
-  { pattern: /\bsupabase\s+db\s+(reset|push)\b.*--linked/i, reason: 'Operación sobre la base de datos remota enlazada. Solo el tech lead.' },
-  { pattern: /\b(drop\s+(table|schema|database)|truncate\s+table)\b/i, reason: 'DDL destructivo. Crea una migración y pide revisión R3.' },
-  { pattern: /\b(cat|less|more|head|tail|source)\s+[^|;]*\.env(\.|\s|$)/i, reason: 'Leer .env expone secretos al contexto del agente.' },
-  { pattern: /\bvercel\s+(--prod|deploy\s+.*--prod)\b/i, reason: 'Deploy a producción manual. Producción sale solo por pipeline.' },
-  { pattern: /\bnpm\s+publish\b/i, reason: 'Publicar paquetes requiere aprobación humana.' },
-  { pattern: /\bgit\s+clone\s+(?:-[^\s]+\s+)*(?:https?:\/\/|git@|ssh:\/\/|file:\/\/)[^\s]+\s*(?:&&|;|\||$)/i,
-    reason: 'git clone sin carpeta de destino: la deja donde estés. Pregúntale a la persona DÓNDE la quiere '
-      + '(carpeta madre o ruta exacta) y clona con "node scripts/sn/sn-sync.mjs clone <proyecto> --in <carpeta> | --into <ruta>", '
-      + 'o con "git clone <url> <ruta>" si el repositorio no está en Altum.' },
-  { pattern: /\bgh\s+repo\s+clone\s+[^\s]+\s*(?:&&|;|\||$)/i,
-    reason: 'gh repo clone sin carpeta de destino: la deja donde estés. Pregunta primero dónde la quiere la persona.' },
-  { pattern: /\b(echo|printf)\b[^\n]*\$\{?SN_[A-Z0-9_]*(TOKEN|SECRET|KEY|PAT)\b|\bprintenv\b[^\n|]*\bSN_[A-Z0-9_]*(TOKEN|SECRET|KEY|PAT)\b|\b(printenv|env)\s*(\||$)/, reason: 'Imprimir un token o secreto lo expone en la conversación.' },
-];
+const MOTOR = fileURLToPath(new URL('../scripts/sn-sync.mjs', import.meta.url));
+const LIDER_VIEJO_MS = 12 * 60 * 60 * 1000;
 
+const ES_ENV = /(^|\/)\.env(\.[^/]*)?$/i;
+const ENV_DE_EJEMPLO = /\.(example|sample|template|dist|defaults)$/i;
 const PROTECTED_PATHS = [
-  { pattern: /(^|\/)\.env(\.|$)/, tools: ['Read', 'Edit', 'Write'], reason: 'Archivos .env contienen secretos. Usa .env.example.' },
-  { pattern: /(^|\/)(supabase\/migrations|prisma\/migrations|migrations)\/.+\.sql$/, tools: ['Edit'], reason: 'No se editan migraciones existentes. Crea una migración nueva.' },
+  { prueba: (f) => ES_ENV.test(f) && !ENV_DE_EJEMPLO.test(f), tools: ['Read', 'Edit', 'Write', 'MultiEdit', 'Grep', 'NotebookEdit'], reason: 'Archivos .env contienen secretos. Usa .env.example.' },
   // Las plantillas del kit (plugin/plantillas/.github/...) no son CI activo de ningún proyecto.
-  { pattern: /^(?!.*\/plantillas\/).*(^|\/)\.github\/workflows\//, tools: ['Edit', 'Write'], reason: 'Cambiar CI es R4. Requiere tech lead.' },
+  { prueba: (f) => /(^|\/)\.github\/workflows\//.test(f) && !/\/plantillas\//.test(f), tools: ['Edit', 'Write', 'MultiEdit'], reason: 'Cambiar CI es R4. Requiere tech lead.' },
+  { prueba: (f) => /(^|\/)\.sn\/state\/altum-lider\.json$/.test(f), tools: ['Edit', 'Write', 'MultiEdit'], reason: 'Quién es el líder lo dice Altum: ese archivo lo escribe el plugin (sn-sync lead), no se edita a mano.' },
 ];
+const ES_MIGRACION = (f) => /(^|\/)(supabase\/migrations|prisma\/migrations|migrations)\/.+\.sql$/.test(f);
 
-async function motivoParaNoUnir(cwd) {
+function leerJson(archivo) {
   try {
-    const { execFileSync } = await import('node:child_process');
-    const { readFileSync } = await import('node:fs');
-    const archivo = `${cwd}/.sn/state/altum-lider.json`;
-    const { existsSync } = await import('node:fs');
-    if (!existsSync(archivo) && existsSync(`${cwd}/scripts/sn/sn-sync.mjs`)) {
-      // Aún no se sabe quién es el líder en este computador: se pregunta a Altum antes de decidir.
-      // Con el motor del plugin, que es el que la persona mantiene al día (la copia del repo puede ser vieja).
-      const { fileURLToPath } = await import('node:url');
-      const motor = `${fileURLToPath(new URL('../scripts/sn-sync.mjs', import.meta.url))}`;
-      try { execFileSync(process.execPath, [motor, 'lead', '--github'], { cwd, stdio: 'ignore', timeout: 15000, windowsHide: true }); } catch { /* sin clave o sin red */ }
-    }
-    const lider = JSON.parse(readFileSync(archivo, 'utf8'));
-    if (!lider?.github) return ''; // sin líder conocido con GitHub no se puede comprobar: no se bloquea
-    const yo = execFileSync('gh', ['api', 'user', '--jq', '.login'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim();
-    if (yo && yo.toLowerCase() !== lider.github.toLowerCase()) {
-      return `Solo el líder del proyecto (${lider.name}, @${lider.github}) une el PR: es quien cierra el proceso. Él lo hace desde su Claude con /sn-validate. Tú ya terminaste tu parte: el PR queda esperando su aprobación.`;
-    }
-    return '';
+    return JSON.parse(readFileSync(archivo, 'utf8').replace(/^\uFEFF/, ''));
+  } catch {
+    return null;
+  }
+}
+
+function git(cwd, args) {
+  try {
+    return execFileSync('git', ['-C', cwd, ...args], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }).trim();
   } catch {
     return '';
   }
 }
 
+// Solo el líder que dice Altum une el PR. Falla CERRADO: si el repositorio está unido a Altum y no se
+// puede confirmar quién es el líder o quién está trabajando, no se une (antes, sin red o sin sesión
+// de gh, pasaba cualquiera). Un repositorio sin Altum no tiene este candado.
+function motivoParaNoUnir(cwd) {
+  const conectores = leerJson(path.join(cwd, '.sn/connectors.json'))?.connectors || [];
+  if (!conectores.some((c) => c.kind === 'altum' && c.project_id && c.enabled !== false)) return '';
+  const archivo = path.join(cwd, '.sn/state/altum-lider.json');
+  let lider = leerJson(archivo);
+  if (!lider?.name || !lider.at || Date.now() - lider.at > LIDER_VIEJO_MS) {
+    // Se pregunta a Altum con el motor del plugin (el que la persona mantiene al día).
+    try { execFileSync(process.execPath, [MOTOR, 'lead', '--github'], { cwd, stdio: 'ignore', timeout: 15000, windowsHide: true }); } catch { /* sin clave o sin red */ }
+    lider = leerJson(archivo) || lider;
+  }
+  if (!lider?.name) {
+    return 'No pude confirmar con Altum quién es el líder del proyecto (sin conexión o sin tu clave). Solo el líder une el PR: inténtalo cuando haya conexión.';
+  }
+  if (!lider.github) {
+    return `El líder (${lider.name}) no tiene su usuario de GitHub registrado en Altum, así que no puedo confirmar quién une el PR. Que lo registre en Altum (Mi perfil) y vuelve a intentarlo.`;
+  }
+  let yo = '';
+  try {
+    yo = execFileSync('gh', ['api', 'user', '--jq', '.login'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim();
+  } catch { /* sin gh, sin sesión o sin red */ }
+  if (!yo) return 'No pude confirmar tu usuario de GitHub (gh sin sesión o sin red: "gh auth status"). Solo el líder une el PR.';
+  if (yo.toLowerCase() !== lider.github.toLowerCase()) {
+    return `Solo el líder del proyecto (${lider.name}, @${lider.github}) une el PR: es quien cierra el proceso. Él lo hace desde su Claude con /sn-validate. Tú ya terminaste tu parte: el PR queda esperando su aprobación.`;
+  }
+  return '';
+}
+
 async function motivoParaNoAbrirPr(cwd) {
   try {
-    const { execFileSync } = await import('node:child_process');
-    const { existsSync } = await import('node:fs');
-    if (!existsSync(`${cwd}/docs/items`)) return '';
+    if (!existsSync(path.join(cwd, 'docs/items'))) return '';
     process.chdir(cwd);
     process.env.SN_SYNC_NO_GH = '1'; // para abrir el PR no hace falta preguntarle a GitHub; así es rápido
-    const rama = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    const rama = git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
     const aqui = new URL('../scripts/sync/', import.meta.url);
     const { takeSnapshot } = await import(new URL('snapshot.mjs', aqui).href);
     const { puedeAbrirPr } = await import(new URL('siguiente.mjs', aqui).href);
@@ -88,39 +100,63 @@ function readStdin() {
   });
 }
 
-const raw = await readStdin();
-let input;
+let input = null;
 try {
-  input = JSON.parse(raw);
-} catch {
-  process.exit(0); // Malformed hook payload: do not block the session.
-}
+  input = JSON.parse(await readStdin());
+} catch { /* payload roto: no se bloquea la sesión */ }
+if (!input || typeof input !== 'object') process.exit(0);
 
 const tool = input.tool_name ?? '';
 const args = input.tool_input ?? {};
+const cwd = input.cwd || process.cwd();
 
 if (tool === 'Bash') {
-  // Cada comando de una cadena (a && b; c | d) se evalúa por separado para no mezclar palabras entre comandos.
-  const segments = String(args.command ?? '').split(/&&|\|\||;|\||\n/);
-  const hit = BLOCKED_COMMANDS.find(({ pattern }) => segments.some((segment) => pattern.test(segment)));
-  if (hit) block(hit.reason);
-  // Sellos: no se abre un PR si el plano del ítem de esta rama no tiene su sello 1 o falta la evidencia.
-  // Es determinista a propósito: el agente no puede "saltarse el sello y seguir adelante".
+  let rama = null;
+  const ramaActual = () => { if (rama === null) rama = git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']); return rama; };
+  const lista = comandos(args.command);
+  lista.forEach(({ palabras, siguiente }, idx) => {
+    // Lo que se pasa a un sumidero (portapapeles, "gh secret set"…) no vuelve a imprimirse en la
+    // conversación; hacia cualquier otra cosa (grep, cat, tee…) sí puede volver a aparecer.
+    const pipedOut = siguiente === '|' && esSumidero(lista[idx + 1]?.palabras || []);
+    const motivo = motivoParaBloquear(palabras, { ramaActual, pipedOut });
+    if (motivo) block(motivo);
+  });
   // Unir el PR es cerrar el proceso: solo lo hace el líder que dice Altum (desde /sn-validate).
-  if (segments.some((segment) => /\bgh\s+pr\s+merge\b|\baz\s+repos\s+pr\s+update\b.*--status\s+completed/.test(segment))) {
-    const motivo = await motivoParaNoUnir(input.cwd || process.cwd());
+  if (lista.some(({ palabras }) => uneUnPr(palabras))) {
+    const motivo = motivoParaNoUnir(cwd);
     if (motivo) block(motivo);
   }
-  if (segments.some((segment) => /\b(gh\s+pr\s+create|az\s+repos\s+pr\s+create)\b/.test(segment))) {
-    const motivo = await motivoParaNoAbrirPr(input.cwd || process.cwd());
+  // Sellos: no se abre un PR si el plano del ítem de esta rama no tiene su sello 1 o falta la evidencia.
+  // Es determinista a propósito: el agente no puede "saltarse el sello y seguir adelante".
+  if (lista.some(({ palabras }) => abreUnPr(palabras))) {
+    const motivo = await motivoParaNoAbrirPr(cwd);
     if (motivo) block(`Falta un paso del proceso: ${motivo}`);
   }
 }
 
-const filePath = String(args.file_path ?? args.path ?? '');
+// Rutas de Windows (C:\proyecto\.env) se comparan igual que las de macOS/Linux.
+const filePath = String(args.file_path ?? args.notebook_path ?? args.path ?? '').replace(/\\/g, '/');
 if (filePath) {
-  const hit = PROTECTED_PATHS.find(({ pattern, tools }) => tools.includes(tool) && pattern.test(filePath));
-  if (hit && !filePath.endsWith('.env.example')) block(hit.reason);
+  const hit = PROTECTED_PATHS.find(({ prueba, tools }) => tools.includes(tool) && prueba(filePath));
+  if (hit) block(hit.reason);
+  // Migraciones: solo es "existente" (intocable con Edit) si git ya la tiene guardada. Una que el
+  // agente acaba de crear con Write, en la misma tarea, se puede corregir con Edit sin problema.
+  // Write SÍ se bloquea si ya hay un archivo ahí: eso es sobrescribir una migración que alguien guardó.
+  if (ES_MIGRACION(filePath)) {
+    const absoluto = path.resolve(cwd, filePath);
+    if (tool === 'Edit' || tool === 'MultiEdit') {
+      const versionada = (() => {
+        try {
+          execFileSync('git', ['-C', cwd, 'ls-files', '--error-unmatch', filePath], { stdio: 'ignore', timeout: 5000, windowsHide: true });
+          return true;
+        } catch {
+          return false;
+        }
+      })();
+      if (versionada) block('No se editan migraciones existentes. Crea una migración nueva.');
+    }
+    if (tool === 'Write' && existsSync(absoluto)) block('Ya existe una migración con ese nombre. No se sobrescribe: crea una migración nueva.');
+  }
 }
 
 process.exit(0);

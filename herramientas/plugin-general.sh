@@ -13,6 +13,11 @@ PLUGIN="softnexus-sdd@softnexus"
 REPO="pipejust/softnexus-sdd-kit"
 CATALOGO="softnexus"
 
+if ! command -v node >/dev/null 2>&1; then
+  echo "No encuentro \"node\" en este computador. Instálalo (nodejs.org) y vuelve a correr este script." >&2
+  exit 1
+fi
+
 fallos=0
 BITACORA="${TMPDIR:-/tmp}/sn-plugin.txt"
 : > "$BITACORA"
@@ -30,13 +35,15 @@ intentar() {
     return 0
   fi
   printf '%s\n' "$salida"
-  if printf '%s' "$salida" | grep -qiE 'already enabled|ya está (habilitado|activado|encendid)|not installed|no está instalad|installed in user scope|ya no existe|but not all|could not be refreshed'; then
+  # Qué es "ya estaba así" depende del comando (YA_ESTABA lo dice cada llamada): "no está instalado"
+  # al ACTUALIZAR es un fallo de verdad, no algo que se pueda dejar pasar.
+  if [ -n "${YA_ESTABA:-}" ] && printf '%s' "$salida" | grep -qiE "$YA_ESTABA"; then
     printf '   (ya estaba así: nada que hacer)\n'
     return 0
   fi
   # La línea que de verdad explica el fallo, para que se vea sin tener que subir en la terminal.
   local motivo
-  motivo=$(printf '%s' "$salida" | grep -E '✘|✗|[Ee]rror|[Ff]ail|denied|ENOENT|EINVAL|EACCES' | grep -v 'NO SE PUDO: node' | tail -1 | sed 's/^ *//')
+  motivo=$(printf '%s' "$salida" | grep -E '✘|✗|[Ee]rror|[Ff]ail|denied|ENOENT|EINVAL|EACCES|not found|no se reconoce|is not recognized' | grep -v 'NO SE PUDO: node' | tail -1 | sed 's/^ *//')
   printf '   ✗ NO SE PUDO: %s\n' "$*"
   [ -n "$motivo" ] && printf '     MOTIVO: %s\n' "$motivo"
   fallos=$((fallos + 1))
@@ -44,16 +51,13 @@ intentar() {
 
 # 1) El catálogo. Si en este computador quedó registrado como una CARPETA, "marketplace update" solo
 #    la revalida: hay que traerla al día con git, o nunca verá las versiones nuevas.
-carpeta=$(python3 - <<'PY' 2>/dev/null || true
-import json, os
-try:
-    d = json.load(open(os.path.expanduser('~/.claude/plugins/known_marketplaces.json')))
-    f = (d.get('softnexus') or {}).get('source') or {}
-    print(f.get('path') or '' if f.get('source') in ('local', 'directory') else '')
-except Exception:
-    print('')
-PY
-)
+carpeta=$(node -e '
+try {
+  const t = require("fs").readFileSync(require("path").join(require("os").homedir(), ".claude/plugins/known_marketplaces.json"), "utf8").replace(/^\uFEFF/, "");
+  const f = (JSON.parse(t).softnexus || {}).source || {};
+  process.stdout.write(["local", "directory"].includes(f.source) ? (f.path || "") : "");
+} catch {}
+' 2>/dev/null || true)
 if [ -n "${carpeta:-}" ] && [ -d "$carpeta/.git" ]; then
   paso "Tu catálogo es una carpeta de este computador: la traigo al día"
   intentar git -C "$carpeta" pull --ff-only
@@ -65,25 +69,39 @@ if ! claude plugin marketplace list 2>/dev/null | grep -q "$CATALOGO"; then
 fi
 
 paso "Refresco el catálogo de Softnexus"
-intentar claude plugin marketplace update "$CATALOGO"
+YA_ESTABA='but not all|could not be refreshed' intentar claude plugin marketplace update "$CATALOGO"
 
-# 2) La copia general: la del usuario, la que sirve en TODOS los proyectos.
-if claude plugin list 2>/dev/null | grep -q "$PLUGIN"; then
+# 2) La copia general: la del usuario, la que sirve en TODOS los proyectos. Se mira si existe la de
+#    USUARIO (no cualquiera: "claude plugin list" también muestra las de proyectos, y entonces se
+#    intentaba actualizar una copia general que no existía).
+general() {
+  node -e '
+try {
+  const t = require("fs").readFileSync(require("path").join(require("os").homedir(), ".claude/plugins/installed_plugins.json"), "utf8").replace(/^\uFEFF/, "");
+  const u = ((JSON.parse(t).plugins || {})[process.argv[1]] || []).find((i) => i.scope === "user");
+  process.stdout.write(u ? (process.argv[2] === "ruta" ? u.installPath || "" : "si") : "");
+} catch {}
+' "$PLUGIN" "${1:-}" 2>/dev/null || true
+}
+if [ -n "$(general)" ]; then
   paso "Pongo al día la copia general"
   intentar claude plugin update "$PLUGIN"
 else
   paso "Instalo la copia general"
-  intentar claude plugin install "$PLUGIN"
+  YA_ESTABA='already installed|ya está instalad' intentar claude plugin install "$PLUGIN"
 fi
 
 # 3) Ya con la versión nueva instalada, ella sabe quitar las copias que viven dentro de proyectos.
 paso "Me aseguro de que quede encendida"
-intentar claude plugin enable "$PLUGIN" --scope user
+YA_ESTABA='already enabled|ya está (habilitado|activado|encendid)' intentar claude plugin enable "$PLUGIN" --scope user
 
-motor=$(ls -d "$HOME/.claude/plugins/cache/$CATALOGO/softnexus-sdd"/*/scripts/sn-sync.mjs 2>/dev/null | sort -V | tail -1)
-if [ -n "${motor:-}" ]; then
+ruta=$(general ruta)
+motor="${ruta:+$ruta/scripts/sn-sync.mjs}"
+if [ "$fallos" -eq 0 ] && [ -n "${motor:-}" ] && [ -f "$motor" ]; then
   paso "Quito las copias que vivan dentro de proyectos"
   intentar node "$motor" limpiar-copias
+elif [ "$fallos" -gt 0 ]; then
+  echo "Conservo las copias de los proyectos: la instalación general no quedó confirmada."
 fi
 
 if [ "$fallos" -gt 0 ]; then

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Prueba del vigilante interno de Altum (sin n8n).
 set -uo pipefail
+export SN_MOTOR_PROPIO=1   # las pruebas usan ESTE motor, no el plugin instalado en el computador
 T="$(cd "$(dirname "$0")" && pwd)"
 W="$T/tmp"; mkdir -p "$W"   # todo lo que la prueba crea vive aquí (no se versiona)
 PLUGIN="$(cd "$T/../plugin" && pwd)"
@@ -41,9 +42,10 @@ check "No se insiste: el aviso del repositorio no se repite en cada mensaje" "! 
 
 echo "== Arranque con la sesión"
 hook SessionStart; sleep 1.5
-check "SessionStart arranca el vigilante en segundo plano" "[ -f .sn/state/watch-altum.pid ] && kill -0 \$(cat .sn/state/watch-altum.pid) 2>/dev/null"
-PID1=$(cat .sn/state/watch-altum.pid); hook SessionStart; sleep 1
-check "Un segundo SessionStart no crea otro vigilante" "[ \"\$(cat .sn/state/watch-altum.pid)\" = \"$PID1\" ]"
+pid() { node -e 'process.stdout.write(String(JSON.parse(require("fs").readFileSync(".sn/state/watch-altum.pid","utf8")).pid))'; }
+check "SessionStart arranca el vigilante en segundo plano" "[ -f .sn/state/watch-altum.pid ] && kill -0 \$(pid) 2>/dev/null"
+PID1=$(pid); hook SessionStart; sleep 1
+check "Un segundo SessionStart no crea otro vigilante" "[ \"\$(pid)\" = \"$PID1\" ]"
 hook SessionEnd; sleep 0.5
 check "SessionEnd lo detiene" "[ ! -f .sn/state/watch-altum.pid ] && ! kill -0 $PID1 2>/dev/null"
 
@@ -70,10 +72,27 @@ check "Las rondas del vigilante no piden estados (quedan guardados 10 min): 1 pe
 
 check "El aviso de una tarea nacida en reunión no dice #null" "node -e \"import('./scripts/sn/sync/altum-watch.mjs').then(m => { const t = m.describe({ kind: 'new', number: null, title: 'Acuerdo de la reunión', priority: null }); if (/#null|#undefined/.test(t) || !/reunión/.test(t)) process.exit(1); })\""
 
+echo "== Detener el vigilante nunca mata un proceso ajeno"
+node -e 'require("fs").writeFileSync(".sn/state/watch-altum.pid", JSON.stringify({pid: process.pid, at: Date.now() - 3600000, cada: 60}))'
+out=$(node scripts/sn/sn-sync.mjs watch-stop 2>&1); vivo=$?
+check "Un archivo viejo del vigilante (su número lo puede tener hoy otro programa): NO se mata nada" "kill -0 $$ 2>/dev/null && [ ! -f .sn/state/watch-altum.pid ]"
+check "Y tampoco se cree que siga vigilando" "node -e \"import('./scripts/sn/sync/altum-watch.mjs').then(m => process.exit(m.isWatching() ? 1 : 0))\""
+
+echo "== Lo que no llegó a Altum nunca queda en silencio"
+printf '{"at":"2026-10-08T10:00:00Z","conector":"altum","item":"CLI-0009","error":"HTTP 500 Altum caído"}\n' > .sn/state/descartados.jsonl
+rm -f .sn/state/descartados-avisados.json
+out=$(hook UserPromptSubmit)
+check "El siguiente mensaje le cuenta al agente qué cambio no llegó y cómo reenviarlo" "echo \"\$out\" | grep -q 'NO llegaron a Altum' && echo \"\$out\" | grep -q 'CLI-0009' && echo \"\$out\" | grep -q 'asegurar'"
+out2=$(hook UserPromptSubmit)
+check "Se avisa una sola vez" "! echo \"\$out2\" | grep -q 'NO llegaron a Altum'"
+check "status lo sigue mostrando" "node scripts/sn/sn-sync.mjs status | grep -q 'No llegaron a Altum (1' && node scripts/sn/sn-sync.mjs status | grep -q 'CLI-0009'"
+rm -f .sn/state/descartados.jsonl .sn/state/descartados-avisados.json
+
 echo "== Carpeta nueva sin proyecto: el agente sabe que existe la metodología"
 hookdir() { printf '{"hook_event_name":"%s","cwd":"%s"}' "$1" "$2" | node "$PLUGIN/hooks/altum-watch.mjs"; }
 rm -rf "$W/carpeta-nueva"; mkdir -p "$W/carpeta-nueva"
 out=$(hookdir SessionStart "$W/carpeta-nueva")
+check "Lo que se dice al abrir sale en UN solo JSON válido (dos seguidos se perdían)" "echo \"\$out\" | python3 -c 'import json,sys; json.loads(sys.stdin.read())'"
 check "Al abrir una carpeta vacía se le dice al agente que use la skill sn para traer el proyecto" "echo \"\$out\" | grep -q 'skill .sn.' && echo \"\$out\" | grep -q 'NO busques repositorios a mano'"
 check "El aviso trae el motor del plugin, que sirve sin proyecto preparado" "echo \"\$out\" | grep -q 'scripts/sn-sync.mjs'"
 out=$(hookdir UserPromptSubmit "$W/carpeta-nueva")

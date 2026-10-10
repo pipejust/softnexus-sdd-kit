@@ -318,7 +318,10 @@ export async function readBacklog(connector, root = '.', since = '') {
   }));
   const gone = deleted.filter((d) => d.project_id === connector.project_id).map((d) => ({
     altum_id: d.id, number: d.number, kind: '', title: d.title, state: 'borrada', priority: null, assignee_id: null,
-    target_date: null, open: false, deleted: true, item: linked.get(d.id)?.id || '',
+    // La ficha se reconoce por el enlace escrito, por el external_ref o por el "[ID]" con que empieza
+    // el título (Altum no devuelve el external_ref de las borradas, y la sincronización ya no escribe
+    // el enlace en la ficha por su cuenta).
+    target_date: null, open: false, deleted: true, item: (linked.get(d.id) || linked.get(d.external_ref) || linked.get(String(d.title || '').match(/^\[([^\]]+)\]/)?.[1]))?.id || '',
     task: { ...d, updated_at: d.deleted_at, updated_by: null },
   }));
   return [...rows, ...gone].sort((a, b) => Number(b.open) - Number(a.open) || (a.priority ?? 9) - (b.priority ?? 9));
@@ -328,7 +331,9 @@ export async function readBacklog(connector, root = '.', since = '') {
 export async function pullAltum(connector, since, root = '.', { includeClosed = false } = {}) {
   const backlog = await readBacklog(connector, root, since);
   const live = backlog.filter((b) => !b.deleted);
-  const created = live.filter((b) => !b.item && (b.open || includeClosed)).map((b) => importable(connector, b.task));
+  // Una tarea con external_ref ya es la tarea de una ficha (aunque esa ficha esté en otro computador y
+  // todavía no haya llegado por git): importarla creaba una segunda ficha que se peleaba la tarea.
+  const created = live.filter((b) => !b.item && !b.task?.external_ref && (b.open || includeClosed)).map((b) => importable(connector, b.task));
   const changed = live.filter((b) => b.item).map((b) => ({ id: b.item, altum_id: b.altum_id, state: b.state, title: b.title, priority: b.priority }));
   const deActen = live.filter((b) => b.external).length;
   const deleted = backlog.filter((b) => b.deleted && b.item).map((b) => ({ id: b.item, altum_id: b.altum_id, number: b.number, title: b.title }));

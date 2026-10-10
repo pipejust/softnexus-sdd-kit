@@ -27,7 +27,9 @@ sn_clave_altum() {
 
   local empresa_raw="${1:-}" sufijo="" de="" var line
   if [ -n "$empresa_raw" ]; then
-    sufijo="_$(printf '%s' "$empresa_raw" | tr '[:lower:]- ' '[:upper:]__' | tr -cd 'A-Z0-9_')"
+    # Misma regla que sn-clave-altum.ps1: se quita lo que no sea letra/número ASCII, espacio, - o _;
+    # mayúsculas; espacio y - pasan a _. ("Mi Empresa" → SN_ALTUM_KEY_MI_EMPRESA en los dos sistemas).
+    sufijo="_$(printf '%s' "$empresa_raw" | LC_ALL=C tr -cd 'A-Za-z0-9 _-' | LC_ALL=C tr 'a-z -' 'A-Z__')"
     de=" para ${empresa_raw}"
   fi
   var="SN_ALTUM_KEY${sufijo}"

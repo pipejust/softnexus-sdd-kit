@@ -73,6 +73,7 @@ const SPRINTS = [
   { id: 'sp-0', name: 'Sprint 0', goal: 'Arranque', starts_on: '2026-09-21', ends_on: '2026-10-02', state: 'closed' },
 ];
 const esFechaSola = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v));
+const noCuelga = (data, padre) => padre && padre.kind === 'historia' && (data.kind || '') === 'historia';
 const esFechaHora = (v) => !Number.isNaN(Date.parse(String(v)));
 // Lo que Altum rechaza con 422 en los campos nuevos.
 function malDato(data) {
@@ -80,6 +81,8 @@ function malDato(data) {
   for (const k of ['started_at', 'completed_at']) if (data[k] != null && !esFechaHora(data[k])) return `${k} tiene que ser una fecha-hora ISO`;
   if (data.sprint_id && !SPRINTS.some((sp) => sp.id === data.sprint_id)) return 'ese sprint no es de este proyecto';
   if (data.parent_id && !tasks.some((t) => t.id === data.parent_id)) return 'el padre no es de este proyecto';
+  // Altum solo permite ciertas jerarquías de tipos: una historia NO cuelga de otra historia.
+  if (data.parent_id && noCuelga(data, tasks.find((t) => t.id === data.parent_id))) return 'Un/a historia no puede colgar de un/a historia. Puede colgar de: épica, funcionalidad.';
   return '';
 }
 // Permisos del 6-oct: con PERMISOS=lider la clave personal puede planear; si no, 403 con los campos.
@@ -91,6 +94,7 @@ const planearProhibido = (data) => (permisos === 'no-lider'
   ? CAMPOS_DE_PLANEACION.filter((k) => data[k] !== undefined) : []);
 const dependencias = new Map(); // tarea -> [ids que la bloquean]
 let forzar409 = '';
+let limite429 = 0;
 const idempotent = new Map();
 let number = 100;
 
@@ -124,6 +128,10 @@ http.createServer((req, res) => {
     }
     // Forzar el 409 "ese external_ref ya existe" aunque no exista: es lo que pasó en producción.
     if (url.pathname === '/_409') { forzar409 = url.searchParams.get('ref') || ''; return send(res, 200, { forzar409 }); }
+    // Las próximas N peticiones a la API responden 429 (límite de peticiones), con Retry-After de 1 s.
+    if (url.pathname === '/_429') { limite429 = Number(url.searchParams.get('n') || 1); return send(res, 200, { limite429 }); }
+    // El líder cambia la prioridad a mano dentro de Altum.
+    if (url.pathname === '/_prioridad') { const t = findBy(url); t.priority = Number(url.searchParams.get('p')); t.updated_at = now(); t.updated_by = null; return send(res, 200, t); }
     if (url.pathname === '/_stripmark') { tasks.forEach((t) => { t.description = String(t.description || '').replace(/<!--[^>]*-->/g, ''); }); return send(res, 200, {}); }
     // --- Azure DevOps (mismo servidor falso): PR de ramas y sus aprobaciones ---
     const az = url.pathname.match(/^\/([^/]+)\/([^/]+)\/_apis\/git\/repositories\/([^/]+)\/pullrequests(?:\/(\d+))?$/);
@@ -155,6 +163,7 @@ http.createServer((req, res) => {
       return send(res, 200, { key: { id: personal ? 'key-laura' : KEY_ID, type: personal ? 'user' : 'company', name: personal ? 'Portátil de Laura' : 'CI', scopes: personal ? ['tasks:read', 'tasks:write', 'projects:read', 'projects:write'] : ['tasks:read', 'tasks:write', 'projects:read'] }, company: { id: 'c1', slug: 'softnexus', name: 'Softnexus' }, user: personal ? { ...LAURA, emails: [LAURA.email, 'laura.personal@gmail.com'], github_username: 'lauragomez' } : null, projects });
     }
     const pidOf = () => base.match(/^\/projects\/([^/]+)\//)?.[1] || url.searchParams.get('project_id') || (body ? JSON.parse(body).project_id : null) || tasks.find((t) => base === `/tasks/${t.id}`)?.project_id;
+    if (limite429 > 0 && base.startsWith('/')) { limite429 -= 1; res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '1' }); return res.end(JSON.stringify({ detail: 'Se superó el límite de 120 peticiones por minuto' })); }
     if (pidOf() && !allowed(pidOf())) return send(res, 403, { detail: { error: 'No estás asignado a este proyecto' } });
     if (req.method === 'GET' && base === `/projects/${PROJECT}/config/estados`) return send(res, 200, STATES);
     if (req.method === 'GET' && base === `/projects/${PROJECT}/config/campos`) return send(res, 200, FIELDS);
@@ -247,6 +256,7 @@ http.createServer((req, res) => {
       if (malDato(data)) return send(res, 422, { error: malDato(data) });
       if (planearProhibido(data).length) return send(res, 403, { detail: { error: 'Eso lo decide quien lleva el proyecto', campos: planearProhibido(data) } });
       if (data.external_ref && (data.external_ref === forzar409 || tasks.some((t) => t.project_id === data.project_id && t.external_ref === data.external_ref))) return send(res, 409, { error: 'external_ref ya existe' });
+      for (const k of ['started_at', 'completed_at']) if (data[k]) data[k] = new Date(data[k]).toISOString();   // Altum las guarda en UTC
       const { assignee_email: email, ...rest } = data;
       if (email && !USERS[email]) return send(res, 404, { error: 'no hay nadie con ese correo' });
       const task = manual({ id: randomUUID(), number: (number += 1), state: 'new', created_at: now(), updated_at: now(), ...rest, ...(email ? { assignee_id: USERS[email] } : {}), updated_by: author });
@@ -269,14 +279,15 @@ http.createServer((req, res) => {
       if (!task) return send(res, 404, {});
       const data = JSON.parse(body);
       if (badField(data.custom_fields)) return send(res, 422, { error: `campo ${badField(data.custom_fields)[0]} no válido` });
-      if (malDato(data)) return send(res, 422, { error: malDato(data) });
+      if (malDato({ kind: task.kind, ...data })) return send(res, 422, { error: malDato({ kind: task.kind, ...data }) });
       if (planearProhibido(data).length) return send(res, 403, { detail: { error: 'Eso lo decide quien lleva el proyecto', campos: planearProhibido(data) } });
       if (data.state && !STATES.some((s) => s.key === data.state)) return send(res, 422, { error: `estado "${data.state}" no existe en el proyecto` });
       if (data.state === 'closed' && task.title.includes(BLOCKED_TITLE)) return send(res, 409, { error: 'Hay bloqueadores sin resolver', bloqueadores: [{ id: 'b1', number: 12, title: 'Configurar pasarela', state: 'en_desarrollo' }] });
+      for (const k of ['started_at', 'completed_at']) if (data[k]) data[k] = new Date(data[k]).toISOString();   // Altum las guarda en UTC
       Object.assign(task, data, { updated_at: now(), updated_by: author });
       return send(res, 200, task);
     }
-    if (req.method === 'GET' && one) return send(res, 200, tasks.find((t) => t.id === one[1]) || {});
+    if (req.method === 'GET' && one) { const t = tasks.find((x) => x.id === one[1]); return t ? send(res, 200, t) : send(res, 404, { detail: 'Tarea no encontrada' }); }
     return send(res, 404, { error: 'ruta' });
   });
 }).listen(PORT);

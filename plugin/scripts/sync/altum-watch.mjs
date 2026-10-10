@@ -16,6 +16,32 @@ const MAX_INBOX = 50;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// El archivo del vigilante guarda su número de proceso, cada cuánto da una ronda y cuándo fue la
+// última. El número solo no basta: si el vigilante muere de golpe, el sistema puede darle ese mismo
+// número a OTRO programa, y entonces "detener el vigilante" mataba algo que no era nuestro.
+// Con la hora de la última ronda se sabe si de verdad sigue vivo.
+function leerVigilante(pidFile) {
+  if (!existsSync(pidFile)) return null;
+  const texto = readFileSync(pidFile, 'utf8').trim();
+  try {
+    const d = JSON.parse(texto);
+    return d && d.pid ? { pid: Number(d.pid), at: Number(d.at) || 0, cada: Number(d.cada) || 60 } : null;
+  } catch {
+    return Number(texto) ? { pid: Number(texto), at: 0, cada: 60 } : null;   // formato viejo: solo el número
+  }
+}
+
+const esNuestro = (v) => Boolean(v) && Date.now() - v.at < v.cada * 3000 + 60000;
+
+function vivo(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function readInbox() {
   return readState(INBOX, []);
 }
@@ -78,11 +104,13 @@ export function describe(note) {
 export async function watch(connector, { everySeconds = 60, maxMinutes = 480, notify = true } = {}) {
   const pidFile = stateFile(PID_FILE);
   mkdirSync(path.dirname(pidFile), { recursive: true });
-  writeFileSync(pidFile, String(process.pid));
+  const latir = () => writeFileSync(pidFile, JSON.stringify({ pid: process.pid, at: Date.now(), cada: everySeconds }));
+  latir();
   const deadline = Date.now() + maxMinutes * 60000;
   let delay = everySeconds * 1000;
   while (Date.now() < deadline) {
-    if (!existsSync(pidFile) || readFileSync(pidFile, 'utf8').trim() !== String(process.pid)) return;
+    if (leerVigilante(pidFile)?.pid !== process.pid) return;   // otro vigilante tomó el relevo
+    latir();
     try {
       const notes = await checkOnce(connector);
       if (notify && notes.length) notifyDesktop('Altum', notes.length === 1 ? describe(notes[0]) : `${notes.length} cambios en Altum`);
@@ -93,16 +121,19 @@ export async function watch(connector, { everySeconds = 60, maxMinutes = 480, no
     }
     await sleep(delay + Math.floor(Math.random() * 5000)); // variación para no coincidir con otros computadores
   }
-  if (existsSync(pidFile) && readFileSync(pidFile, 'utf8').trim() === String(process.pid)) rmSync(pidFile);
+  if (leerVigilante(pidFile)?.pid === process.pid) rmSync(pidFile);
 }
 
 export function stopWatch() {
   const pidFile = stateFile(PID_FILE);
-  if (!existsSync(pidFile)) return false;
-  const pid = Number(readFileSync(pidFile, 'utf8'));
-  rmSync(pidFile);
+  const v = leerVigilante(pidFile);
+  if (!v) return false;
+  rmSync(pidFile, { force: true });
+  // Solo se detiene si de verdad es nuestro vigilante (dio una ronda hace poco): si quedó un archivo
+  // viejo, ese número puede ser hoy de otro programa del computador y matarlo sería un daño.
+  if (!esNuestro(v)) return false;
   try {
-    process.kill(pid);
+    process.kill(v.pid);
   } catch {
     // ya no existía
   }
@@ -110,12 +141,6 @@ export function stopWatch() {
 }
 
 export function isWatching() {
-  const pidFile = stateFile(PID_FILE);
-  if (!existsSync(pidFile)) return false;
-  try {
-    process.kill(Number(readFileSync(pidFile, 'utf8')), 0);
-    return true;
-  } catch {
-    return false;
-  }
+  const v = leerVigilante(stateFile(PID_FILE));
+  return Boolean(v) && esNuestro(v) && vivo(v.pid);
 }

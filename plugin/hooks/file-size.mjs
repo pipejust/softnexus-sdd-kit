@@ -45,7 +45,7 @@ const root = payload.cwd || process.cwd();
 if (!filePath || !['Write', 'Edit', 'MultiEdit'].includes(tool)) process.exit(0);
 
 const absolute = path.resolve(root, filePath);
-const relative = path.relative(root, absolute);
+const relative = path.relative(root, absolute).replace(/\\/g, '/');   // en Windows vendría con \ y no coincidía con las reglas
 
 // Los archivos de control del límite solo pueden endurecerse, nunca aflojarse, desde un agente.
 function parseBaseline(text) {

@@ -23,7 +23,7 @@ function readStdin() {
 function altumConnector(root) {
   const file = path.join(root, '.sn/connectors.json');
   if (!existsSync(file)) return null;
-  const { connectors = [] } = JSON.parse(readFileSync(file, 'utf8'));
+  const { connectors = [] } = JSON.parse(readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));   // sin BOM
   return connectors.find((c) => c.kind === 'altum' && c.enabled !== false) || null;
 }
 
@@ -40,8 +40,30 @@ function shouldRemind(root, name = 'altum-key-remind.json') {
   }
 }
 
-function context(text, hookEventName = 'UserPromptSubmit') {
-  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext: text } }));
+// Todo lo que se le dice al agente en este evento sale en UN solo JSON al final: Claude Code no lee
+// dos objetos seguidos en la misma salida (se perdían el aviso de versión o la orientación).
+const partes = [];
+function context(text) {
+  partes.push(text);
+}
+function entregar(hookEventName) {
+  if (partes.length) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext: partes.join('\n\n') } }));
+}
+
+// Entregas a Altum que se rindieron tras varios intentos: no pueden quedar en silencio.
+// Se avisan una vez (se recuerda hasta qué línea se avisó); "status" las muestra todas.
+function descartadosNuevos(root) {
+  const file = path.join(root, '.sn/state/descartados.jsonl');
+  const marca = path.join(root, '.sn/state/descartados-avisados.json');
+  if (!existsSync(file)) return '';
+  const lineas = readFileSync(file, 'utf8').split('\n').filter(Boolean);
+  const vistos = existsSync(marca) ? Number(JSON.parse(readFileSync(marca, 'utf8')).n) || 0 : 0;
+  const nuevos = lineas.slice(Math.min(vistos, lineas.length));
+  if (!nuevos.length) return '';
+  writeFileSync(marca, JSON.stringify({ n: lineas.length }));
+  const detalle = nuevos.slice(-5).map((l) => { try { const e = JSON.parse(l); return `- ${e.item || '?'}: ${e.error || 'sin detalle'}`; } catch { return ''; } }).filter(Boolean);
+  return `[Altum] ${nuevos.length} cambio(s) NO llegaron a Altum después de varios intentos y ya no se reintentan:\n${detalle.join('\n')}\n`
+    + 'Díselo a la persona en una línea. Para volver a mandarlos: corre "asegurar <ID>" en cada ficha.';
 }
 
 // Carpeta que todavía no es un proyecto preparado (recién creada, o repo sin la metodología):
@@ -96,6 +118,7 @@ async function avisoDeVersion(root) {
 const FALTA_CLAVE = '[Altum] Esta persona todavía no tiene guardada su clave personal de Altum, así que no verá sus proyectos ni sus tareas. '
   + 'En una línea, ofrécele guardarla ahora (un solo paso, siguiendo references/clave-altum.md del plugin; la clave nunca se escribe en el chat). Si dice que no, sigue con lo suyo.';
 
+let event = '';
 try {
   const payload = JSON.parse(await readStdin());
   const root = payload.cwd || process.cwd();
@@ -104,19 +127,19 @@ try {
   // sigue siendo la del CI; aquí solo dice si el proyecto ya está preparado.
   const preparado = path.join(root, 'scripts/sn/sn-sync.mjs');
   const script = MOTOR_DEL_PLUGIN;
-  const event = payload.hook_event_name;
+  event = payload.hook_event_name;
   if (event === 'SessionStart') {
     // Primero se lee lo último que se supo (sin red, instantáneo) y después se manda a refrescar en
     // segundo plano: al revés, el refresco podría pisar el dato justo antes de leerlo.
     const aviso = await avisoDeVersion(root);
-    if (aviso) context(aviso, 'SessionStart');
+    if (aviso) context(aviso);
     spawn(process.execPath, [MOTOR_DEL_PLUGIN, 'actualizar', '--solo-revisar'], { windowsHide: true, cwd: root, detached: process.platform !== 'win32', stdio: 'ignore' }).unref();
   }
   if (!existsSync(preparado)) {
     // Sin proyecto preparado no hay vigilante ni bandeja: solo la orientación de apertura.
     if (event === 'SessionStart') {
       const { hasKey } = await import(pathToFileURL(path.join(path.dirname(MOTOR_DEL_PLUGIN), 'sync/altum.mjs')).href);
-      context(orientacion(hasKey({}), existsSync(path.join(root, '.git'))), 'SessionStart');
+      context(orientacion(hasKey({}), existsSync(path.join(root, '.git'))));
     }
   } else {
     const connector = altumConnector(root);
@@ -124,7 +147,7 @@ try {
     const { hasKey } = await import(pathToFileURL(path.join(path.dirname(MOTOR_DEL_PLUGIN), 'sync/altum.mjs')).href);
     const tieneClave = hasKey(connector || {});
     if (event === 'SessionStart' && !tieneClave) {
-      if (shouldRemind(root)) context(FALTA_CLAVE, 'SessionStart');
+      if (shouldRemind(root)) context(FALTA_CLAVE);
     } else if (event === 'SessionStart' && connector?.project_id) {
       // En segundo plano: el vigilante y la comprobación de si el proyecto ya tiene repositorio registrado.
       if (connector.watch !== false) spawn(process.execPath, [script, 'watch', connector.name, '--background'], { windowsHide: true, cwd: root, detached: process.platform !== 'win32', stdio: 'ignore' }).unref();
@@ -138,7 +161,7 @@ try {
     } else if (event === 'UserPromptSubmit' && connector?.project_id) {
       const avisos = [];
       // Falta registrar de dónde se clona el proyecto: es lo primero que hay que resolver.
-      const { repoReminder } = await import(pathToFileURL(path.join(root, 'scripts/sn/sync/altum-backlog.mjs')).href);
+      const { repoReminder } = await import(pathToFileURL(path.join(path.dirname(MOTOR_DEL_PLUGIN), 'sync/altum-backlog.mjs')).href);
       const falta = repoReminder(root);
       if (falta && shouldRemind(root, 'altum-repo-remind.json')) {
         avisos.push(`[Altum] ${falta}\nDíselo a la persona ANTES de seguir con lo suyo, en una línea, y ofrécele hacerlo tú.`);
@@ -147,10 +170,14 @@ try {
       if (notes && !notes.startsWith('Sin avisos')) {
         avisos.push(`[Altum] Novedades desde el último mensaje (menciónalas en una línea a la persona):\n${notes}`);
       }
+      const descartados = descartadosNuevos(root);
+      if (descartados) avisos.push(descartados);
       if (avisos.length) context(avisos.join('\n\n'));
     }
   }
+  entregar(event);
 } catch {
-  // Sin conexión, sin clave o proyecto sin Altum: seguir normal.
+  // Sin conexión, sin clave o proyecto sin Altum: seguir normal (lo que ya se juntó, se entrega).
+  if (event) entregar(event);
 }
 process.exit(0);

@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { leerTexto } from './texto.mjs';
 
 const REPO = 'pipejust/softnexus-sdd-kit';
 const PLUGIN = 'softnexus-sdd@softnexus';
@@ -15,9 +16,13 @@ const MANIFIESTO = `https://raw.githubusercontent.com/${REPO}/main/plugin/.claud
 const CADA = 12 * 60 * 60 * 1000;   // no se pregunta más de dos veces al día
 const CACHE = path.join(os.homedir(), '.claude', 'sn-version.json');
 
+// Los JSON de configuración se leen sin BOM: en Windows algunos editores lo agregan y JSON.parse falla
+// (el proyecto parecía no declarar el plugin y la limpieza se lo saltaba).
+const leerJson = (archivo) => JSON.parse(leerTexto(archivo));
+
 export function versionInstalada(raizPlugin) {
   try {
-    return JSON.parse(readFileSync(path.join(raizPlugin, '.claude-plugin', 'plugin.json'), 'utf8')).version || '';
+    return leerJson(path.join(raizPlugin, '.claude-plugin', 'plugin.json')).version || '';
   } catch {
     return '';
   }
@@ -49,9 +54,11 @@ function guardarCache(valor) {
 }
 
 // La última versión publicada. Con {rapido:true} no sale a la red: usa lo último que se supo.
-export async function ultimaPublicada({ rapido = false } = {}) {
+// Con {fresco:true} (lo pide una persona con "actualizar") siempre se pregunta: la caché de 12 h es
+// para el hook, y decirle "ya estás al día" con un dato viejo era justo lo que confundía a la gente.
+export async function ultimaPublicada({ rapido = false, fresco = false } = {}) {
   const cache = leerCache();
-  if (rapido || (cache && Date.now() - cache.at < CADA)) return cache?.ultima || '';
+  if (rapido || (!fresco && cache && Date.now() - cache.at < CADA)) return cache?.ultima || '';
   try {
     const r = await fetch(MANIFIESTO, { signal: AbortSignal.timeout(5000) });
     if (!r.ok) throw new Error(String(r.status));
@@ -64,10 +71,25 @@ export async function ultimaPublicada({ rapido = false } = {}) {
   }
 }
 
+// Para cuando una PERSONA pide la verdad (no el hook en segundo plano, que usa ultimaPublicada de
+// arriba): dice si de verdad se pudo preguntar, para no decir "Todo al día" con un dato de caché
+// cuando en realidad no hay conexión en este momento.
+export async function versionPublicadaDeVerdad() {
+  try {
+    const r = await fetch(MANIFIESTO, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) throw new Error(String(r.status));
+    const { version } = await r.json();
+    guardarCache({ at: Date.now(), ultima: version });
+    return { ultima: version || '', red: true };
+  } catch {
+    return { ultima: leerCache()?.ultima || '', red: false };
+  }
+}
+
 // Cómo se registró el catálogo en ESTE computador: desde GitHub o desde una carpeta clonada a mano.
 export function catalogo(nombre = 'softnexus') {
   try {
-    const d = JSON.parse(readFileSync(path.join(os.homedir(), '.claude', 'plugins', 'known_marketplaces.json'), 'utf8'));
+    const d = leerJson(path.join(os.homedir(), '.claude', 'plugins', 'known_marketplaces.json'));
     const fuente = d?.[nombre]?.source || {};
     const carpeta = fuente.source === 'local' || fuente.source === 'directory' ? (fuente.path || d[nombre].installLocation) : '';
     return { tipo: carpeta ? 'carpeta' : (fuente.source || 'desconocido'), carpeta, repo: fuente.repo || '' };
@@ -79,8 +101,8 @@ export function catalogo(nombre = 'softnexus') {
 // Dónde está instalado y en qué versión: la copia del proyecto gana sobre la del usuario.
 export function instalaciones(plugin = 'softnexus-sdd@softnexus') {
   try {
-    const d = JSON.parse(readFileSync(path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json'), 'utf8'));
-    return (d?.plugins?.[plugin] || []).map((i) => ({ scope: i.scope, version: i.version, proyecto: i.projectPath || '' }));
+    const d = leerJson(path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json'));
+    return (d?.plugins?.[plugin] || []).map((i) => ({ scope: i.scope, version: i.version, proyecto: i.projectPath || '', ruta: i.installPath || '' }));
   } catch {
     return [];
   }
@@ -89,9 +111,9 @@ export function instalaciones(plugin = 'softnexus-sdd@softnexus') {
 // Las copias que de verdad mandan en ESTA sesión: la del usuario y, si existe, la del proyecto
 // abierto (las de otros proyectos no estorban aquí y avisar por ellas sería ruido).
 export function instalacionesDeAqui(carpeta, installs = instalaciones()) {
-  const aqui = path.resolve(carpeta || process.cwd());
+  const aqui = mismaCarpeta(carpeta || process.cwd());
   return installs.filter((i) => i.scope === 'user'
-    || (i.proyecto && (aqui === path.resolve(i.proyecto) || aqui.startsWith(`${path.resolve(i.proyecto)}${path.sep}`))));
+    || (i.proyecto && (aqui === mismaCarpeta(i.proyecto) || aqui.startsWith(`${mismaCarpeta(i.proyecto)}/`))));
 }
 
 // Los proyectos de este computador que se guardaron su propia copia del plugin: los que lo tienen
@@ -100,30 +122,62 @@ export function instalacionesDeAqui(carpeta, installs = instalaciones()) {
 // GENERAL. Tratarla como proyecto borraba el plugin de ~/.claude/settings.json y dejaba apagada la
 // copia que acababa de instalarse.
 export function esCarpetaDelUsuario(carpeta) {
-  const casa = path.resolve(os.homedir());
-  const c = path.resolve(carpeta || '');
-  return c === casa || c === path.join(casa, '.claude');
+  const casa = mismaCarpeta(os.homedir());
+  const c = mismaCarpeta(carpeta || '');
+  return c === casa || c === mismaCarpeta(path.join(os.homedir(), '.claude'));
+}
+
+// Una misma carpeta puede venir escrita de dos formas (C:\\x\\y y C:/x/y, o con otras mayúsculas en
+// Windows): para contarla una sola vez se compara normalizada.
+export function mismaCarpeta(carpeta) {
+  const crudo = String(carpeta || '');
+  const c = path.resolve(crudo.replace(/\\/g, '/')).replace(/\\/g, '/').replace(/\/+$/, '');
+  // Windows y macOS no distinguen mayúsculas en las rutas; Linux sí.
+  return process.platform === 'win32' || process.platform === 'darwin' || /^[a-z]:/i.test(crudo) ? c.toLowerCase() : c;
 }
 
 export function proyectosConCopia(installs = instalaciones()) {
-  const carpetas = new Set(installs.filter((i) => i.scope !== 'user' && i.proyecto && !esCarpetaDelUsuario(i.proyecto)).map((i) => i.proyecto));
+  const vistas = new Map();
+  const agregar = (c) => { const clave = mismaCarpeta(c); if (!vistas.has(clave)) vistas.set(clave, c); };
+  installs.filter((i) => i.scope !== 'user' && i.proyecto && !esCarpetaDelUsuario(i.proyecto)).forEach((i) => agregar(i.proyecto));
+  const carpetas = { add: agregar };
   try {
-    const abiertos = JSON.parse(readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8')).projects || {};
+    const abiertos = leerJson(path.join(os.homedir(), '.claude.json')).projects || {};
     for (const carpeta of Object.keys(abiertos)) {
       if (!esCarpetaDelUsuario(carpeta) && declaraElPlugin(carpeta)) carpetas.add(carpeta);
     }
   } catch { /* sin lista de proyectos: basta con los instalados */ }
-  return [...carpetas];
+  return [...vistas.values()];
 }
 
 const AJUSTES = (carpeta) => path.join(carpeta, '.claude', 'settings.json');
 
 export function declaraElPlugin(carpeta) {
   try {
-    const d = JSON.parse(readFileSync(AJUSTES(carpeta), 'utf8'));
+    const d = leerJson(AJUSTES(carpeta));
     return Boolean((d.enabledPlugins || {})[PLUGIN]);
   } catch {
     return false;
+  }
+}
+
+// ¿Ese archivo está versionado en git? Un archivo versionado es del EQUIPO: si el plugin lo cambia
+// por su cuenta, el repo queda con un cambio sin guardar en el computador de cada persona, y si alguien
+// lo sube, le cambia la configuración a todos. Esos archivos solo se cambian con un PR.
+// true si SE SABE que está versionado; false si SE SABE que no lo está; null si no se pudo preguntar
+// (sin git en el PATH, timeout, repo con lock). Sin poder preguntar, nunca se trata como personal:
+// eso dejaba editar en silencio el settings.json del equipo en una máquina sin git en el PATH.
+export function estaVersionado(archivo) {
+  try {
+    execFileSync('git', ['-C', path.dirname(archivo), 'ls-files', '--error-unmatch', path.basename(archivo)],
+      { stdio: 'ignore', timeout: 10000, windowsHide: true });
+    return true;
+  } catch (error) {
+    // git sale EXACTAMENTE 1 cuando el archivo de verdad no está versionado (es el contrato de
+    // --error-unmatch). Cualquier otro motivo para fallar (ENOENT: sin git en el PATH; timeout; una
+    // señal) es "no se pudo preguntar", y eso nunca se trata como "no versionado": se tratarÍa como
+    // personal un archivo que en realidad es del equipo, y se editaría sin que nadie lo pidiera.
+    return error.status === 1 ? false : null;
   }
 }
 
@@ -132,7 +186,7 @@ export function dejarDeDeclarar(carpeta) {
   if (esCarpetaDelUsuario(carpeta)) return false;   // esa es la configuración general: no se toca
   if (!declaraElPlugin(carpeta)) return false;
   const archivo = AJUSTES(carpeta);
-  const d = JSON.parse(readFileSync(archivo, 'utf8'));
+  const d = leerJson(archivo);
   delete d.enabledPlugins[PLUGIN];
   if (!Object.keys(d.enabledPlugins).length) delete d.enabledPlugins;
   writeFileSync(archivo, `${JSON.stringify(d, null, 2)}\n`);
@@ -150,16 +204,35 @@ export function pasosLimpieza({ installs = instalaciones() } = {}) {
       pasos.push({ fn: () => true, opcional: true, nota: `${path.basename(carpeta)} ya no existe en el disco: nada que limpiar` });
       continue;
     }
-    // El ámbito puede ser "project" o "local" (una copia solo para esa persona en esa carpeta).
-    // Desinstalar con el ámbito equivocado falla, así que se usa el que dice la instalación.
-    const ambito = installs.find((i) => i.proyecto === carpeta && i.scope !== 'user')?.scope || 'project';
-    pasos.push({
-      cmd: 'claude', args: ['plugin', 'uninstall', PLUGIN, '--scope', ambito], cwd: carpeta, opcional: true,
-      nota: `quitar la copia de ${path.basename(carpeta)} (ámbito ${ambito})`,
-    });
+    // Una carpeta puede tener copia "project" (la pide su .claude/settings.json) y "local" (solo de esa
+    // persona) a la vez: se quitan las dos, cada una con su ámbito (con el equivocado, claude falla).
+    // "uninstall --scope project" lo hace claude EDITANDO .claude/settings.json: si ese archivo es del
+    // equipo (versionado), no se corre; queda para un PR.
+    // Sin poder preguntarle a git (sin git en el PATH, timeout, repo con lock) NUNCA se trata como
+    // personal: se asume que SÍ es del equipo, para no terminar editando por error su settings.json.
+    const versionado = declaraElPlugin(carpeta) && estaVersionado(AJUSTES(carpeta)) !== false;
+    const ambitos = [...new Set(installs
+      .filter((i) => i.scope !== 'user' && i.proyecto && mismaCarpeta(i.proyecto) === mismaCarpeta(carpeta))
+      .map((i) => i.scope))];
+    for (const ambito of ambitos) {
+      if (ambito === 'project' && versionado) continue;
+      pasos.push({
+        cmd: 'claude', args: ['plugin', 'uninstall', PLUGIN, '--scope', ambito], cwd: carpeta, opcional: true,
+        nota: `quitar la copia de ${path.basename(carpeta)} (ámbito ${ambito})`,
+      });
+    }
+    if (!declaraElPlugin(carpeta)) continue;
+    if (versionado) {
+      // No se toca: es del equipo. Queda anotado para que lo quite quien administra el repo, con un PR.
+      pasos.push({
+        fn: () => true, opcional: true, pendientePr: carpeta,
+        nota: `${path.basename(carpeta)} pide el plugin en su .claude/settings.json versionado: NO lo toco (va con un PR)`,
+      });
+      continue;
+    }
     pasos.push({
       fn: () => dejarDeDeclarar(carpeta), opcional: true,
-      nota: `que ${path.basename(carpeta)} deje de pedir su propia copia (.claude/settings.json)`,
+      nota: `que ${path.basename(carpeta)} deje de pedir su propia copia (.claude/settings.json local)`,
     });
   }
   return pasos;
@@ -182,8 +255,10 @@ export function pasosInstalacionGeneral({ cat = catalogo(), installs = instalaci
 }
 
 // Las dos cosas de una: limpiar y dejar la general al día.
+// La general se instala PRIMERO: si algo sale mal ahí (sin red, catálogo movido) y se hubiera
+// limpiado antes, el computador se queda sin ningún plugin, peor que al empezar.
 export function pasosGenerales(opciones = {}) {
-  return [...pasosLimpieza(opciones), ...pasosInstalacionGeneral(opciones)];
+  return [...pasosInstalacionGeneral(opciones), ...pasosLimpieza(opciones)];
 }
 
 // Todo lo que hay que correr en esta máquina, en orden y listo para ejecutar.
@@ -197,18 +272,32 @@ export function pasosParaActualizar({ cat = catalogo(), installs = instalaciones
     });
   }
   pasos.push({ cmd: 'claude', args: ['plugin', 'marketplace', 'update', CATALOGO], nota: 'refrescar el catálogo de Softnexus' });
-  pasos.push({ cmd: 'claude', args: ['plugin', 'update', 'softnexus-sdd@softnexus'], nota: 'la copia de tu usuario' });
+  // Si no hay copia de usuario todavía, "update" fallaría siempre ("not installed" cuenta como fallo
+  // real al actualizar): se instala, igual que en pasosInstalacionGeneral.
+  pasos.push(installs.some((i) => i.scope === 'user')
+    ? { cmd: 'claude', args: ['plugin', 'update', 'softnexus-sdd@softnexus'], nota: 'la copia de tu usuario' }
+    : { cmd: 'claude', args: ['plugin', 'install', 'softnexus-sdd@softnexus'], nota: 'instalar la copia de tu usuario (todavía no la tenías)' });
   for (const i of installs.filter((x) => x.scope !== 'user' && x.proyecto)) {
+    if (!existsSync(i.proyecto)) {
+      pasos.push({ fn: () => true, opcional: true, nota: `${path.basename(i.proyecto)} ya no existe en el disco: nada que actualizar ahí` });
+      continue;
+    }
     pasos.push({
-      cmd: 'claude', args: ['plugin', 'update', 'softnexus-sdd@softnexus', '--scope', 'project'], cwd: i.proyecto,
+      cmd: 'claude', args: ['plugin', 'update', 'softnexus-sdd@softnexus', '--scope', i.scope], cwd: i.proyecto,
       nota: `la copia de ${path.basename(i.proyecto)} (${i.version}), que manda dentro de ese proyecto`,
     });
   }
   return pasos;
 }
 
-export function comoActualizar(opciones = {}) {
-  return pasosParaActualizar(opciones).map((p) => `${p.cwd ? `cd "${p.cwd}" && ` : ''}${p.cmd} ${p.args.join(' ')}   # ${p.nota}`);
+// En Windows la gente pega esto en PowerShell, que (en la versión 5) no entiende "&&": se usa ";",
+// que sirve igual en PowerShell y en bash.
+export function comoActualizar(opciones = {}, plataforma = process.platform) {
+  const y = plataforma === 'win32' ? '; ' : ' && ';
+  // Entrecomillado SIEMPRE, no solo en Windows: una ruta de este mismo repositorio tiene acentos y
+  // espacios, y sin comillas git la cortaba en el primer espacio con un error que no explicaba nada.
+  // Los pasos "fn" (p. ej. "esa carpeta ya no existe") no tienen un comando que pegar: no se listan.
+  return pasosParaActualizar(opciones).filter((p) => !p.fn).map((p) => `${p.cwd ? `cd "${p.cwd}"${y}` : ''}${p.cmd} ${p.args.map(entrecomillar).join(' ')}   # ${p.nota}`);
 }
 
 // Correrlos de una. Se muestra cada comando antes de ejecutarlo y, si uno falla, se sigue con los
@@ -220,8 +309,21 @@ export function ambitoQuePide(texto) {
   return String(texto || '').match(/installed in (\w+) scope/i)?.[1] || '';
 }
 
-export function esBenigno(motivo) {
-  return /already enabled|ya está (habilitado|activado|encendid)|not installed|no está instalad|installed in user scope|not found|no such plugin|ya no existe|ENOENT|but not all|could not be refreshed/i.test(String(motivo || ''));
+// Qué cuenta como "ya estaba así" depende del comando: "no está instalado" es lo que se quería al
+// desinstalar, pero al ACTUALIZAR es un fallo de verdad. Y ENOENT (no se encontró "claude") nunca lo es.
+const YA_ESTABA = {
+  // "not found" SUELTO no vale: "Marketplace softnexus not found" (el catálogo se desregistró) es un
+  // fallo de verdad, no "ya estaba desinstalado". Se exige la frase completa que usa claude.
+  uninstall: /plugin .*(is )?not installed|no está instalad|installed in user scope|no such plugin|ya no existe/i,
+  enable: /already enabled|ya está (habilitado|activado|encendid)/i,
+  install: /already installed|ya está instalad/i,
+  marketplace: /but not all|could not be refreshed/i,
+};
+export function esBenigno(motivo, paso = null) {
+  if (typeof paso !== 'object') paso = null;   // también se usa como callback de .every/.some
+  const que = paso ? paso.que || (paso.cmd === 'claude' ? paso.args?.[1] : '') : '';
+  const listas = paso ? [YA_ESTABA[que]].filter(Boolean) : Object.values(YA_ESTABA);
+  return listas.some((re) => re.test(String(motivo || '')));
 }
 
 export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
@@ -238,7 +340,7 @@ export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
       // Solo lo que IMPRIMIÓ el comando, no el "Command failed: ..." que agrega Node y no explica nada.
       const impreso = `${error.stdout || ''}\n${error.stderr || ''}`;
       const pistas = impreso.split('\n').map((l) => l.trim()).filter(Boolean)
-        .filter((l) => /✘|✗|error|fail|no se pudo|cannot|denied|ENOENT|EINVAL|EACCES/i.test(l));
+        .filter((l) => /✘|✗|error|fail|no se pudo|cannot|denied|ENOENT|EINVAL|EACCES|no se reconoce|is not recognized|not found/i.test(l));
       const motivo = (pistas[pistas.length - 1] || String(error.message || error).split('\n')[0])
         .replace(/^✗\s*NO SE PUDO:\s*/, '').slice(0, 300);
       // "está instalado en local, no en project": se reintenta con el ámbito que pide, una sola vez.
@@ -249,7 +351,7 @@ export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
         resultados.push(...ejecutarPasos([conOtro], { correr }));
         continue;
       }
-      if (esBenigno(todo)) {
+      if (esBenigno(todo, paso)) {
         console.log('   (ya estaba así: nada que hacer)');
         resultados.push({ paso, ok: true, yaEstaba: true });
         continue;
@@ -266,18 +368,33 @@ export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
 // solos, así que las rutas con espacios ("C:\\Mis Proyectos\\x") se comillan aquí.
 export function entrecomillar(argumento) {
   const a = String(argumento);
-  return /[\s&|<>^()"]/.test(a) ? `"${a.replace(/"/g, '""')}"` : a;
+  // Una barra al final ("C:\\x\\") se duplica: si no, la \\ escapa la comilla de cierre y el argumento
+  // se come lo que sigue.
+  return /[\s&|<>^()"]/.test(a) ? `"${a.replace(/"/g, '""').replace(/(\\+)$/, '$1$1')}"` : a;
 }
 
 // Se captura TODO lo que escribe el comando (salida y errores) y después se imprime. claude manda
 // sus mensajes por la salida normal, no por la de errores: mirando solo "stderr" no había forma de
 // distinguir un fallo de verdad de un "ya estaba así".
+// En Windows "claude" es claude.cmd, y Node no deja ejecutar .cmd directamente (EINVAL). Pasarle
+// shell:true con una lista de argumentos funciona, pero Node lo marcó obsoleto (DEP0190) y en una
+// versión futura será error. Se hace lo mismo que haría el shell, explícito: cmd.exe con UNA línea
+// ya entrecomillada y sin que Node vuelva a escaparla.
+export function lineaParaCmd(cmd, args) {
+  return `"${[cmd, ...args].map(entrecomillar).join(' ')}"`;
+}
+
+function correrEnWindows(paso, opciones) {
+  return execFileSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', lineaParaCmd(paso.cmd, paso.args)],
+    { ...opciones, windowsVerbatimArguments: true, windowsHide: true });
+}
+
 function ejecutar(paso) {
   if (paso.fn) return paso.fn();
   const opciones = { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], cwd: paso.cwd || process.cwd(), timeout: 180000, windowsHide: true };
   try {
     const salida = process.platform === 'win32'
-      ? execFileSync(paso.cmd, paso.args.map(entrecomillar), { ...opciones, shell: true, windowsHide: true })
+      ? correrEnWindows(paso, opciones)
       : execFileSync(paso.cmd, paso.args, { ...opciones, windowsHide: true });
     if (salida?.trim()) console.log(`   ${salida.trim().split('\n').join('\n   ')}`);
     return salida;

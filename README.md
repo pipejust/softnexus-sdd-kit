@@ -6,6 +6,18 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
+## Versión 0.61.0
+
+Incluye las correcciones de sincronización, guardas, hooks e instalación posteriores a 0.60.0.
+La validación real en **Sandbox Spec Driven**, el 10 de octubre de 2026, detectó que el rechazo
+de jerarquía de Altum dice «no puede colgar de» sin nombrar `parent_id`. Ahora se reconoce ese
+mensaje y se reintenta el resto del cambio, incluido el cierre. El campo rechazado queda registrado
+para no repetirlo en cada sincronización. Un rechazo desconocido se informa sin adivinar el campo.
+
+El instalador conserva la configuración versionada del equipo y confirma la instalación general
+antes de limpiar las copias personales; si no puede comprobar la versión publicada, lo informa.
+Evidencia de la API real: [validación del sandbox](pruebas/evidencia/sandbox-2026-10-10.md).
+
 ```
 softnexus-sdd-kit/
 ├── .claude-plugin/marketplace.json   ← marketplace interno (subir a GitHub privado)

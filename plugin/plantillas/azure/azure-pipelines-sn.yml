@@ -23,6 +23,8 @@ steps:
       versionSpec: '22.x'
   - script: |
       if [ -z "$SN_ALTUM_KEY" ]; then echo "Falta la clave de Altum de la empresa en las variables del pipeline (la configura el líder)."; exit 0; fi
+      # Motor y conexión de la rama principal, no los del PR (una rama vieja o editada no decide la firma).
+      git fetch -q origin "$(System.PullRequest.TargetBranch)" && git checkout -q FETCH_HEAD -- scripts/sn .sn/connectors.json
       node scripts/sn/sn-sync.mjs verificar-firma $(System.PullRequest.PullRequestId)
     displayName: Firma del líder
     condition: eq(variables['Build.Reason'], 'PullRequest')
@@ -33,7 +35,8 @@ steps:
       if [ -z "$SN_ALTUM_KEY" ]; then echo "Falta la clave de Altum de la empresa en las variables del pipeline (la configura el líder)."; exit 0; fi
       node scripts/sn/sn-sync.mjs sync --upsert-only
     displayName: Sincronizar con Altum
-    condition: ne(variables['Build.Reason'], 'PullRequest')
+    # Solo lo que ya se unió a la rama principal escribe en Altum.
+    condition: and(ne(variables['Build.Reason'], 'PullRequest'), in(variables['Build.SourceBranch'], 'refs/heads/main', 'refs/heads/master'))
     env:
       SN_AZURE_PAT: $(System.AccessToken)
       SN_ALTUM_KEY: $(SN_ALTUM_KEY)
