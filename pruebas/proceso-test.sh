@@ -29,7 +29,7 @@ guard "git status"; check "Otros comandos no se bloquean" "[ \$? -eq 0 ]"
 H=$(git rev-parse --short HEAD)
 printf -- "## 2026-09-21 10:00 · APROBADO · sello: plano\n- Valida: Laura <laura@x>\n- Commit validado: %s\n" "$H" > openspec/changes/add-saldo/validacion.md
 git add -A && git commit -qm aprobado
-mkdir -p .sn/state && node -e 'require("fs").writeFileSync(".sn/state/altum-lider.json", JSON.stringify({at: Date.now(), name: "Marta Ríos", email: "marta@softnexus.co", github: "martarios"}))'
+mkdir -p .sn/state && node -e 'require("fs").writeFileSync(".sn/state/altum-lider.json", JSON.stringify({project_id: "p1", at: Date.now(), name: "Marta Ríos", email: "marta@softnexus.co", github: "martarios"}))'
 # El candado de "solo el líder une el PR" es de los proyectos unidos a Altum: por eso el conector.
 printf '{"project":"saldo","connectors":[{"name":"altum","kind":"altum","base_url":"http://127.0.0.1:9/api","project_id":"p1","key_env":"SN_CLAVE_QUE_NO_EXISTE","events":["sn.item.*"]}]}' > .sn/connectors.json
 check "Plano R1 aprobado por la propia persona: SÍ cuenta (no hace falta el líder en R0–R2)" "sn siguiente | grep -q 'Plano aprobado'"
@@ -103,7 +103,7 @@ check "Sin sesión de gh no se puede saber quién eres: NO se une, y se dice có
 mv .sn/state/altum-lider.json "$W/lider.bak"
 printf '{"tool_name":"Bash","cwd":"%s","tool_input":{"command":"gh pr merge 7 --merge"}}' "$PWD" | PATH="$W/gh-quien:$PATH" QUIEN=laura node "$PLUGIN/hooks/guard.mjs" >/dev/null 2>"$W/guard.err"; code=$?
 check "Sin poder preguntarle a Altum quién es el líder: NO se une" "[ $code -eq 2 ] && grep -q 'quién es el líder' '$W/guard.err'"
-node -e 'require("fs").writeFileSync(".sn/state/altum-lider.json", JSON.stringify({at: Date.now(), name: "Marta Ríos", email: "marta@softnexus.co"}))'
+node -e 'require("fs").writeFileSync(".sn/state/altum-lider.json", JSON.stringify({project_id: "p1", at: Date.now(), name: "Marta Ríos", email: "marta@softnexus.co"}))'
 printf '{"tool_name":"Bash","cwd":"%s","tool_input":{"command":"gh pr merge 7 --merge"}}' "$PWD" | PATH="$W/gh-quien:$PATH" QUIEN=laura node "$PLUGIN/hooks/guard.mjs" >/dev/null 2>"$W/guard.err"; code=$?
 check "Líder sin usuario de GitHub en Altum: NO se une y se dice que lo registre" "[ $code -eq 2 ] && grep -q 'registre en Altum' '$W/guard.err'"
 mv "$W/lider.bak" .sn/state/altum-lider.json

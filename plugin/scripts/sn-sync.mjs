@@ -33,11 +33,11 @@ import { readItems, setExternalId, writeImportedItem } from './sync/items.mjs';
 import { diffSnapshots, matches } from './sync/events.mjs';
 import { itemMarkdown, listMarkdown } from './sync/report.mjs';
 import { takeSnapshot } from './sync/snapshot.mjs';
-import { mensajeValidacion } from './sync/validacion-mensaje.mjs';
+import { mensaje } from './sync/mensaje.mjs';
 import { aprobacionesPr, firmaDelLider, origenRepo, prDeRama } from './sync/pr.mjs';
 import { siguientePaso } from './sync/siguiente.mjs';
-import { catalogo, comoActualizar, declaraElPlugin, dejarDeDeclarar, ejecutarPasos, esMasNueva, gitAtrasado, instalaciones, pasosInstalacionGeneral, pasosLimpieza, pasosParaActualizar, proyectosConCopia, ultimaPublicada, versionInstalada, versionPublicadaDeVerdad } from './sync/version.mjs';
-import { parseLog } from './validation-state.mjs';
+import { instalaciones, versionInstalada, esMasNueva } from './sync/version.mjs';
+import { actualizar, dejarDeDeclararAqui, limpiarCopias, instalarGeneral } from './sync/maintenance.mjs';
 import { leerTexto } from './sync/texto.mjs';
 import { codeownersConLider } from './sync/lider.mjs';
 import {
@@ -132,6 +132,18 @@ function upsertEvents(snapshot) {
 }
 
 async function sync(config) {
+  // Una simulación nunca entrega la cola ni crea estado local, incluso con --background.
+  if (flag('--dry-run')) {
+    const snapshot = takeSnapshot(config.project);
+    const upsertOnly = flag('--upsert-only');
+    const events = upsertOnly ? upsertEvents(snapshot) : diffSnapshots(loadSnapshot(), snapshot);
+    const targets = upsertOnly ? config.connectors.filter((c) => ['rest', 'github', 'altum'].includes(c.kind)) : config.connectors;
+    const me = localActor();
+    for (const evt of events) for (const connector of targets.filter((c) => wanted(c, evt, me))) {
+      console.log(`[dry-run] ${connector.name} <- ${evt.type} ${evt.item.id} (${evt.item.stage})`);
+    }
+    return;
+  }
   if (flag('--background')) {
     spawn(process.execPath, [SELF, 'sync', '--delay'], { windowsHide: true, detached: process.platform !== 'win32', stdio: 'ignore', cwd: process.cwd(), env: process.env }).unref();
     return;
@@ -149,13 +161,11 @@ async function sync(config) {
     let failed = 0;
     for (const evt of events) {
       for (const connector of targets.filter((c) => wanted(c, evt, me))) {
-        if (flag('--dry-run')) {
-          console.log(`[dry-run] ${connector.name} <- ${evt.type} ${evt.item.id} (${evt.item.stage})`);
-        } else if (await attempt(connector, evt)) sent += 1; else failed += 1;
+        if (await attempt(connector, evt)) sent += 1; else failed += 1;
         refreshLock();   // una corrida larga no debe perder el candado a mitad de camino
       }
     }
-    if (!flag('--dry-run')) saveSnapshot(snapshot);
+    saveSnapshot(snapshot);
     if (!flag('--quiet')) {
       console.log(`sn-sync: ${events.length} eventos · ${sent} entregas · ${failed} en cola`
         + ` · reintentos ok ${outbox.retried}${outbox.dropped ? ` · descartados ${outbox.dropped}` : ''}`);
@@ -239,63 +249,6 @@ function gitOut(argumentos) {
   } catch {
     return '';
   }
-}
-
-// El change activo: el único que haya, o el que pidan por nombre.
-function changeActivo(nombre) {
-  const dir = 'openspec/changes';
-  if (nombre) return nombre;
-  if (!existsSync(dir)) return '';
-  const activos = readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory() && d.name !== 'archive').map((d) => d.name);
-  if (activos.length > 1) throw new Error(`hay ${activos.length} cambios abiertos (${activos.join(', ')}): dime cuál con "mensaje <change>"`);
-  return activos[0] || '';
-}
-
-function urlDelPr(rama) {
-  if (process.env.SN_SYNC_NO_GH) return '';
-  try {
-    return JSON.parse(execFileSync('gh', ['pr', 'view', rama, '--json', 'url'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })).url || '';
-  } catch {
-    return '';
-  }
-}
-
-// Mensaje listo para copiarle al líder. Mientras no haya mensajería conectada, esto ES el canal:
-// lo arma el motor (no el agente) para que siempre lleve rama, commit, quién firma y cómo empezar.
-async function mensaje(config) {
-  const change = changeActivo(args[1] && !args[1].startsWith('--') ? args[1] : '');
-  const rama = gitOut(['rev-parse', '--abbrev-ref', 'HEAD']);
-  const archivo = change ? path.join('openspec/changes', change, 'validacion.md') : '';
-  const entradas = archivo && existsSync(archivo) ? parseLog(leerTexto(archivo)) : [];
-  const solicitud = [...entradas].reverse().find((e) => e.type === 'SOLICITUD');
-  const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
-  // El líder y el nombre del proyecto salen de Altum; si Altum no responde, el mensaje se arma igual.
-  let lider = null;
-  let proyecto = '';
-  if (connector) {
-    try {
-      lider = await projectLead(connector);
-      proyecto = lider?.project || '';
-    } catch {
-      lider = null;
-    }
-  }
-  process.stdout.write(`${mensajeValidacion({
-    proyecto: proyecto || config?.project || path.basename(process.cwd()),
-    sello: option('--sello', solicitud?.seal || 'plano'),
-    riesgo: option('--riesgo', (solicitud?.fields?.Riesgo || '').split(' · ')[0]),
-    pide: localActor().replace(/\s*<[^>]*>$/, '') || '',
-    titulo: option('--titulo', change || ''),
-    queValidar: option('--que', solicitud?.fields?.['Qué validar'] || ''),
-    rama,
-    // El commit de la solicitud: es exactamente lo que el líder tiene que mirar, no lo último que haya.
-    commit: (solicitud?.raw.match(/Commit:\s*([0-9a-f]{7,40})/)?.[1]) || gitOut(['rev-parse', '--short', 'HEAD']),
-    pr: option('--pr', urlDelPr(rama)),
-    lider: lider?.falta ? null : lider,
-    clonar: proyecto || config?.project || path.basename(process.cwd()),
-  })}\n`);
-  if (!lider) console.log('(Altum no dijo quién es el líder: pregúntale a la persona a quién se lo manda.)');
-  if (!rama || rama === 'main' || rama === 'master') console.log('(Ojo: no estás en una rama de trabajo, así que el líder no tendría qué validar.)');
 }
 
 function altumConnector(config, name) {
@@ -546,136 +499,6 @@ async function projects(config) {
   list.forEach((p) => console.log(`  ${p.name || '(sin nombre)'}${p.client ? `  · cliente: ${p.client}` : ''}`
     + `${p.repos.length > 1 ? `  (${p.repos.length} repositorios)` : p.repos.length ? '' : '  (sin repositorio en Altum)'}`));
   console.log('\nPara empezar a trabajar en uno: clone "<nombre>"');
-}
-
-// actualizar: ¿está al día el plugin en ESTE computador? Cada máquina lo instaló distinto —desde
-// GitHub o desde una carpeta clonada a mano, para el usuario o dentro de un proyecto— y por eso
-// "ya estás en la última" a veces miente. Aquí se dice la verdad y qué correr, en orden.
-async function actualizar() {
-  const raiz = path.join(path.dirname(SELF), '..');
-  // --solo-revisar: lo corre el hook en segundo plano para dejar la última versión consultada en caché.
-  if (flag('--solo-revisar')) { await ultimaPublicada(); return; }
-  const cat = catalogo();
-  const installs = instalaciones();
-  // --general: dejar el plugin UNA sola vez en este computador. Quita las copias que viven dentro de
-  // proyectos (y la línea que las pedía) y deja al día la general, la que sirve para todos.
-  if (flag('--general')) {
-    // Primero la general, sola: si no queda bien (sin red, catálogo movido), no se tocan las copias
-    // de los proyectos — dejarlas ahí es mejor que quitarlas y quedarse sin ningún plugin.
-    console.log('\nPrimero dejo al día la copia general (la de tu usuario):');
-    const resultadoGeneral = ejecutarPasos(pasosInstalacionGeneral({ cat, installs }));
-    if (resultadoGeneral.some((r) => !r.ok)) {
-      resumen(resultadoGeneral, '');
-      console.log('\nNo quito las copias de los proyectos: si la general no quedó instalada, eso te dejaría sin plugin. Corrige esto y vuelve a intentar "actualizar --general".');
-      return;
-    }
-    const copias = proyectosConCopia(installs);
-    console.log(copias.length
-      ? `\nListo. Ahora quito las ${copias.length} copia(s) que viven dentro de proyectos, para que quede una sola:`
-      : '\nListo. No hay copias dentro de proyectos: nada más que hacer.');
-    resumen([...resultadoGeneral, ...ejecutarPasos(pasosLimpieza({ installs }))], 'Listo: una sola instalación, para todos los proyectos.');
-    if (!process.exitCode) console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir.');
-    return;
-  }
-
-  const actual = versionInstalada(raiz);
-  // Lo pide una persona: se le dice la VERDAD, no un dato de caché disfrazado de fresco.
-  const { ultima, red } = await versionPublicadaDeVerdad();
-  console.log(`Plugin Softnexus: tienes ${actual || '?'}${ultima ? ` · publicada ${ultima}${red ? '' : ' (de la última vez que hubo conexión; ahora no pude consultar)'}` : ' (no pude consultar la última: sin red)'}`);
-  if (cat.tipo === 'carpeta') {
-    const atrasado = gitAtrasado(cat.carpeta);
-    console.log(`El catálogo de este computador es una CARPETA (${cat.carpeta}), no GitHub:`
-      + ` "claude plugin marketplace update" solo la revalida, no la actualiza${atrasado ? ` (está ${atrasado} commits atrás)` : ''}.`);
-  }
-  const viejas = installs.filter((i) => ultima && esMasNueva(ultima, i.version));
-  if (installs.length > 1) {
-    console.log(`Está instalado ${installs.length} veces: ${installs.map((i) => `${i.scope} ${i.version}`).join(', ')}.`
-      + ' Dentro de un proyecto, la copia del proyecto manda sobre la del usuario.');
-  }
-  if (ultima && !esMasNueva(ultima, actual) && !viejas.length) {
-    return console.log(red ? 'Todo al día. No hay nada que hacer.' : 'Parece al día según la última vez que hubo conexión, pero no pude confirmarlo ahora mismo (sin red). Vuelve a intentarlo cuando tengas conexión.');
-  }
-  const pasos = pasosParaActualizar({ cat, installs });
-  if (flag('--arreglar')) {
-    console.log(`\nActualizando todo en esta máquina (${pasos.length} pasos):`);
-    resumen(ejecutarPasos(pasos), 'Listo: todo quedó al día.');
-    if (!process.exitCode) console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir. Hasta que no reinicies sigue corriendo la versión vieja.');
-    else if (installs.some((i) => i.scope !== 'user')) {
-      console.log('\nSi sigue sin quedar, prueba con una sola instalación para todos los proyectos:  node "' + SELF + '" actualizar --general');
-    }
-    return;
-  }
-  console.log('\nPara ponerlo al día en esta máquina, en este orden:');
-  comoActualizar({ cat, installs }).forEach((paso) => console.log(`  ${paso}`));
-  console.log('\nO deja que lo haga solo:  node "' + SELF + '" actualizar --arreglar');
-  if (installs.some((i) => i.scope !== 'user')) {
-    console.log('Y para no repetir esto nunca más (una sola instalación para todos los proyectos):');
-    console.log('  node "' + SELF + '" actualizar --general');
-  }
-  console.log('Y al final, cierra Claude Code y vuélvelo a abrir: hasta que no reinicies sigue corriendo la versión vieja.');
-  if (cat.tipo === 'carpeta') {
-    console.log('\nPara no repetir esto cada vez, se puede registrar el catálogo desde GitHub:'
-      + '\n  claude plugin marketplace remove softnexus'
-      + '\n  claude plugin marketplace add pipejust/softnexus-sdd-kit'
-      + '\n  claude plugin install softnexus-sdd@softnexus');
-  }
-}
-
-// Decir la verdad al final: si algo falló, se ve, se explica cómo terminarlo a mano y el comando
-// sale con error (quien lo llama no puede dar por bueno algo que no se hizo).
-function resumen(hechos, bien) {
-  const conPr = hechos.filter((h) => h.paso?.pendientePr).map((h) => h.paso.pendientePr);
-  if (conPr.length) {
-    console.log(`\n${conPr.length} repositorio(s) piden el plugin en un archivo VERSIONADO (.claude/settings.json).`
-      + ' No lo toqué: es del equipo. Quien administre cada uno, dentro del repo y en una rama:');
-    console.log('   node "' + SELF + '" dejar-de-declarar   y entregarlo en un PR');
-    conPr.forEach((c) => console.log(`   · ${c}`));
-  }
-  const fallaron = hechos.filter((h) => !h.ok);
-  if (!fallaron.length) return console.log(`\n${bien}`);
-  process.exitCode = 1;
-  console.log(`\n⚠️  ATENCIÓN: ${fallaron.length} de ${hechos.length} pasos NO se pudieron hacer:`);
-  for (const { paso, motivo } of fallaron) {
-    const comando = paso.fn ? paso.nota : `${paso.cmd} ${paso.args.join(' ')}`;
-    console.log(`   ✗ ${comando}${paso.cwd ? `   (en ${paso.cwd})` : ''}\n     ${motivo}`);
-  }
-  console.log('\nLo que falló hay que hacerlo a mano (copia el comando de arriba) o decírselo al líder. NO quedó completo.');
-  console.log('Para mandar el detalle completo: node "' + SELF + '" actualizar --general > /tmp/sn-plugin.txt 2>&1   y pasa ese archivo.');
-}
-
-// dejar-de-declarar: quita "softnexus-sdd@softnexus" del .claude/settings.json de ESTE repositorio.
-// Es un cambio del equipo, así que se hace a propósito, en una rama, y se entrega en un PR. Desde ahí
-// el plugin solo se activa a nivel de usuario (una instalación por computador).
-function dejarDeDeclararAqui() {
-  const carpeta = process.cwd();
-  if (!declaraElPlugin(carpeta)) return console.log('Este repositorio no pide el plugin en .claude/settings.json: no hay nada que quitar.');
-  dejarDeDeclarar(carpeta);
-  console.log('Listo: .claude/settings.json ya no pide el plugin (el resto del archivo quedó igual).');
-  console.log('Entrégalo en un PR: "chore: el plugin Softnexus se activa por usuario, no por proyecto".');
-}
-
-// limpiar-copias: quita el plugin de TODOS los proyectos de este computador (las copias instaladas
-// dentro de cada carpeta y la línea que las pedía). Después manda una sola: la del computador.
-function limpiarCopias() {
-  const installs = instalaciones();
-  const copias = proyectosConCopia(installs);
-  if (!copias.length) return console.log('Ningún proyecto tiene copia propia del plugin: ya manda una sola, la de tu usuario.');
-  console.log(`${copias.length} proyecto(s) tienen su propia copia. Las quito:`);
-  const hechos = ejecutarPasos(pasosLimpieza({ installs }));
-  resumen(hechos, 'Listo: ya no hay copias dentro de proyectos.');
-  console.log('Ahora instala la general si no la tienes: instalar-general.');
-}
-
-// instalar-general: deja la copia del computador (ámbito de usuario), la que sirve en TODOS los
-// proyectos. Si ya está, la deja al día.
-async function instalarGeneral() {
-  const cat = catalogo();
-  const installs = instalaciones();
-  const hechos = ejecutarPasos(pasosInstalacionGeneral({ cat, installs }));
-  const copias = proyectosConCopia(installs);
-  resumen(hechos, 'Listo: el plugin queda instalado para todos tus proyectos.');
-  if (copias.length) console.log(`OJO: ${copias.length} proyecto(s) todavía tienen copia propia y esa manda dentro de ellos. Quítalas con: limpiar-copias.`);
-  if (!process.exitCode) console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir.');
 }
 
 // El conector de Altum de este repositorio, con proyecto y clave listos.
@@ -1128,7 +951,7 @@ else if (command === 'verificar-firma') await verificarFirma(config);
 else if (command === 'proteger-rama') proteger();
 else if (command === 'asegurar') await asegurar(config);
 else if (command === 'quitar-repo') await quitarRepo(config);
-else if (command === 'mensaje') await mensaje(config);
+else if (command === 'mensaje') await mensaje(config, { args, option, localActor, gitOut });
 else if (command === 'clone') await clone(config);
 else if (command === 'set-repo') await setRepo(config);
 else if (command === 'conectar') await conectar(config);

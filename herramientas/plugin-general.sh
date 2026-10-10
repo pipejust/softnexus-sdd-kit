@@ -69,7 +69,7 @@ if ! claude plugin marketplace list 2>/dev/null | grep -q "$CATALOGO"; then
 fi
 
 paso "Refresco el catálogo de Softnexus"
-YA_ESTABA='but not all|could not be refreshed' intentar claude plugin marketplace update "$CATALOGO"
+intentar claude plugin marketplace update "$CATALOGO"
 
 # 2) La copia general: la del usuario, la que sirve en TODOS los proyectos. Se mira si existe la de
 #    USUARIO (no cualquiera: "claude plugin list" también muestra las de proyectos, y entonces se
@@ -102,6 +102,9 @@ if [ "$fallos" -eq 0 ] && [ -n "${motor:-}" ] && [ -f "$motor" ]; then
   intentar node "$motor" limpiar-copias
 elif [ "$fallos" -gt 0 ]; then
   echo "Conservo las copias de los proyectos: la instalación general no quedó confirmada."
+else
+  echo "No pude confirmar el motor de la instalación general. Conservo las copias de los proyectos."
+  fallos=$((fallos + 1))
 fi
 
 if [ "$fallos" -gt 0 ]; then

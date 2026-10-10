@@ -26,6 +26,7 @@ function git(args) {
 function commitExists(commit) {
   try {
     execFileSync('git', ['cat-file', '-e', `${commit}^{commit}`], { windowsHide: true, stdio: 'ignore' });
+    execFileSync('git', ['merge-base', '--is-ancestor', commit, 'HEAD'], { windowsHide: true, stdio: 'ignore' });
     return true;
   } catch {
     return false;
@@ -58,18 +59,45 @@ function commitOf(entry) {
 // después": es que no se puede verificar nada. Se distingue con un símbolo propio para no
 // confundirlo con el "vencida" normal de seguir construyendo sobre un plano ya sellado.
 const SIN_VERIFICAR = Symbol('sin-commit-verificable');
+function tareasCambiaron(commit, change) {
+  const archivo = `${CHANGES_DIR}/${change}/tasks.md`;
+  const antes = git(['show', `${commit}:${archivo}`]);
+  const ahora = existsSync(archivo) ? leerTexto(archivo) : '';
+  const normalizar = (t) => t.replace(/\[[xX]\]/g, '[ ]').trim();
+  if (normalizar(antes) === normalizar(ahora)) return false;
+  // dividir mueve las pendientes a una ficha enlazada; las tareas conservadas no cambian de texto.
+  const division = ahora.match(/^> (\d+) tarea\(s\) pasaron a ([A-Za-z0-9-]+) el \d{4}-\d{2}-\d{2}: el plano se cerró con las (\d+) ya hechas\.$/m);
+  if (!division) return true;
+  const ficha = path.join('docs/items', `${division[2]}.md`);
+  if (!existsSync(ficha) || !/^parent:\s*\S+/m.test(leerTexto(ficha))) return true;
+  const nuevas = ahora.split('\n').filter((l) => /^\s*- \[[xX]\]/.test(l));
+  const viejas = antes.split('\n').filter((l) => /^\s*- \[[ xX]\]/.test(l)).map(normalizar);
+  return nuevas.length !== Number(division[3]) || viejas.length - nuevas.length !== Number(division[1])
+    || nuevas.some((l) => !viejas.includes(normalizar(l)));
+}
 function changedSince(commit, change, seal) {
   if (!commit || !commitExists(commit)) return SIN_VERIFICAR;
   const scope = seal === 'plano' ? PLAN_PATHS.map((p) => path.join(CHANGES_DIR, change, p)) : ['.'];
   // Los commits que solo tocan validacion.md no invalidan nada.
-  const log = git(['log', '--format=%h', `${commit}..HEAD`, '--', ...scope, `:(exclude)${CHANGES_DIR}/${change}/validacion.md`]);
-  return log.length > 0;
+  const paths = [...scope, `:(exclude)${CHANGES_DIR}/${change}/validacion.md`,
+    ...(seal === 'plano' ? [`:(exclude)${CHANGES_DIR}/${change}/tasks.md`] : [])];
+  try {
+    if (seal === 'plano' && tareasCambiaron(commit, change)) return true;
+    // Compara también el árbol de trabajo: una edición sin commit sí puede cambiar lo aprobado.
+    execFileSync('git', ['diff', '--quiet', commit, '--', ...paths], { windowsHide: true, stdio: 'ignore' });
+    return Boolean(execFileSync('git', ['ls-files', '--others', '--exclude-standard', '--', ...paths], { windowsHide: true, encoding: 'utf8' }).trim());
+  } catch (error) {
+    return error.status === 1 ? true : SIN_VERIFICAR;
+  }
 }
 
 // El líder según Altum, guardado por "sn-sync lead" / "asegurar" (.sn/state/altum-lider.json).
 function liderGuardado(root = '.') {
   try {
-    return JSON.parse(readFileSync(path.join(root, '.sn/state/altum-lider.json'), 'utf8'));
+    const lider = JSON.parse(readFileSync(path.join(root, '.sn/state/altum-lider.json'), 'utf8'));
+    const config = path.join(root, '.sn/connectors.json');
+    const proyecto = existsSync(config) ? JSON.parse(leerTexto(config)).connectors?.find((c) => c.kind === 'altum' && c.enabled !== false)?.project_id : '';
+    return proyecto && lider.project_id !== proyecto ? null : lider;
   } catch {
     return null;
   }
@@ -106,11 +134,11 @@ export function statusOf(entries, change, lider = liderGuardado()) {
   // cualquier otra persona no cuenta: el plano sigue esperando la firma.
   const firmante = identidadFirmante(last.fields.Valida);
   const hayFirmante = Boolean(firmante.correo || firmante.github);
-  if ((lider?.email || lider?.github) && pideLider(entries, last, change) && hayFirmante && !esElLider(lider, firmante)) {
+  if (pideLider(entries, last, change) && (!(lider?.email || lider?.github) || !hayFirmante || !esElLider(lider, firmante))) {
     return {
       ...base,
       status: 'firma inválida',
-      detail: `la firmó ${last.fields.Valida}, pero el líder es ${lider.name} (${comoSeIdentifica(lider)}).`
+      detail: `No se pudo verificar la firma de ${last.fields.Valida || 'un firmante sin identidad'} con el líder de Altum${lider?.name ? `: ${lider.name} (${comoSeIdentifica(lider)})` : '.'}.`
         + ' Si ese es su correo personal, que lo registre en Altum o que firme agregando su usuario de GitHub: "Nombre <correo> · GitHub @usuario".',
     };
   }
@@ -163,7 +191,14 @@ export function planoSellado(change, root = '.') {
   if (!delPlano.length) return false;
   // "sin commit verificable" NO cuenta: un sello con un commit inventado o inalcanzable no es un
   // sello de verdad, aunque el texto diga "APROBADO".
-  return ['validado', 'validación vencida'].includes(statusOf(delPlano, change).status);
+  const estado = statusOf(delPlano, change);
+  if (estado.status !== 'validado') return false;
+  // Avanzar las casillas de tasks.md es normal; cambiar el diseño o los escenarios exige otro sello.
+  try {
+    const scope = ['proposal.md', 'specs', 'design.md'].map((p) => path.join(CHANGES_DIR, change, p));
+    execFileSync('git', ['diff', '--quiet', estado.commit, '--', ...scope], { windowsHide: true, stdio: 'ignore' });
+    return !execFileSync('git', ['ls-files', '--others', '--exclude-standard', '--', ...scope], { windowsHide: true, encoding: 'utf8' }).trim();
+  } catch { return false; }
 }
 
 export function validationFor(change, root = '.') {

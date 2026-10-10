@@ -41,7 +41,7 @@ export function siguientePaso(item) {
 // ¿Se puede abrir el PR de este ítem? Solo con el plano aprobado (sello 1) y la evidencia hecha.
 export function puedeAbrirPr(item) {
   if (!item.change) return { puede: true };
-  if (['plan_written', 'planning', 'ready', 'triaged'].includes(item.stage) || ['awaiting_validation', 'invalid_signature', 'validation_expired'].includes(item.flag)) {
+  if (['plan_written', 'planning', 'ready', 'triaged'].includes(item.stage) || ['awaiting_validation', 'invalid_signature', 'validation_expired', 'changes_requested', 'blocked'].includes(item.flag)) {
     return { puede: false, motivo: `el plano de ${item.id} no tiene su sello 1 (${siguientePaso(item).paso}). Siguiente: ${siguientePaso(item).siguiente}` };
   }
   // Marcar tareas no reemplaza la firma: sin sello 1 en el plano no hay PR, aunque ya se haya construido.
