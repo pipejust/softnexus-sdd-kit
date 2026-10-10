@@ -148,12 +148,12 @@ export function programa(palabras) {
       while (conValor && k < palabras.length && palabras[k].startsWith('-')) k += conValor.has(palabras[k]) ? 2 : 1;
       continue;
     }
-    if (SHELLS_CON_C.has(base) && palabras.includes('-c')) {
-      const j = palabras.indexOf('-c', k);
-      return { cmd: base, args: palabras.slice(k + 1), envSolo: false, anidado: palabras[j + 1] || '' };
+    const j = palabras.findIndex((p, i) => i > k && /^-[a-z]*c[a-z]*$/i.test(p));
+    if (SHELLS_CON_C.has(base) && j !== -1) {
+      return { cmd: base, args: palabras.slice(k + 1), envSolo: false, anidado: (palabras[j + 1] || '').replaceAll(DOLAR_LITERAL, '$') };
     }
     if (base === 'eval') {
-      return { cmd: base, args: palabras.slice(k + 1), envSolo: false, anidado: palabras.slice(k + 1).join(' ') };
+      return { cmd: base, args: palabras.slice(k + 1), envSolo: false, anidado: palabras.slice(k + 1).join(' ').replaceAll(DOLAR_LITERAL, '$') };
     }
     break;
   }
@@ -258,7 +258,7 @@ function revisarPush(resto, ramaActual) {
   // Solo es un BORRADO si el lado de origen queda vacío (":rama" o "origin :rama"). "HEAD:main" es
   // un push normal con mapeo explícito, no un borrado, aunque también tenga ":".
   const esBorrado = (r) => r.startsWith(':');
-  const protegidaBorrada = refspecs.some((r) => esBorrado(r) && PROTEGIDAS.has(r.split(':')[0].replace(/^refs\/heads\//, '')))
+  const protegidaBorrada = refspecs.some((r) => esBorrado(r) && PROTEGIDAS.has(destino(r)))
     || (largos.includes('--delete') || banderasCortas(resto).includes('d')) && posicionales(resto).some((r) => PROTEGIDAS.has(r));
   if (protegidaBorrada) return 'Eso borraría una rama protegida en el remoto. Pide confirmación humana.';
   if (refspecs.some((r) => !esBorrado(r) && (PROTEGIDAS.has(destino(r)) || (destino(r) === 'HEAD' && PROTEGIDAS.has(ramaActual()))))) {
@@ -355,8 +355,9 @@ export function motivoParaBloquear(palabras, { ramaActual = () => '', pipedOut =
   const { cmd, args, envSolo, anidado } = programa(palabras);
   if (anidado !== undefined) {
     // "bash -c '…'", "sh -c '…'" o "eval '…'": el comando de verdad está ADENTRO de ese texto.
-    for (const seg of comandos(anidado)) {
-      const motivo = motivoParaBloquear(seg.palabras, { ramaActual, pipedOut: seg.siguiente === '|' });
+    const lista = comandos(anidado);
+    for (const [i, seg] of lista.entries()) {
+      const motivo = motivoParaBloquear(seg.palabras, { ramaActual, pipedOut: seg.siguiente === '|' && esSumidero(lista[i + 1]?.palabras || []) });
       if (motivo) return motivo;
     }
     return '';
@@ -438,7 +439,8 @@ export function esSumidero(palabras) {
 }
 
 export function uneUnPr(palabras) {
-  const { cmd, args } = programa(palabras);
+  const { cmd, args, anidado } = programa(palabras);
+  if (anidado !== undefined) return comandos(anidado).some((s) => uneUnPr(s.palabras));
   const a = cmd === 'gh' ? sinGlobalesDeGh(args) : args;
   if (cmd === 'gh' && a[0] === 'pr' && a[1] === 'merge') return true;
   if (cmd === 'gh' && a[0] === 'api' && a.some((x) => /\/pulls\/\d+\/merge\b/.test(x))) return true;
@@ -450,7 +452,8 @@ export function uneUnPr(palabras) {
 }
 
 export function abreUnPr(palabras) {
-  const { cmd, args } = programa(palabras);
+  const { cmd, args, anidado } = programa(palabras);
+  if (anidado !== undefined) return comandos(anidado).some((s) => abreUnPr(s.palabras));
   const a = cmd === 'gh' ? sinGlobalesDeGh(args) : args;
   return (cmd === 'gh' && a[0] === 'pr' && a[1] === 'create') || (cmd === 'az' && args[0] === 'repos' && args[1] === 'pr' && args[2] === 'create');
 }

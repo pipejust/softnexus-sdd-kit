@@ -6,17 +6,19 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
-## Versión 0.61.0
+## Versión 0.62.0
 
-Incluye las correcciones de sincronización, guardas, hooks e instalación posteriores a 0.60.0.
-La validación real en **Sandbox Spec Driven**, el 10 de octubre de 2026, detectó que el rechazo
-de jerarquía de Altum dice «no puede colgar de» sin nombrar `parent_id`. Ahora se reconoce ese
-mensaje y se reintenta el resto del cambio, incluido el cierre. El campo rechazado queda registrado
-para no repetirlo en cada sincronización. Un rechazo desconocido se informa sin adivinar el campo.
+La auditoría corrige simulaciones que podían entregar la cola real, rechazos sucesivos 403/422 de
+Altum, reintentos de dependencias, guardas de comandos anidados y borrado de ramas protegidas,
+firmas sin identidad y cachés de líder vencidas o de otro proyecto. Cambiar el diseño sin commit
+invalida su sello; un commit de otra rama tampoco cuenta como aprobación.
 
-El instalador conserva la configuración versionada del equipo y confirma la instalación general
-antes de limpiar las copias personales; si no puede comprobar la versión publicada, lo informa.
-Evidencia de la API real: [validación del sandbox](pruebas/evidencia/sandbox-2026-10-10.md).
+La actualización general también pone al día las copias de proyecto cuya configuración compartida
+se conserva hasta un PR. Los errores del catálogo o un motor inexistente impiden declarar éxito.
+No hay que actualizar por chat: se hace una vez por computador y se reinicia Claude Code.
+
+Evidencia: [auditoría del código](pruebas/evidencia/auditoria-2026-10-10.md) y
+[validación anterior del sandbox](pruebas/evidencia/sandbox-2026-10-10.md).
 
 ```
 softnexus-sdd-kit/

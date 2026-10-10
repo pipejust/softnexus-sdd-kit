@@ -478,20 +478,26 @@ export function camposDel422(textoDeAltum, cuerpo) {
 // Un envío que, si Altum lo rechaza por permisos (403) o por un campo que ese proyecto no acepta
 // (422), se repite sin eso. Lo que no se pudo mandar se avisa y se anota, para no gastar una
 // petición en cada sincronización repitiendo el mismo rechazo.
-async function enviarLoQueSePueda(connector, method, route, cuerpo, headers, aviso, alRechazar) {
-  try {
-    return await api(connector, method, route, cuerpo, headers);
-  } catch (error) {
-    const campos = error.status === 403 ? (error.campos || CAMPOS_DE_PLANEACION)
-      : error.status === 422 ? camposDel422(error.delServidor, cuerpo) : [];
-    const resto = campos.length ? sinLosRechazados(cuerpo, campos) : null;
-    if (!resto) throw error;   // no se sabe qué campo fue: no se adivina, se reporta
-    aviso?.(error.status === 422
-      ? `${error.message} — lo mando sin ${campos.join(', ')}; eso queda escrito en la ficha, no en Altum.`
-      : error.message);
-    alRechazar?.(campos.filter((c) => c in cuerpo), cuerpo);
-    if (method === 'PATCH' && !Object.keys(resto).length) return null; // no quedó nada que mandar
-    return api(connector, method, route, resto, headers);
+export async function enviarLoQueSePueda(connector, method, route, cuerpo, headers, aviso, alRechazar) {
+  let pendiente = cuerpo;
+  // Cada vuelta elimina al menos un campo: el límite es el tamaño del cuerpo inicial.
+  for (;;) {
+    try {
+      return await api(connector, method, route, pendiente, headers);
+    } catch (error) {
+      const candidatos = error.status === 403 ? (error.campos?.length ? error.campos : CAMPOS_DE_PLANEACION)
+        : error.status === 422 ? camposDel422(error.delServidor, pendiente) : [];
+      if (candidatos.includes('state')) throw error; // jamás simular un cierre descartando su estado
+      const campos = candidatos.filter((c) => c in pendiente);
+      const resto = campos.length ? sinLosRechazados(pendiente, campos) : null;
+      if (!resto) throw error;
+      aviso?.(error.status === 422
+        ? `${error.message} — lo mando sin ${campos.join(', ')}; eso queda escrito en la ficha, no en Altum.`
+        : error.message);
+      alRechazar?.(campos, pendiente);
+      if (method === 'PATCH' && !Object.keys(resto).length) return null;
+      pendiente = resto;
+    }
   }
 }
 
@@ -520,7 +526,7 @@ export function esAjena(tarea, yo) {
 // Qué bloqueadores ya se declararon para cada tarea: sin esto, cada ficha con "bloqueado_por" gastaba
 // un GET de más EN CADA sincronización, aunque nada hubiera cambiado (el límite es 120/min).
 const BLOQUEADORES_DECLARADOS = 'altum-bloqueadores.json';
-async function declararBloqueadores(connector, taskId, item, byRef, tareaPorNumero = () => '') {
+export async function declararBloqueadores(connector, taskId, item, byRef, tareaPorNumero = () => '') {
   const quiero = (item.blockers || []).map((id) => byRef.get(id) || tareaPorNumero(id)).filter(Boolean);
   if (!quiero.length) return;
   const todos = readState(BLOQUEADORES_DECLARADOS, {});
@@ -531,18 +537,20 @@ async function declararBloqueadores(connector, taskId, item, byRef, tareaPorNume
     const raw = await api(connector, 'GET', `/tasks/${taskId}/dependencies`);
     actuales = (Array.isArray(raw) ? raw : raw?.items || []).map((d) => d.id);
   } catch (error) {
+    if (!(error instanceof NotRetryable)) throw error;
     console.log(`[altum] ${item.id}: no pude leer los bloqueadores — ${error.message}`);
     return; // Altum todavía sin esa ruta, o caído: no es motivo para romper la sincronización
   }
   const intentados = [...yaDeclarados];
   for (const bloqueador of quiero.filter((id) => !yaDeclarados.has(id))) {
-    intentados.push(bloqueador);
-    if (actuales.includes(bloqueador)) continue;
+    if (actuales.includes(bloqueador)) { intentados.push(bloqueador); continue; }
     try {
       await api(connector, 'POST', `/tasks/${taskId}/dependencies`, { blocker_id: bloqueador });
     } catch (error) {
+      if (!(error instanceof NotRetryable)) throw error;
       console.log(`[altum] ${item.id}: no pude declarar el bloqueador — ${error.message}`);
     }
+    intentados.push(bloqueador);
   }
   writeState(BLOQUEADORES_DECLARADOS, { ...todos, [taskId]: intentados });
 }
@@ -798,7 +806,7 @@ async function createTask(connector, item, description, { assignee, email, custo
 // Para quien reciba los webhooks de Altum (n8n, función serverless…): firma = HMAC-SHA256(secreto, "{timestamp}." + cuerpo).
 export function verifyAltumSignature({ secret, timestamp, signature, rawBody, now = Date.now() / 1000 }) {
   if (!secret || !timestamp || !signature) return false;
-  if (Math.abs(now - Number(timestamp)) > MAX_SIGNATURE_AGE_S) return false;
+  if (!Number.isFinite(Number(timestamp)) || !Number.isFinite(now) || Math.abs(now - Number(timestamp)) > MAX_SIGNATURE_AGE_S) return false;
   const expected = createHmac('sha256', secret).update(`${timestamp}.`).update(rawBody).digest('hex');
   const received = String(signature).replace(/^sha256=/, '');
   return expected.length === received.length && timingSafeEqual(Buffer.from(expected), Buffer.from(received));

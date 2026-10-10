@@ -210,12 +210,16 @@ export function pasosLimpieza({ installs = instalaciones() } = {}) {
     // equipo (versionado), no se corre; queda para un PR.
     // Sin poder preguntarle a git (sin git en el PATH, timeout, repo con lock) NUNCA se trata como
     // personal: se asume que SÍ es del equipo, para no terminar editando por error su settings.json.
-    const versionado = declaraElPlugin(carpeta) && estaVersionado(AJUSTES(carpeta)) !== false;
+    const versionado = existsSync(AJUSTES(carpeta)) && estaVersionado(AJUSTES(carpeta)) !== false;
     const ambitos = [...new Set(installs
       .filter((i) => i.scope !== 'user' && i.proyecto && mismaCarpeta(i.proyecto) === mismaCarpeta(carpeta))
       .map((i) => i.scope))];
     for (const ambito of ambitos) {
-      if (ambito === 'project' && versionado) continue;
+      if (ambito === 'project' && versionado) {
+        pasos.push({ cmd: 'claude', args: ['plugin', 'update', PLUGIN, '--scope', 'project'], cwd: carpeta,
+          pendientePr: carpeta, nota: `actualizar la copia de ${path.basename(carpeta)}; retirar su configuración versionada requiere PR` });
+        continue;
+      }
       pasos.push({
         cmd: 'claude', args: ['plugin', 'uninstall', PLUGIN, '--scope', ambito], cwd: carpeta, opcional: true,
         nota: `quitar la copia de ${path.basename(carpeta)} (ámbito ${ambito})`,
@@ -317,7 +321,6 @@ const YA_ESTABA = {
   uninstall: /plugin .*(is )?not installed|no está instalad|installed in user scope|no such plugin|ya no existe/i,
   enable: /already enabled|ya está (habilitado|activado|encendid)/i,
   install: /already installed|ya está instalad/i,
-  marketplace: /but not all|could not be refreshed/i,
 };
 export function esBenigno(motivo, paso = null) {
   if (typeof paso !== 'object') paso = null;   // también se usa como callback de .every/.some
@@ -346,6 +349,11 @@ export function ejecutarPasos(pasos, { correr = ejecutar } = {}) {
       // "está instalado en local, no en project": se reintenta con el ámbito que pide, una sola vez.
       const otroAmbito = ambitoQuePide(todo);
       if (otroAmbito && paso.args?.includes('uninstall') && !paso.reintentado && otroAmbito !== 'user') {
+        if (otroAmbito === 'project' && existsSync(AJUSTES(paso.cwd)) && estaVersionado(AJUSTES(paso.cwd)) !== false) {
+          resultados.push(...ejecutarPasos([{ cmd: 'claude', args: ['plugin', 'update', PLUGIN, '--scope', 'project'], cwd: paso.cwd,
+            pendientePr: paso.cwd, nota: 'actualizar la copia sin editar la configuración del equipo' }], { correr }));
+          continue;
+        }
         const conOtro = { ...paso, reintentado: true, args: paso.args.map((a, i) => (paso.args[i - 1] === '--scope' ? otroAmbito : a)) };
         console.log(`   (esa copia es de ámbito ${otroAmbito}: lo intento así)`);
         resultados.push(...ejecutarPasos([conOtro], { correr }));

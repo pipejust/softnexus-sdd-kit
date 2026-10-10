@@ -42,15 +42,17 @@ function git(cwd, args) {
 // de gh, pasaba cualquiera). Un repositorio sin Altum no tiene este candado.
 function motivoParaNoUnir(cwd) {
   const conectores = leerJson(path.join(cwd, '.sn/connectors.json'))?.connectors || [];
-  if (!conectores.some((c) => c.kind === 'altum' && c.project_id && c.enabled !== false)) return '';
+  const proyecto = conectores.find((c) => c.kind === 'altum' && c.project_id && c.enabled !== false)?.project_id;
+  if (!proyecto) return '';
   const archivo = path.join(cwd, '.sn/state/altum-lider.json');
   let lider = leerJson(archivo);
-  if (!lider?.name || !lider.at || Date.now() - lider.at > LIDER_VIEJO_MS) {
+  const vigente = (l) => l?.name && l.project_id === proyecto && Number.isFinite(l.at) && l.at <= Date.now() && Date.now() - l.at <= LIDER_VIEJO_MS;
+  if (!vigente(lider)) {
     // Se pregunta a Altum con el motor del plugin (el que la persona mantiene al día).
     try { execFileSync(process.execPath, [MOTOR, 'lead', '--github'], { cwd, stdio: 'ignore', timeout: 15000, windowsHide: true }); } catch { /* sin clave o sin red */ }
     lider = leerJson(archivo) || lider;
   }
-  if (!lider?.name) {
+  if (!vigente(lider)) {
     return 'No pude confirmar con Altum quién es el líder del proyecto (sin conexión o sin tu clave). Solo el líder une el PR: inténtalo cuando haya conexión.';
   }
   if (!lider.github) {
@@ -83,7 +85,7 @@ async function motivoParaNoAbrirPr(cwd) {
     }
     return '';
   } catch {
-    return ''; // si no se puede leer el estado, no se bloquea por esto (lo demás del guard sigue)
+    return 'No pude verificar los sellos y la evidencia del repositorio. Corrige el estado antes de abrir el PR.';
   }
 }
 

@@ -10,6 +10,7 @@ bash pruebas/todas.sh
 | Prueba | Qué cubre |
 |---|---|
 | `reglas-test.mjs` | Reglas de sincronización y detección del mensaje 422 observado en el sandbox real. |
+| `auditoria-test.mjs` | Regresiones de simulación sin envíos, rechazos sucesivos, comandos anidados, caché del líder, firma y validez del commit, y fallos del ejecutor de pruebas. |
 | `instalador-test.sh` | El script de arranque conserva las copias anteriores si falla la actualización, incluso cuando existe el motor anterior. |
 | `run.sh` | El motor de punta a punta: eventos, conectores REST, webhook, Matrix y GitHub Issues, cola de reintentos, motor del repositorio frente al del plugin, y las dos reglas de Windows (clave del sistema, sin consolas). |
 | `altum-test.sh` | El conector nativo de Altum contra el contrato real: crear y actualizar tareas sin duplicar, estados, criterios de aceptación, tareas de reuniones (Acten), repositorios del proyecto, `conectar`, firma del líder y PR de GitHub y Azure DevOps. |

@@ -235,7 +235,7 @@ export function whoAmIText(me, projectId) {
 export async function projectLead(connector, projectId = connector.project_id) {
   const lider = await leerLider(connector, projectId);
   // Copia local: validation-state la usa para no aceptar firmas de quien no es el líder (sin red).
-  if (lider?.name) writeState('altum-lider.json', { at: Date.now(), name: lider.name, email: lider.email || '', emails: lider.emails || [], github: lider.github || '' });
+  writeState('altum-lider.json', { at: Date.now(), project_id: projectId, name: lider?.name || '', email: lider?.email || '', emails: lider?.emails || [], github: lider?.github || '' });
   return lider;
 }
 
