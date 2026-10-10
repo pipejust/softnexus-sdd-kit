@@ -26,7 +26,8 @@ try {
   const input = payload.tool_input ?? {};
   const relevant = payload.tool_name === 'Bash'
     ? RELEVANT_COMMAND.test(String(input.command ?? ''))
-    : RELEVANT_PATH.test(path.relative(root, path.resolve(root, String(input.file_path ?? ''))));
+    // En Windows path.relative devuelve "docs\\items\\x": se normaliza o nunca coincidía.
+    : RELEVANT_PATH.test(path.relative(root, path.resolve(root, String(input.file_path ?? ''))).replace(/\\/g, '/'));
   if (relevant && existsSync(path.join(root, '.sn/connectors.json')) && existsSync(preparado)) {
     spawn(process.execPath, [script, 'sync', '--background'], { windowsHide: true, cwd: root, detached: process.platform !== 'win32', stdio: 'ignore' }).unref();
   }

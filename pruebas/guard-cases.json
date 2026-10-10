@@ -93,5 +93,549 @@
   "env -u SN_ALTUM_KEY bash -c true",
   0,
   "env -u (quitar la variable) no imprime nada: no se bloquea"
+ ],
+ [
+  "git commit -m \"no usar git push --force nunca\"",
+  0,
+  "un mensaje de commit que NOMBRA un comando peligroso no se bloquea"
+ ],
+ [
+  "gh pr create --title x --body \"$(cat <<'EOF'\nNo hagas git push origin main ni rm -rf /\nEOF\n)\"",
+  0,
+  "el cuerpo de un PR (heredoc) es texto, no comandos"
+ ],
+ [
+  "cat > notas.md <<EOF\ngit push --force\nrm -rf /\nEOF\ngit status",
+  0,
+  "heredoc sin comillas: su texto se salta y el comando de después se revisa"
+ ],
+ [
+  "cat > notas.md <<EOF\nhola\nEOF\ngit push --force origin feat/x",
+  2,
+  "después del heredoc, un push forzado sí se bloquea"
+ ],
+ [
+  "sed -i '' 's/env|x/y/' archivo.txt",
+  0,
+  "la palabra env dentro de comillas no es el comando env"
+ ],
+ [
+  "git push -fu origin feat/x",
+  2,
+  "force escondido en banderas juntas (-fu)"
+ ],
+ [
+  "git push origin +feat/x",
+  2,
+  "+rama es un push forzado"
+ ],
+ [
+  "git push --mirror",
+  2,
+  "push --mirror"
+ ],
+ [
+  "git push --force-with-lease origin feat/x",
+  2,
+  "force-with-lease también reescribe"
+ ],
+ [
+  "git push origin HEAD:main",
+  2,
+  "push a main por refspec"
+ ],
+ [
+  "git -C ../otro push --force",
+  2,
+  "opciones globales de git antes del push"
+ ],
+ [
+  "rm -rf ~/",
+  2,
+  "rm -rf ~/"
+ ],
+ [
+  "rm -r -f .",
+  2,
+  "rm con banderas separadas sobre la carpeta actual"
+ ],
+ [
+  "rm -rf \"$HOME\"",
+  2,
+  "rm -rf del home entre comillas"
+ ],
+ [
+  "rm -rf node_modules dist",
+  0,
+  "borrar carpetas del proyecto sí se puede"
+ ],
+ [
+  "git clean -fdx",
+  2,
+  "git clean -fdx borra lo que no está en git"
+ ],
+ [
+  "git clean -n",
+  0,
+  "git clean -n solo muestra"
+ ],
+ [
+  "cat .env.example",
+  0,
+  "leer el ejemplo de .env"
+ ],
+ [
+  "cat config/.env.local",
+  2,
+  "leer .env.local"
+ ],
+ [
+  "grep KEY < .env",
+  2,
+  "leer .env por redirección"
+ ],
+ [
+  "env",
+  2,
+  "env solo imprime todas las variables"
+ ],
+ [
+  "printenv",
+  2,
+  "printenv solo imprime todas las variables"
+ ],
+ [
+  "printenv HOME",
+  0,
+  "printenv de una variable que no es secreta"
+ ],
+ [
+  "sudo env",
+  2,
+  "env detrás de sudo"
+ ],
+ [
+  "security find-generic-password -a yo -s SN_ALTUM_KEY -w",
+  2,
+  "sacar la clave del Llavero"
+ ],
+ [
+  "psql -c \"drop table users\"",
+  2,
+  "DDL destructivo en un cliente SQL"
+ ],
+ [
+  "git commit -m \"drop table users en la migración nueva\"",
+  0,
+  "un commit que habla de DDL no es DDL"
+ ],
+ [
+  "echo '{}' > .sn/state/altum-lider.json",
+  2,
+  "reescribir quién es el líder a mano"
+ ],
+ [
+  "cat .sn/state/altum-lider.json",
+  0,
+  "leer quién es el líder sí se puede"
+ ],
+ [
+  "npm publish",
+  2,
+  "publicar paquete"
+ ],
+ [
+  "git clone --depth 1 https://github.com/x/y",
+  2,
+  "clone con opciones y sin destino"
+ ],
+ [
+  "git clone --depth 1 https://github.com/x/y ~/Proyectos/y",
+  0,
+  "clone con opciones y con destino"
+ ],
+ [
+  {
+   "tool_name": "Read",
+   "tool_input": {
+    "file_path": "C:\\proyecto\\.env"
+   }
+  },
+  2,
+  "Read de .env con ruta de Windows"
+ ],
+ [
+  {
+   "tool_name": "Grep",
+   "tool_input": {
+    "pattern": "KEY",
+    "path": "config/.env.local"
+   }
+  },
+  2,
+  "Grep dentro de .env.local"
+ ],
+ [
+  {
+   "tool_name": "MultiEdit",
+   "tool_input": {
+    "file_path": ".github/workflows/ci.yml",
+    "edits": []
+   }
+  },
+  2,
+  "MultiEdit de un workflow de CI"
+ ],
+ [
+  {
+   "tool_name": "Write",
+   "tool_input": {
+    "file_path": "/repo/.sn/state/altum-lider.json",
+    "content": "{}"
+   }
+  },
+  2,
+  "escribir a mano quién es el líder"
+ ],
+ [
+  {
+   "tool_name": "Read",
+   "tool_input": {
+    "file_path": "/repo/.env.example"
+   }
+  },
+  0,
+  "leer .env.example"
+ ],
+ [
+  {
+   "tool_name": "Edit",
+   "tool_input": {
+    "file_path": "/repo/plugin/plantillas/.github/workflows/sn-sync.yml"
+   }
+  },
+  0,
+  "las plantillas del kit no son CI activo"
+ ],
+ [
+  null,
+  0,
+  "payload vacío (null): no se rompe ni bloquea"
+ ],
+ [
+  "git commit -m \"docs: altum-lider.json no se edita a mano\"",
+  0,
+  "A1: commit que NOMBRA el archivo no se bloquea"
+ ],
+ [
+  "git add .sn/state/altum-lider.json",
+  0,
+  "A1: git add del archivo no se bloquea"
+ ],
+ [
+  "test -f .sn/state/altum-lider.json && echo si",
+  0,
+  "A1: comprobar que existe no se bloquea"
+ ],
+ [
+  "echo \"{}\" > .sn/state/altum-lider.json",
+  2,
+  "A1: escribirlo SÍ se bloquea"
+ ],
+ [
+  "sed -i \"\" \"s/x/y/\" .sn/state/altum-lider.json",
+  2,
+  "A1: editarlo con sed -i SÍ se bloquea"
+ ],
+ [
+  "grep -rn \".env\" .gitignore",
+  0,
+  "A2: patrón \".env\" en grep no es el archivo"
+ ],
+ [
+  "ls -la | grep .env",
+  0,
+  "A2: grep de un pipe sobre \".env\" como patrón"
+ ],
+ [
+  "rg \"\\.env\" src",
+  0,
+  "A2: patrón escapado en rg no es el archivo"
+ ],
+ [
+  "grep -e \".env\" .env",
+  2,
+  "A2: con -e, el siguiente posicional SÍ es el archivo"
+ ],
+ [
+  "echo X > .env",
+  2,
+  "A3: redirección > hacia .env"
+ ],
+ [
+  "echo X >> .env",
+  2,
+  "A3: redirección >> hacia .env"
+ ],
+ [
+  "cp /dev/null supabase/migrations/001.sql",
+  2,
+  "A3: cp sobre una migración"
+ ],
+ [
+  "sed -i \"\" \"s/a/b/\" .github/workflows/ci.yml",
+  2,
+  "A3: sed -i sobre un workflow de CI"
+ ],
+ [
+  "echo hola > notas.md",
+  0,
+  "A3: redirección normal no se bloquea"
+ ],
+ [
+  "git branch -D feat/vieja",
+  2,
+  "A4: git branch -D"
+ ],
+ [
+  "git checkout .",
+  2,
+  "A4: git checkout . descarta cambios"
+ ],
+ [
+  "git checkout -- archivo.txt",
+  2,
+  "A4: git checkout -- descarta un archivo"
+ ],
+ [
+  "git restore archivo.txt",
+  2,
+  "A4: git restore descarta cambios"
+ ],
+ [
+  "git restore --staged archivo.txt",
+  0,
+  "A4: git restore --staged es seguro"
+ ],
+ [
+  "git stash clear",
+  2,
+  "A4: git stash clear borra el stash"
+ ],
+ [
+  "git stash drop",
+  2,
+  "A4: git stash drop borra una entrada"
+ ],
+ [
+  "git tag -d v1",
+  2,
+  "A4: git tag -d"
+ ],
+ [
+  "git push origin --delete main",
+  2,
+  "A4: borrar la rama protegida en el remoto"
+ ],
+ [
+  "git push origin --delete feat/vieja",
+  0,
+  "A4: borrar una rama propia en el remoto es normal"
+ ],
+ [
+  "gh release delete v1 --yes",
+  2,
+  "A4: gh release delete"
+ ],
+ [
+  "gh repo delete owner/repo --yes",
+  2,
+  "A4: gh repo delete"
+ ],
+ [
+  "gh api -X DELETE repos/o/r/git/refs/heads/dev",
+  2,
+  "A4: gh api DELETE"
+ ],
+ [
+  "gh secret delete SN_ALTUM_KEY",
+  2,
+  "A4: gh secret delete"
+ ],
+ [
+  "if true; then git push --force; fi",
+  2,
+  "A5: push forzado detrás de \"then\""
+ ],
+ [
+  "for b in a b; do git push origin --delete main; done",
+  2,
+  "A5: detrás de \"do\""
+ ],
+ [
+  "bash -c \"git push --force\"",
+  2,
+  "A6: bash -c esconde el push forzado"
+ ],
+ [
+  "sh -c 'rm -rf ~/'",
+  2,
+  "A6: sh -c esconde un borrado del home"
+ ],
+ [
+  "eval \"git push -f\"",
+  2,
+  "A6: eval esconde el push forzado"
+ ],
+ [
+  "timeout 10 git push -f",
+  2,
+  "A6: timeout esconde el push forzado"
+ ],
+ [
+  "sudo -u otro git push --force",
+  2,
+  "A6: sudo con -u no tapa el push forzado"
+ ],
+ [
+  "echo \"$SN_ALTUM_KEY\" | gh secret set SN_ALTUM_KEY",
+  0,
+  "M3: secreto hacia gh secret set (CI) no se bloquea"
+ ],
+ [
+  "printf %s \"$SN_ALTUM_KEY\" | pbcopy",
+  0,
+  "M3: secreto hacia el portapapeles no se bloquea"
+ ],
+ [
+  "echo \"$SN_ALTUM_KEY\" | tee archivo.txt",
+  2,
+  "M3: secreto hacia tee SÍ se bloquea (tee también lo imprime)"
+ ],
+ [
+  "echo ${SN_ALTUM_KEY:+set}",
+  0,
+  "M3: comprobar que está definida (sin su valor) no se bloquea"
+ ],
+ [
+  "echo \"usa \\$SN_ALTUM_KEY\"",
+  0,
+  "M3: mencionar el nombre de la variable, escapada, no se bloquea"
+ ],
+ [
+  "cat ~/.ssh/id_rsa",
+  2,
+  "M4: leer una llave SSH"
+ ],
+ [
+  "cat ~/.aws/credentials",
+  2,
+  "M4: leer credenciales de AWS"
+ ],
+ [
+  "gh auth token",
+  2,
+  "M4: gh auth token imprime el token de la sesión"
+ ],
+ [
+  "echo $GITHUB_TOKEN",
+  2,
+  "M4: imprimir un token que no es SN_*"
+ ],
+ [
+  "source .env",
+  0,
+  "M5: source .env no se bloquea (no imprime)"
+ ],
+ [
+  ". .env",
+  0,
+  "M5: \". .env\" no se bloquea"
+ ],
+ [
+  "cat <<< hola\ngit push --force origin feat/x",
+  2,
+  "M7: <<< no traga el comando de la siguiente línea"
+ ],
+ [
+  "git clean -nfd",
+  0,
+  "M9: git clean -nfd (banderas juntas, con -n) es una simulación"
+ ],
+ [
+  "git push --dry-run origin main",
+  0,
+  "M9: git push --dry-run no empuja nada"
+ ],
+ [
+  "npm publish --dry-run",
+  0,
+  "M10: npm publish --dry-run es solo verificación"
+ ],
+ [
+  "pnpm -r publish",
+  2,
+  "M10: pnpm -r publish"
+ ],
+ [
+  "pnpm --filter paquete publish",
+  2,
+  "M10: pnpm --filter … publish"
+ ],
+ [
+  "npm unpublish paquete@1.0.0",
+  2,
+  "M10: npm unpublish borra una versión publicada"
+ ],
+ [
+  "git push origin main\r\n",
+  2,
+  "B4: CRLF no impide detectar el push a main"
+ ],
+ [
+  {
+   "tool_name": "Edit",
+   "tool_input": {
+    "file_path": "supabase/migrations/001_vieja.sql"
+   },
+   "cwd": "<<M>>"
+  },
+  2,
+  "M2: Edit sobre una migración YA versionada se bloquea"
+ ],
+ [
+  {
+   "tool_name": "Edit",
+   "tool_input": {
+    "file_path": "supabase/migrations/002_nueva.sql"
+   },
+   "cwd": "<<M>>"
+  },
+  0,
+  "M2: Edit sobre una migración que el agente acaba de crear (sin commit) NO se bloquea"
+ ],
+ [
+  {
+   "tool_name": "Write",
+   "tool_input": {
+    "file_path": "supabase/migrations/001_vieja.sql",
+    "content": "x"
+   },
+   "cwd": "<<M>>"
+  },
+  2,
+  "M2: Write que sobrescribiría una migración existente se bloquea"
+ ],
+ [
+  {
+   "tool_name": "Write",
+   "tool_input": {
+    "file_path": "supabase/migrations/003_otra.sql",
+    "content": "x"
+   },
+   "cwd": "<<M>>"
+  },
+  0,
+  "M2: Write de una migración nueva (no existe aún) no se bloquea"
  ]
 ]

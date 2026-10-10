@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Prueba de punta a punta del motor sn-sync contra un servidor falso (REST, webhook, Matrix, GitHub Issues).
 set -uo pipefail
+export SN_MOTOR_PROPIO=1   # las pruebas usan ESTE motor, no el plugin instalado en el computador
 T="$(cd "$(dirname "$0")" && pwd)"
 W="$T/tmp"; mkdir -p "$W"   # todo lo que la prueba crea vive aquí (no se versiona)
 PLUGIN="$(cd "$T/../plugin/scripts" && pwd)"
@@ -115,6 +116,10 @@ check "status lista 4 conectores" "[ \$(node scripts/sn/sn-sync.mjs status | gre
 printf '#!/bin/sh\necho hook-previo\n' > .git/hooks/post-commit; chmod +x .git/hooks/post-commit
 node scripts/sn/sn-sync.mjs githooks >/dev/null; node scripts/sn/sn-sync.mjs githooks >/dev/null
 check "Hook previo se conserva y la línea no se duplica" "grep -q hook-previo .git/hooks/post-commit && [ \$(grep -c softnexus-sync .git/hooks/post-commit) -eq 1 ]"
+mkdir -p .husky && printf '#!/bin/sh\nnpx lint-staged\n' > .husky/post-commit && git config core.hooksPath .husky
+out=$(node scripts/sn/sn-sync.mjs githooks)
+check "Ganchos versionados del equipo (.husky): no se tocan, se dice qué agregar en un PR" "! grep -q softnexus-sync .husky/post-commit && echo \"\$out\" | grep -q 'no los toco por mi cuenta'"
+git config --unset core.hooksPath; rm -rf .husky
 printf -- '---\nid: CLI-0002\ntype: feature\ntitle: Exportar a Excel\n---\n' > docs/items/CLI-0002.md
 git add -A && git commit -qm "nuevo item" >/dev/null; sleep 5
 check "Un commit dispara la sync en segundo plano (CLI-0002 llega solo)" "grep -q 'CLI-0002' '$LOG'"
@@ -181,11 +186,27 @@ JSON
 declara_otra_vez
 check "Un proyecto cuya carpeta ya no existe no se intenta limpiar (ni cuenta como fallo)" "ver \"import {pasosLimpieza, ejecutarPasos} from '$PLUGIN/sync/version.mjs'; const p=pasosLimpieza({installs:[{scope:'project',version:'0.3',proyecto:'/tmp/no-existe-sn-xyz'}]}); const suyos=p.filter(x=>x.nota.includes('no-existe-sn-xyz')); const r=ejecutarPasos(suyos); process.exit(suyos.length===1 && suyos[0].nota.includes('ya no existe') && !suyos.some(x=>x.args) && r.every(x=>x.ok) ? 0 : 1)\""
 declara_otra_vez
-check "limpiar-copias solo quita: una desinstalación y un ajuste por proyecto, nada más" "ver \"import {pasosLimpieza} from '$PLUGIN/sync/version.mjs'; const p=pasosLimpieza(); process.exit(p.length===4 && p.filter(x=>x.args&&x.args.includes('uninstall')).length===2 && p.filter(x=>x.fn).length===2 ? 0 : 1)\""
+check "limpiar-copias: desinstala solo las copias instaladas (con su ámbito) y ajusta el settings no versionado que la pide" "ver \"import {pasosLimpieza} from '$PLUGIN/sync/version.mjs'; const p=pasosLimpieza(); const quita=p.filter(x=>x.args&&x.args.includes('uninstall')); const ajusta=p.filter(x=>x.fn&&!x.pendientePr).length; process.exit(quita.length===1 && quita[0].cwd.endsWith('proyecto-de-otro') && ajusta===1 ? 0 : 1)\""
 check "instalar-general solo instala o actualiza la copia del computador" "ver \"import {pasosInstalacionGeneral} from '$PLUGIN/sync/version.mjs'; const p=pasosInstalacionGeneral(); const t=p.map(x=>x.args.join(' ')).join('|'); process.exit(!t.includes('uninstall') && t.includes('marketplace update') && /plugin (install|update) softnexus-sdd@softnexus/.test(t) ? 0 : 1)\""
 check "Sin copia de usuario, instalar-general instala (no actualiza)" "ver \"import {pasosInstalacionGeneral} from '$PLUGIN/sync/version.mjs'; const p=pasosInstalacionGeneral({installs: []}); process.exit(p.some(x=>x.args.includes('install')) && !p.some(x=>x.args.includes('update') && x.args.includes('softnexus-sdd@softnexus')) ? 0 : 1)\""
 declara_otra_vez
-check "El comando general quita cada copia, borra la línea que la pedía y deja la de usuario al día" "W_PROY=\"$W/proyecto-de-otro\" ver \"import {pasosGenerales} from '$PLUGIN/sync/version.mjs'; const p=pasosGenerales(); const quita=p.filter(x=>x.args && x.args.includes('uninstall')).length; const ajustes=p.filter(x=>x.fn).length; const pasos=p.map(x=>x.args?x.args.join(' '):'ajuste'); process.exit(quita===2 && ajustes===2 && pasos.includes('plugin update softnexus-sdd@softnexus') ? 0 : 1)\""
+check "El comando general quita cada copia, ajusta solo lo no versionado y deja la de usuario al día" "W_PROY=\"$W/proyecto-de-otro\" ver \"import {pasosGenerales} from '$PLUGIN/sync/version.mjs'; const p=pasosGenerales(); const quita=p.filter(x=>x.args && x.args.includes('uninstall')).length; const ajusta=p.filter(x=>x.fn&&!x.pendientePr).length; const pasos=p.map(x=>x.args?x.args.join(' '):'ajuste'); process.exit(quita===1 && ajusta===1 && pasos.includes('plugin update softnexus-sdd@softnexus') ? 0 : 1)\""
+declara_otra_vez
+rm -rf "$W/repo-versionado" && mkdir -p "$W/repo-versionado/.claude" && (cd "$W/repo-versionado" && git init -q && printf '{"enabledPlugins": {"softnexus-sdd@softnexus": true}}\n' > .claude/settings.json && git add .claude/settings.json && git -c user.name=t -c user.email=t@x commit -qm base)
+cat > "$CASA/.claude.json" <<JSON
+{"projects": {"$W/proy-con-copia": {}, "$W/repo-versionado": {}}}
+JSON
+declara_otra_vez
+check "Un .claude/settings.json VERSIONADO nunca se edita: se reporta para un PR" "ver \"import {pasosLimpieza, ejecutarPasos} from '$PLUGIN/sync/version.mjs'; import {readFileSync} from 'node:fs'; const antes=readFileSync('$W/repo-versionado/.claude/settings.json','utf8'); const p=pasosLimpieza().filter(x=>x.fn); ejecutarPasos(p); const despues=readFileSync('$W/repo-versionado/.claude/settings.json','utf8'); process.exit(antes===despues && p.some(x=>x.pendientePr && x.pendientePr.endsWith('repo-versionado')) ? 0 : 1)\""
+check "Sin git en el PATH, un settings.json que SÍ está versionado se trata como del equipo (CRÍTICO: antes se podía editar en silencio)" "ver \"import {estaVersionado} from '$PLUGIN/sync/version.mjs'; process.exit(estaVersionado('$W/repo-versionado/.claude/settings.json')===true ? 0 : 1)\""
+check "estaVersionado sin poder preguntar (sin git) da null, nunca false (false sería \"se puede editar\")" "ver \"process.env.PATH='/no/existe/git'; import {estaVersionado} from '$PLUGIN/sync/version.mjs'; process.exit(estaVersionado('$W/repo-versionado/.claude/settings.json')===null ? 0 : 1)\""
+check "pasosLimpieza trata ese \"no se pudo preguntar\" como versionado: no corre uninstall --scope project" "ver \"process.env.PATH='/no/existe/git'; import {pasosLimpieza} from '$PLUGIN/sync/version.mjs'; const p=pasosLimpieza({installs:[{scope:'project',version:'0.3',proyecto:'$W/repo-versionado'}]}).filter(x=>x.nota.includes('repo-versionado')); process.exit(!p.some(x=>x.args) && p.some(x=>x.pendientePr) ? 0 : 1)\""
+check "Copia de proyecto en un repo con settings VERSIONADO: no se corre \"uninstall --scope project\" (claude editaría ese archivo)" "ver \"import {pasosLimpieza} from '$PLUGIN/sync/version.mjs'; const p=pasosLimpieza({installs:[{scope:'project',version:'0.3',proyecto:'$W/repo-versionado'}]}).filter(x=>x.nota.includes('repo-versionado')); process.exit(!p.some(x=>x.args) && p.some(x=>x.pendientePr) ? 0 : 1)\""
+check "Copias project y local en la misma carpeta: se quitan las dos, cada una con su ámbito" "ver \"import {pasosLimpieza} from '$PLUGIN/sync/version.mjs'; const p=pasosLimpieza({installs:[{scope:'project',version:'0.3',proyecto:'$W/proyecto-de-otro'},{scope:'local',version:'0.3',proyecto:'$W/proyecto-de-otro/'}]}).filter(x=>x.args); const a=p.map(x=>x.args[x.args.length-1]).sort().join(','); process.exit(a==='local,project' ? 0 : 1)\""
+check "Y el repo no queda con cambios sin guardar" "[ -z \"\$(git -C \"$W/repo-versionado\" status --porcelain)\" ]"
+cat > "$CASA/.claude.json" <<JSON
+{"projects": {"$W/proy-con-copia": {}}}
+JSON
 declara_otra_vez
 check "Deja de declararlo en el proyecto, sin tocar lo demás del archivo" "ver \"import {dejarDeDeclarar, declaraElPlugin} from '$PLUGIN/sync/version.mjs'; import {readFileSync} from 'node:fs'; const c='$W/proy-con-copia'; const cambio=dejarDeDeclarar(c); const d=JSON.parse(readFileSync(c+'/.claude/settings.json','utf8')); process.exit(cambio && !declaraElPlugin(c) && d.enabledPlugins['superpowers@claude-plugins-official'] && d.permissions ? 0 : 1)\""
 check "Si un paso falla, los demás se siguen corriendo" "ver \"import {pasosParaActualizar, ejecutarPasos} from '$PLUGIN/sync/version.mjs'; let n=0; const r=ejecutarPasos(pasosParaActualizar(), { correr: (p) => { n+=1; if (n===1) throw new Error('carpeta borrada'); } }); process.exit(n===4 && r.filter(x=>x.ok).length===3 ? 0 : 1)\""
@@ -208,7 +229,7 @@ check "\"Ya estaba encendido\" o \"no estaba instalado\" NO cuentan como fallo" 
 cat > "$W/salida-normal.mjs" <<'JS'
 const { ejecutarPasos } = await import(process.env.SN_VERSION_MJS);
 // claude escribe sus mensajes por la salida NORMAL, no por la de errores
-const ok = ejecutarPasos([{ cmd: 'sh', args: ['-c', 'echo "Failed: is already enabled at user scope"; exit 1'], opcional: true, nota: 'x' }]);
+const ok = ejecutarPasos([{ cmd: 'sh', que: 'enable', args: ['-c', 'echo "Failed: is already enabled at user scope"; exit 1'], opcional: true, nota: 'x' }]);
 const malo = ejecutarPasos([{ cmd: 'sh', args: ['-c', 'echo "Failed: disco lleno"; exit 1'], nota: 'y' }]);
 console.log(ok[0].ok && ok[0].yaEstaba && !malo[0].ok && malo[0].motivo.includes('disco lleno') ? 'salida-ok' : 'salida-mal');
 JS
@@ -219,8 +240,8 @@ const r = ejecutarPasos([{ cmd: 'sh', args: ['-c', 'echo "   ✗ NO SE PUDO: ✘
 console.log(r[0].motivo === '✘ Failed to uninstall: permiso denegado' ? 'motivo-ok' : `motivo-mal: ${r[0].motivo}`);
 JS
 mkdir -p "$W/con tildes ñ/scripts"
-cp "$PLUGIN/validation-state.mjs" "$W/con tildes ñ/scripts/"
-check "Una ruta con tildes o espacios no rompe los comandos (se decodifica bien)" "cd \"$W/con tildes ñ\" && node scripts/validation-state.mjs | grep -q '^\\[' ; cd \"$T\""
+cp -R "$PLUGIN/validation-state.mjs" "$PLUGIN/sync" "$W/con tildes ñ/scripts/"
+check "Una ruta con tildes o espacios no rompe los comandos (se decodifica bien)" "(cd \"$W/con tildes ñ\" && node scripts/validation-state.mjs | grep -q '^\\[')"
 cat > "$W/ambito.mjs" <<'JS'
 const { ejecutarPasos, ambitoQuePide } = await import(process.env.SN_VERSION_MJS);
 const intentos = [];
@@ -236,15 +257,36 @@ console.log(bien ? 'ambito-ok' : `ambito-mal ${JSON.stringify(intentos)}`);
 JS
 check "Si la copia es de ámbito local, se desinstala con ese ámbito (no se da por fallida)" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/ambito.mjs\" 2>/dev/null | grep -q ambito-ok"
 check "Solo se refresca NUESTRO catálogo (si otro ajeno falla, no es problema nuestro)" "ver \"import {pasosInstalacionGeneral} from '$PLUGIN/sync/version.mjs'; const p=pasosInstalacionGeneral(); const m=p.find(x=>x.args && x.args.includes('marketplace')); process.exit(m && m.args[m.args.length-1]==='softnexus' ? 0 : 1)\""
+check "\"No está instalado\" es lo que se quería al desinstalar, pero al ACTUALIZAR es un fallo; y que no exista claude (ENOENT) nunca es \"ya estaba\"" "ver \"import {esBenigno} from '$PLUGIN/sync/version.mjs'; const u={cmd:'claude',args:['plugin','uninstall']}; const up={cmd:'claude',args:['plugin','update']}; process.exit(esBenigno('Plugin is not installed', u) && !esBenigno('Plugin is not installed at scope user', up) && !esBenigno('spawn claude ENOENT', up) && !esBenigno('spawn claude ENOENT') ? 0 : 1)\""
 check "Y si aun así se queja de otros catálogos, no cuenta como fallo" "ver \"import {esBenigno} from '$PLUGIN/sync/version.mjs'; process.exit(esBenigno('✘ Updated 11 marketplaces, but not all') ? 0 : 1)\""
 check "El script muestra el MOTIVO y guarda todo en un archivo" "grep -q 'MOTIVO' \"$T/../herramientas/plugin-general.sh\" && grep -q 'BITACORA' \"$T/../herramientas/plugin-general.sh\""
 check "El motivo de verdad sube al resumen, no el genérico \"Command failed\"" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/motivo.mjs\" 2>/dev/null | grep -q motivo-ok"
 check "Lo que el comando dice por la salida normal también cuenta para saber si fue un fallo" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/salida-normal.mjs\" 2>/dev/null | grep -q salida-ok"
 check "Un paso que termina en \"ya estaba\" se cuenta como hecho" "ver \"import {ejecutarPasos} from '$PLUGIN/sync/version.mjs'; const r=ejecutarPasos([{cmd:'claude',args:['plugin','enable'],opcional:true,nota:'x'}], { correr: () => { const e=new Error('Failed to enable plugin: Plugin is already enabled at user scope'); throw e; } }); process.exit(r[0].ok && r[0].yaEstaba ? 0 : 1)\""
 check "El script tampoco lo cuenta como fallo" "grep -q 'already enabled' \"$T/../herramientas/plugin-general.sh\""
+check "Una ruta que termina en barra no se come la comilla de cierre en cmd.exe" "ver \"import {entrecomillar} from '$PLUGIN/sync/version.mjs'; process.exit(entrecomillar('C:\\\\\\\\Mis Proyectos\\\\\\\\')==='\\\"C:\\\\\\\\Mis Proyectos\\\\\\\\\\\\\\\\\\\"' ? 0 : 1)\""
+check "Los pasos para Windows se pueden pegar en PowerShell (sin &&)" "ver \"import {comoActualizar} from '$PLUGIN/sync/version.mjs'; const p=comoActualizar({cat:{tipo:'github'},installs:[{scope:'user',version:'1'},{scope:'project',version:'1',proyecto:'$W/proyecto-de-otro'}]},'win32'); process.exit(p.some(l=>l.startsWith('cd \\\"$W/proyecto-de-otro\\\"; claude')) && !p.some(l=>l.includes('&&')) ? 0 : 1)\""
 check "En Windows los argumentos se entrecomillan: una ruta con espacios no parte el comando" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/comillas.mjs\" | grep -q comillas-ok"
 HOME="$CASA" node "$PLUGIN/sn-sync.mjs" actualizar --general >"$W/salida-general.txt" 2>&1; codigo=$?
 check "Si un paso falla, el comando sale con error, lo dice y no invita a reiniciar como si nada" "[ \$codigo -ne 0 ] && grep -q 'NO SE PUDO' \"$W/salida-general.txt\" && grep -q 'ATENCIÓN' \"$W/salida-general.txt\" && ! grep -q 'AHORA SÍ' \"$W/salida-general.txt\""
+# El script de verdad, con un "claude" falso que anota lo que le piden.
+FALSO="$W/claude-falso"; rm -rf "$FALSO"; mkdir -p "$FALSO/bin" "$FALSO/casa/.claude/plugins"
+cat > "$FALSO/bin/claude" <<'SH'
+#!/bin/sh
+echo "$*" >> "$FALSO_LOG"
+case "$*" in
+  "plugin marketplace list") echo "softnexus" ;;
+  "plugin update softnexus-sdd@softnexus") [ -n "$FALLA_UPDATE" ] && { echo "✘ Plugin softnexus-sdd@softnexus is not installed at scope user"; exit 1; } ;;
+esac
+exit 0
+SH
+chmod +x "$FALSO/bin/claude"
+printf '{"plugins":{"softnexus-sdd@softnexus":[{"scope":"project","version":"0.3","projectPath":"/x"}]}}' > "$FALSO/casa/.claude/plugins/installed_plugins.json"
+FALSO_LOG="$FALSO/log" HOME="$FALSO/casa" TMPDIR="$FALSO" PATH="$FALSO/bin:$PATH" bash "$T/../herramientas/plugin-general.sh" >/dev/null 2>&1; codigo=$?
+check "Solo con copias de proyecto (sin la general), el script INSTALA la general, no intenta actualizarla" "grep -qx 'plugin install softnexus-sdd@softnexus' '$FALSO/log' && ! grep -q '^plugin update' '$FALSO/log' && [ $codigo -eq 0 ]"
+printf '{"plugins":{"softnexus-sdd@softnexus":[{"scope":"user","version":"0.3","installPath":"/no/existe"}]}}' > "$FALSO/casa/.claude/plugins/installed_plugins.json"
+: > "$FALSO/log"; FALLA_UPDATE=1 FALSO_LOG="$FALSO/log" HOME="$FALSO/casa" TMPDIR="$FALSO" PATH="$FALSO/bin:$PATH" bash "$T/../herramientas/plugin-general.sh" >"$FALSO/salida" 2>&1; codigo=$?
+check "Si actualizar falla con \"no está instalado\", es un fallo de verdad: lo dice con el motivo y sale con error" "[ $codigo -eq 1 ] && grep -q 'MOTIVO: ✘ Plugin softnexus-sdd@softnexus is not installed at scope user' '$FALSO/salida'"
 check "El script tampoco esconde errores: cuenta los fallos y sale con error" "grep -q 'fallos + 1' \"$T/../herramientas/plugin-general.sh\" && grep -q 'exit 1' \"$T/../herramientas/plugin-general.sh\""
 
 echo "== Windows: clave del sistema y sin ventanas de consola"
@@ -274,6 +316,41 @@ console.log(malos.length ? `sin-hide ${malos.join(' ')}` : 'todos-ocultos');
 JS
 check "Ningún proceso se lanza sin windowsHide (nada de consolas parpadeando en Windows)" "SN_MOTOR=$PLUGIN node \"$W/ventanas.mjs\" | grep -q todos-ocultos"
 check "Los procesos en segundo plano no usan detached fijo (en Windows abriría una consola)" "! grep -rn 'detached: true' $PLUGIN/*.mjs $PLUGIN/sync/*.mjs $PLUGIN/../hooks/*.mjs | grep -q ."
+
+echo "== La copia del motor del repositorio (la del CI) se instala con su versión"
+rm -rf "$W/nuevo-repo"; mkdir -p "$W/nuevo-repo" && (cd "$W/nuevo-repo" && git init -q)
+check "motor sin la copia dice cómo instalarla" "(cd '$W/nuevo-repo' && CLAUDE_PLUGIN_ROOT='$PLUGIN/..' node '$PLUGIN/sn-sync.mjs' motor) | grep -q 'motor --actualizar'"
+check "motor --actualizar la instala y anota de qué versión salió" "(cd '$W/nuevo-repo' && CLAUDE_PLUGIN_ROOT='$PLUGIN/..' node '$PLUGIN/sn-sync.mjs' motor --actualizar) >/dev/null && [ -f '$W/nuevo-repo/scripts/sn/sn-sync.mjs' ] && [ -f '$W/nuevo-repo/scripts/sn/sync/altum.mjs' ] && grep -qE '^[0-9]+\.[0-9]+' '$W/nuevo-repo/scripts/sn/.version'"
+
+echo "== La copia del motor en el repositorio cede al plugin del computador"
+CASA="$W/casa-falsa"; rm -rf "$CASA"; mkdir -p "$CASA/.claude/plugins" "$CASA/plug/scripts" "$CASA/plug/.claude-plugin"
+echo '{"version":"9.9.9"}' > "$CASA/plug/.claude-plugin/plugin.json"
+printf 'console.log("MOTOR DEL PLUGIN " + process.argv.slice(2).join(" "))\n' > "$CASA/plug/scripts/sn-sync.mjs"
+printf '{"plugins":{"softnexus-sdd@softnexus":[{"scope":"user","installPath":"%s","version":"9.9.9"}]}}' "$CASA/plug" > "$CASA/.claude/plugins/installed_plugins.json"
+cd "$W/repo"
+check "Con el plugin general instalado, la copia del repositorio le pasa el trabajo (rama vieja = motor viejo)" "env -u SN_MOTOR_PROPIO HOME='$CASA' node scripts/sn/sn-sync.mjs status | grep -q 'MOTOR DEL PLUGIN status'"
+echo 99.0.0 > scripts/sn/.version
+check "Si la copia del repositorio es más nueva que el plugin, manda la copia" "env -u SN_MOTOR_PROPIO HOME='$CASA' node scripts/sn/sn-sync.mjs status | grep -q '^Proyecto:'"
+rm -f scripts/sn/.version
+check "Sin plugin instalado (el CI), sigue la copia del repositorio" "env -u SN_MOTOR_PROPIO HOME='$W/sin-casa' node scripts/sn/sn-sync.mjs status | grep -q '^Proyecto:'"
+
+echo "== El orden de actualizar --general: primero instala, y si eso falla no toca los proyectos"
+FALSO2="$W/claude-falso2"; rm -rf "$FALSO2"; mkdir -p "$FALSO2/bin" "$FALSO2/casa/.claude/plugins"
+cp "$FALSO/bin/claude" "$FALSO2/bin/claude"
+mkdir -p "$W/proyecto-con-copia2/.claude"
+printf '{"plugins":{"softnexus-sdd@softnexus":[{"scope":"user","version":"0.3"},{"scope":"project","version":"0.3","projectPath":"$W/proyecto-con-copia2"}]}}' > "$FALSO2/casa/.claude/plugins/installed_plugins.json"
+FALSO_LOG="$FALSO2/log" FALLA_UPDATE=1 HOME="$FALSO2/casa" TMPDIR="$FALSO2" PATH="$FALSO2/bin:$PATH" bash "$T/../herramientas/plugin-general.sh" >"$FALSO2/salida" 2>&1; codigo=$?
+check "Si la copia general no se pudo poner al día, NO se intenta quitar la copia del proyecto (quedaría sin ningún plugin)" "[ $codigo -eq 1 ] && ! grep -q 'uninstall' '$FALSO2/log'"
+
+check "esBenigno: \"not found\" SUELTO (catálogo desregistrado) es un fallo real al desinstalar, no \"ya estaba así\"" "ver \"import {esBenigno} from '$PLUGIN/sync/version.mjs'; const u={cmd:'claude',args:['plugin','uninstall']}; process.exit(!esBenigno('✘ Marketplace softnexus not found', u) ? 0 : 1)\""
+
+check "pasosGenerales instala/actualiza la general ANTES de limpiar los proyectos (si falla, no deja el computador sin nada)" "ver \"import {pasosGenerales} from '$PLUGIN/sync/version.mjs'; const p=pasosGenerales({installs:[{scope:'project',version:'0.3',proyecto:'$W/proyecto-de-otro'}]}); const iu=p.findIndex(x=>x.args && (x.args[1]==='install'||x.args[1]==='update')); const un=p.findIndex(x=>x.args && x.args[1]==='uninstall'); process.exit(iu>=0 && un>=0 && iu<un ? 0 : 1)\""
+
+check "pasosParaActualizar instala la copia de usuario si no existía (antes siempre intentaba \"update\", que falla)" "ver \"import {pasosParaActualizar} from '$PLUGIN/sync/version.mjs'; const p=pasosParaActualizar({installs:[]}); process.exit(p.some(x=>x.args && x.args[1]==='install') ? 0 : 1)\""
+
+check "pasosParaActualizar salta un proyecto cuya carpeta ya no existe (no lo cuenta como fallo cada vez)" "ver \"import {pasosParaActualizar} from '$PLUGIN/sync/version.mjs'; const p=pasosParaActualizar({installs:[{scope:'user',version:'1'},{scope:'project',version:'0.3',proyecto:'/tmp/no-existe-sn-abc'}]}); const suyo=p.find(x=>x.nota && x.nota.includes('no-existe-sn-abc')); process.exit(suyo && suyo.fn && !suyo.args ? 0 : 1)\""
+
+check "Sin \"node\" en el PATH, el script lo dice y sale con error (antes se saltaba pasos en silencio y decía \"Listo\")" "out=\$(PATH='/usr/bin:/bin' bash '$T/../herramientas/plugin-general.sh' 2>&1); codigo=\$?; [ \$codigo -eq 1 ] && echo \"\$out\" | grep -qi 'node' && ! echo \"\$out\" | grep -q 'Listo'"
 
 stop_mock
 echo; echo "RESULTADO: $pass OK · $fail fallas"

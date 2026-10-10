@@ -54,8 +54,12 @@ function commitOf(entry) {
   return match ? match[1] : '';
 }
 
+// Un commit inventado o inalcanzable (clon superficial, rama sin traer) NO es "el plano cambió
+// después": es que no se puede verificar nada. Se distingue con un símbolo propio para no
+// confundirlo con el "vencida" normal de seguir construyendo sobre un plano ya sellado.
+const SIN_VERIFICAR = Symbol('sin-commit-verificable');
 function changedSince(commit, change, seal) {
-  if (!commit || !commitExists(commit)) return true; // Sin commit verificable, la validación no se puede dar por vigente.
+  if (!commit || !commitExists(commit)) return SIN_VERIFICAR;
   const scope = seal === 'plano' ? PLAN_PATHS.map((p) => path.join(CHANGES_DIR, change, p)) : ['.'];
   // Los commits que solo tocan validacion.md no invalidan nada.
   const log = git(['log', '--format=%h', `${commit}..HEAD`, '--', ...scope, `:(exclude)${CHANGES_DIR}/${change}/validacion.md`]);
@@ -113,7 +117,11 @@ export function statusOf(entries, change, lider = liderGuardado()) {
   if (last.type === 'CAMBIOS PEDIDOS') return { ...base, status: 'con correcciones' };
   if (last.type === 'RECHAZADO') return { ...base, status: 'detenido' };
   const commit = commitOf(last);
-  return { ...base, commit, status: changedSince(commit, change, last.seal) ? 'validación vencida' : 'validado' };
+  const cambio = changedSince(commit, change, last.seal);
+  return {
+    ...base, commit,
+    status: cambio === SIN_VERIFICAR ? 'sin commit verificable' : cambio ? 'validación vencida' : 'validado',
+  };
 }
 
 function localStates() {
@@ -144,6 +152,18 @@ function pendingRemote() {
       };
     }).filter(Boolean);
   });
+}
+
+// ¿El plano tuvo su sello 1? Se mira solo lo del plano (una entrega posterior no lo tapa). Una firma
+// "vencida" cuenta: marcar tareas en tasks.md cambia el plano y eso es normal mientras se construye.
+// Lo que no cuenta: sin aprobación, esperando, con correcciones, detenido o firmado por quien no es el líder.
+export function planoSellado(change, root = '.') {
+  const file = path.join(root, CHANGES_DIR, change, 'validacion.md');
+  const delPlano = (existsSync(file) ? parseLog(leerTexto(file)) : []).filter((e) => e.seal === 'plano');
+  if (!delPlano.length) return false;
+  // "sin commit verificable" NO cuenta: un sello con un commit inventado o inalcanzable no es un
+  // sello de verdad, aunque el texto diga "APROBADO".
+  return ['validado', 'validación vencida'].includes(statusOf(delPlano, change).status);
 }
 
 export function validationFor(change, root = '.') {

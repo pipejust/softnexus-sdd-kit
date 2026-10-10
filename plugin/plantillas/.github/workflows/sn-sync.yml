@@ -1,12 +1,12 @@
-# Softnexus: mantiene los sistemas de tareas al día con lo que pasa en GitHub
-# (PR abiertos/unidos, validaciones empujadas desde el computador del líder, merges a la rama principal).
+# Softnexus: mantiene los sistemas de tareas al día con lo que se une a la rama principal
+# (PR unidos, validaciones del líder). Corre SOLO al unir: el código de una rama sin aprobar (con su
+# copia del motor, a veces vieja) nunca escribe en Altum con la clave de la empresa.
+# El "en revisión" al abrir el PR lo manda el computador de quien lo abre.
 # Secretos: agrégalos en Settings > Secrets and variables > Actions con los mismos nombres de .sn/connectors.json.
 name: sn-sync
 on:
   push:
     branches: [main, master]
-  pull_request:
-    types: [opened, reopened, ready_for_review, closed, synchronize]
 
 concurrency:
   group: sn-sync-${{ github.ref }}
@@ -23,7 +23,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:

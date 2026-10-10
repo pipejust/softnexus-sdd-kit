@@ -48,7 +48,8 @@ export function commitsFor(item) {
   const paths = [changeDir(item.change)].filter(Boolean);
   const byPath = paths.length ? logLines(['--', ...paths]) : [];
   const seen = new Map([...byId, ...byPath].map((c) => [c.hash, c]));
-  return [...seen.values()].sort((a, b) => b.date.localeCompare(a.date));
+  // Por instante, no por texto: cada persona commitea con su propio desfase horario (-05:00, +01:00…).
+  return [...seen.values()].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
 }
 
 export function filesTouched(commits) {

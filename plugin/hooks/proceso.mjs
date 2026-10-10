@@ -3,7 +3,7 @@
 // el ítem de esta rama, calculado desde el repositorio, y (2) el formato corto de respuesta.
 // Así el agente no improvisa ("hagamos los PR y sigamos") ni entierra a la persona en texto.
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const FORMATO = '[Softnexus · formato de respuesta] Máximo 6 líneas, salvo que la persona pida detalle. '
   + 'Estructura: "✅ <qué quedó hecho, 1 línea>" · "❓ <lo único que necesitas de la persona, si aplica>" · "➡️ Siguiente: <1 línea>". '
@@ -17,15 +17,27 @@ function leer() {
   });
 }
 
+function esProyectoSoftnexus(cwd) {
+  if (existsSync(`${cwd}/docs/items`) || existsSync(`${cwd}/.sn/connectors.json`) || existsSync(`${cwd}/scripts/sn/sn-sync.mjs`)) return true;
+  try {
+    return /Spec Driven|softnexus/i.test(readFileSync(`${cwd}/AGENTS.md`, 'utf8').slice(0, 4000));
+  } catch {
+    return false;
+  }
+}
+
 try {
   const payload = JSON.parse(await leer());
   const cwd = payload.cwd || process.cwd();
-  // Solo en proyectos que trabajan con la metodología.
-  if (existsSync(`${cwd}/docs/items`) || existsSync(`${cwd}/AGENTS.md`)) {
+  // Solo en proyectos que trabajan con la metodología. Un AGENTS.md a secas NO alcanza: lo usan
+  // muchos repositorios ajenos, y el agente terminaba hablando de sellos y planos donde no existen.
+  if (esProyectoSoftnexus(cwd)) {
     const partes = [FORMATO, '[Softnexus · regla] A una persona del equipo solo se le pide su clave personal de Altum. Nunca una "clave del proyecto" (el proyecto sale solo del repositorio con `conectar`; si varios proyectos lo usan, se pregunta por el nombre), ni claves de empresa, secretos, CI, protección de ramas ni tokens de GitHub/Azure: eso lo hace solo el administrador del repositorio.'];
     try {
       process.chdir(cwd);
-      process.env.SN_SYNC_NO_GH = process.env.SN_SYNC_NO_GH || '';
+      // En cada mensaje NO se le pregunta a GitHub por el PR de la rama: son 1-2 s de espera antes de
+      // cada respuesta. El estado del PR lo trae la sincronización; aquí basta con lo que hay en el repo.
+      process.env.SN_SYNC_NO_GH = '1';
       const rama = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
       const aqui = new URL('../scripts/sync/', import.meta.url);
       const { takeSnapshot } = await import(new URL('snapshot.mjs', aqui).href);

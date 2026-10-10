@@ -2,8 +2,11 @@
 # Las aprobaciones de cualquier otra persona no cuentan. Para que bloquee de verdad, esta verificación
 # ("Firma del líder") tiene que ser obligatoria en la rama principal: `node scripts/sn/sn-sync.mjs proteger-rama`.
 name: firma-lider
+# Se verifica con el motor y la conexión de la RAMA PRINCIPAL, nunca con los del PR: una rama vieja
+# (o editada) no puede cambiar quién es el líder ni la regla. pull_request_target toma además este
+# archivo de la rama principal. No se ejecuta código del PR: solo se consulta quién lo aprobó.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
   pull_request_review:
     types: [submitted, dismissed, edited]
@@ -18,6 +21,8 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22

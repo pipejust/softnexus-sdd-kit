@@ -4,13 +4,13 @@
 //   Firma de webhooks de Altum: verifyAltumSignature() para el receptor (n8n u otro).
 // Una clave por empresa (X-API-Key); el resto del contrato es igual para todas.
 import { execFileSync } from 'node:child_process';
-import { createHmac, timingSafeEqual } from 'node:crypto';
-import { existsSync, readFileSync } from 'node:fs';
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { findMark, itemPlainBody } from './body.mjs';
-import { miEmpleado } from './altum-backlog.mjs';
-import { setExternalId } from './items.mjs';
+import { fetchAltumTask, miEmpleado } from './altum-backlog.mjs';
+import { avanza, contenidoMasNuevo, esLaTareaDeLaFicha, instante, mismaFecha, mismaFechaHora } from './reglas.mjs';
 import { readState, writeState } from './store.mjs';
 
 const PUSHED_FILE = 'altum-pushed.json';
@@ -178,7 +178,7 @@ export function motivo403(texto) {
   return 'Altum no deja hacer ese cambio con tu clave: planear (fechas, prioridad, padre, sprint) y tocar tareas de otras personas lo decide quien lleva el proyecto.';
 }
 
-export async function api(connector, method, route, body, headers = {}) {
+export async function api(connector, method, route, body, headers = {}, intento = 0) {
   const base = (connector.base_url || process.env.SN_ALTUM_BASE_URL || DEFAULT_BASE).replace(/\/$/, '');
   const response = await fetch(`${base}${route}`, {
     method,
@@ -194,11 +194,25 @@ export async function api(connector, method, route, body, headers = {}) {
     const text = await response.text();
     let detail = null;
     try { detail = JSON.parse(text); } catch { /* cuerpo no JSON */ }
+    const delServidor = String(detail?.error || detail?.detail?.error || detail?.detail || text || '');
     const message = blockersMessage(detail)
-      || `Altum rechazó el cambio (HTTP ${response.status}${response.status === 422 ? ', estado o campo no válido en ese proyecto' : ''}): ${(detail?.error || text).slice(0, 200)}`;
-    throw new NotRetryable(message, response.status);
+      || `Altum rechazó el cambio (HTTP ${response.status}${response.status === 422 ? ', estado o campo no válido en ese proyecto' : ''}): ${delServidor.slice(0, 200)}`;
+    const error = new NotRetryable(message, response.status);
+    // Lo que dijo ALTUM, sin el texto que agrega el plugin: de ahí (y solo de ahí) se saca qué campo
+    // rechazó. Mirando el mensaje completo, la palabra "estado" del propio aviso hacía creer que el
+    // campo rechazado era el estado, y la tarea se quedaba sin cerrar.
+    error.delServidor = delServidor;
+    throw error;
   }
-  if (response.status === 429) throw new Error(`Altum: límite de peticiones (reintentar en ${response.headers.get('retry-after') || '?'} s)`);
+  if (response.status === 429) {
+    // Límite de 120 peticiones por minuto: se espera lo que Altum pide y se reintenta (hasta 3 veces).
+    const espera = Math.min(Number(response.headers.get('retry-after')) || 10, 60);
+    if (intento < 3) {
+      await new Promise((r) => setTimeout(r, espera * 1000));
+      return api(connector, method, route, body, headers, intento + 1);
+    }
+    throw new Error(`Altum: límite de peticiones (sigue lleno después de 3 esperas de ${espera} s)`);
+  }
   // 403: desde el 6-oct Altum da a la clave personal los mismos permisos que su dueño tiene en pantalla.
   // Planear (fechas, prioridad, padre, sprint) y tocar lo ajeno es del líder. No es un fallo de conexión
   // ni se reintenta: se le dice a la persona que eso lo decide quien lleva el proyecto.
@@ -237,7 +251,10 @@ const STATES_TTL_MS = 10 * 60000;
 
 export async function projectStates(connector, { fresh = false } = {}) {
   const cached = readState(STATES_FILE, {})[connector.project_id];
-  if (!fresh && cached && Date.now() - cached.at < STATES_TTL_MS) return cached.value;
+  // Una caché de una versión vieja del plugin (sin "list", solo "valid") no trae kind ni position:
+  // con eso, la regla "el estado nunca retrocede" se reduce al orden del arreglo. Se descarta y se
+  // vuelve a pedir, en vez de usarla a medias.
+  if (!fresh && cached?.value?.list && Date.now() - cached.at < STATES_TTL_MS) return cached.value;
   const value = await fetchProjectStates(connector);
   writeState(STATES_FILE, { ...readState(STATES_FILE, {}), [connector.project_id]: { at: Date.now(), value } });
   return value;
@@ -249,7 +266,7 @@ async function fetchProjectStates(connector) {
   return {
     valid: list.map((s) => s.key),
     done: list.filter((s) => ['done', 'cancelled'].includes(s.kind)).map((s) => s.key),
-    list: list.map((s) => ({ key: s.key, kind: s.kind })),
+    list: list.map((s, i) => ({ key: s.key, kind: s.kind, label: s.label || '', position: s.position ?? i })),
   };
 }
 
@@ -342,6 +359,10 @@ export function estadoPara(stage, estados, statusMap = {}) {
   // Descartado sin estado de "cancelado" en el workflow: se cierra igual (nunca queda abierta).
   if (!mismos.length && kind === 'cancelled') mismos = estados.filter((s) => s.kind === 'done');
   if (!mismos.length) return null;
+  if (stage === 'in_review') {
+    const revision = mismos.find((s) => /revisi|review/i.test(`${s.key} ${s.label || ''}`));
+    return (revision || mismos[mismos.length - 1]).key;
+  }
   return (['merged', 'done', 'discarded'].includes(stage) ? mismos[mismos.length - 1] : mismos[0]).key;
 }
 
@@ -359,9 +380,10 @@ function rangoDe(clave, estados) {
 // de allá manda y aquí no se toca. Hacia adelante sí: terminar, cerrar o descartar siempre viaja.
 export function estadoQueViaja(connector, item, estados, actual) {
   const quiero = estadoPara(item.stage, estados, connector.status_map);
-  if (!quiero || !actual || quiero === actual) return quiero;
-  if (item.discarded) return quiero; // descartar es una decisión escrita en el repositorio
-  return rangoDe(quiero, estados) < rangoDe(actual, estados) ? null : quiero;
+  if (!quiero || !actual) return quiero;
+  if (quiero === actual) return null;
+  // Descartar es una decisión escrita en el repositorio: pasa a cancelada desde cualquier estado abierto.
+  return avanza(actual, quiero, estados, { descartar: Boolean(item.discarded) }) ? quiero : null;
 }
 
 function stateFor(connector, item, estados) {
@@ -408,6 +430,8 @@ const mismoConjunto = (a, b) => JSON.stringify([...(a || [])].sort()) === JSON.s
 function soloCambios(actual = {}, deseado) {
   return Object.fromEntries(Object.entries(deseado).filter(([k, v]) => {
     if (k === 'acceptance_criteria') return comparable(actual[k]) !== comparable(v);
+    if (k === 'started_at' || k === 'completed_at') return !mismaFechaHora(actual[k], v);
+    if (k === 'start_date' || k === 'due_date') return !mismaFecha(actual[k], v);
     if (Array.isArray(v)) return !mismoConjunto(actual[k], v);
     return JSON.stringify(actual[k] ?? null) !== JSON.stringify(v ?? null);
   }));
@@ -424,14 +448,49 @@ function sinLosRechazados(cuerpo, campos) {
   return Object.keys(resto).length < Object.keys(cuerpo).length ? resto : null;
 }
 
-// Un envío que, si Altum lo rechaza por permisos, se repite sin lo que no nos dejan tocar.
-async function enviarLoQueSePueda(connector, method, route, cuerpo, headers, aviso) {
+// Un 422 ("estado o campo no válido en ese proyecto") tumbaba el envío COMPLETO, estado incluido:
+// una historia colgada de otra historia (Altum solo permite ciertas jerarquías) dejaba la tarea sin
+// cerrar para siempre. Altum no manda la lista de campos, pero su mensaje nombra el que no aceptó:
+// de ahí se saca, se reenvía sin él y lo demás sí llega. La jerarquía queda escrita en el repositorio.
+// Solo el nombre LITERAL del campo (así lo nombra Altum: "ese parent_id no se permite…"), o una
+// palabra que no puede confundirse. El estado NUNCA entra aquí: es el campo cuyo reintento importa,
+// y si se descarta la tarea se queda abierta para siempre.
+const NOMBRES_DE_CAMPO = {
+  parent_id: /parent_id|\bpadre\b|jerarqu|\bno puede colgar de\b/i,
+  sprint_id: /sprint_id|\bsprint\b|iteraci/i,
+  priority: /\bpriority\b|prioridad/i,
+  kind: /\bkind\b/i,
+  start_date: /start_date/i,
+  due_date: /due_date/i,
+  started_at: /started_at/i,
+  completed_at: /completed_at/i,
+  custom_fields: /custom_field|campo propio/i,
+  acceptance_criteria: /acceptance_criteria/i,
+  tags: /\btags\b/i,
+  assignee_id: /assignee_id/i,
+};
+
+export function camposDel422(textoDeAltum, cuerpo) {
+  const texto = String(textoDeAltum || '');
+  return Object.keys(cuerpo || {}).filter((campo) => NOMBRES_DE_CAMPO[campo]?.test(texto));
+}
+
+// Un envío que, si Altum lo rechaza por permisos (403) o por un campo que ese proyecto no acepta
+// (422), se repite sin eso. Lo que no se pudo mandar se avisa y se anota, para no gastar una
+// petición en cada sincronización repitiendo el mismo rechazo.
+async function enviarLoQueSePueda(connector, method, route, cuerpo, headers, aviso, alRechazar) {
   try {
     return await api(connector, method, route, cuerpo, headers);
   } catch (error) {
-    const resto = error.status === 403 ? sinLosRechazados(cuerpo, error.campos || []) : null;
-    if (!resto) throw error;
-    aviso?.(error.message);
+    const campos = error.status === 403 ? (error.campos || CAMPOS_DE_PLANEACION)
+      : error.status === 422 ? camposDel422(error.delServidor, cuerpo) : [];
+    const resto = campos.length ? sinLosRechazados(cuerpo, campos) : null;
+    if (!resto) throw error;   // no se sabe qué campo fue: no se adivina, se reporta
+    aviso?.(error.status === 422
+      ? `${error.message} — lo mando sin ${campos.join(', ')}; eso queda escrito en la ficha, no en Altum.`
+      : error.message);
+    alRechazar?.(campos.filter((c) => c in cuerpo), cuerpo);
+    if (method === 'PATCH' && !Object.keys(resto).length) return null; // no quedó nada que mandar
     return api(connector, method, route, resto, headers);
   }
 }
@@ -458,23 +517,96 @@ export function esAjena(tarea, yo) {
 // Lo que la ficha declara como bloqueadores ("bloqueado_por: ID-1, ID-2") se declara en Altum.
 // Solo se agregan: quitar una dependencia es una decisión que se toma en Altum, no un efecto de
 // haber borrado una línea. Si la clave no puede declararlas (403), se dice y se sigue.
-async function declararBloqueadores(connector, taskId, item, byRef) {
-  const quiero = (item.blockers || []).map((id) => byRef.get(id)).filter(Boolean);
+// Qué bloqueadores ya se declararon para cada tarea: sin esto, cada ficha con "bloqueado_por" gastaba
+// un GET de más EN CADA sincronización, aunque nada hubiera cambiado (el límite es 120/min).
+const BLOQUEADORES_DECLARADOS = 'altum-bloqueadores.json';
+async function declararBloqueadores(connector, taskId, item, byRef, tareaPorNumero = () => '') {
+  const quiero = (item.blockers || []).map((id) => byRef.get(id) || tareaPorNumero(id)).filter(Boolean);
   if (!quiero.length) return;
+  const todos = readState(BLOQUEADORES_DECLARADOS, {});
+  const yaDeclarados = new Set(todos[taskId] || []);
+  if (quiero.every((id) => yaDeclarados.has(id))) return; // ya se intentaron todos, con éxito o sin él
   let actuales = [];
   try {
     const raw = await api(connector, 'GET', `/tasks/${taskId}/dependencies`);
     actuales = (Array.isArray(raw) ? raw : raw?.items || []).map((d) => d.id);
-  } catch {
-    return; // Altum todavía sin esa ruta: no es motivo para romper la sincronización
+  } catch (error) {
+    console.log(`[altum] ${item.id}: no pude leer los bloqueadores — ${error.message}`);
+    return; // Altum todavía sin esa ruta, o caído: no es motivo para romper la sincronización
   }
-  for (const bloqueador of quiero.filter((id) => !actuales.includes(id))) {
+  const intentados = [...yaDeclarados];
+  for (const bloqueador of quiero.filter((id) => !yaDeclarados.has(id))) {
+    intentados.push(bloqueador);
+    if (actuales.includes(bloqueador)) continue;
     try {
       await api(connector, 'POST', `/tasks/${taskId}/dependencies`, { blocker_id: bloqueador });
     } catch (error) {
       console.log(`[altum] ${item.id}: no pude declarar el bloqueador — ${error.message}`);
     }
   }
+  writeState(BLOQUEADORES_DECLARADOS, { ...todos, [taskId]: intentados });
+}
+
+// Qué tarea es la de esta ficha. Primero el enlace escrito en la ficha; si no hay, la tarea cuyo
+// external_ref es exactamente el id de la ficha; y para fichas traídas (ALT-n, ACT-n), la #n o la
+// de la reunión n. Nunca "la primera que venga".
+function tareaIdDe(item, connector, byRef, current) {
+  const escrito = item.external?.[connector.name];
+  if (escrito) return escrito;
+  if (byRef.has(item.id)) return byRef.get(item.id);
+  const alt = String(item.id).match(/^ALT-(\d+)$/i);
+  if (alt) return [...current.values()].find((t) => String(t.number) === alt[1] && !t.external_ref)?.id || '';
+  const act = String(item.id).match(/^ACT-(.+)$/i);
+  if (act && current.has(`acten:${act[1]}`)) return `acten:${act[1]}`;
+  return '';
+}
+
+// Lo último que ESTA máquina mandó de cada ficha (la fecha de la ficha en ese momento). Con eso se sabe
+// si la ficha de ahora es más nueva o es una versión vieja (otra rama, un checkout atrasado).
+// Lo que Altum rechazó para una tarea, con el valor exacto que rechazó: así no se vuelve a intentar
+// cada sincronización, pero si la ficha cambia ese valor (o una persona corre "asegurar") sí se reintenta.
+const RECHAZADOS = 'altum-rechazados.json';
+const valorDe = (v) => JSON.stringify(v ?? null);
+
+function anotarRechazo(taskId, campos, cuerpo) {
+  const anotables = campos.filter((c) => c !== 'state');   // el estado se reintenta siempre
+  if (!taskId || !anotables.length) return;
+  const todo = readState(RECHAZADOS, {});
+  const mios = { ...(todo[taskId] || {}) };
+  for (const campo of anotables) mios[campo] = valorDe(cuerpo[campo]);
+  writeState(RECHAZADOS, { ...todo, [taskId]: mios });
+}
+
+// Quita del envío lo que Altum ya rechazó con ese mismo valor.
+function sinLoYaRechazado(taskId, cambios) {
+  const mios = readState(RECHAZADOS, {})[taskId];
+  if (!mios) return cambios;
+  return Object.fromEntries(Object.entries(cambios).filter(([k, v]) => mios[k] !== valorDe(v)));
+}
+
+const ENVIADOS = 'altum-enviados.json';
+const ultimoEnviado = (id) => readState(ENVIADOS, {})[id] || '';
+const anotarEnviado = (id, modificado) => {
+  if (modificado) writeState(ENVIADOS, { ...readState(ENVIADOS, {}), [id]: modificado });
+};
+
+const ACTEN_ORDEN = { pending: 0, blocked: 0, done: 2, cancelled: 2 };
+const YA_TERMINO = new Set(['merged', 'done', 'discarded']);
+
+// Desde cuándo este repositorio está unido a Altum: el primer commit de .sn/connectors.json o, si
+// todavía no se guardó, la hora del archivo. Lo que terminó ANTES es historia: no se lleva a Altum solo.
+let conectadoDesde = null;
+function desdeCuandoConectado() {
+  if (conectadoDesde !== null) return conectadoDesde;
+  let fecha = '';
+  try {
+    fecha = execFileSync('git', ['log', '--diff-filter=A', '--format=%cI', '--', '.sn/connectors.json'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim().split('\n').pop();
+  } catch { /* sin git */ }
+  if (!fecha) {
+    try { fecha = statSync('.sn/connectors.json').mtime.toISOString(); } catch { /* sin archivo */ }
+  }
+  conectadoDesde = instante(fecha);
+  return conectadoDesde;
 }
 
 export async function deliverAltum(connector, evt) {
@@ -484,74 +616,128 @@ export async function deliverAltum(connector, evt) {
     return;
   }
   const { item } = evt;
-  const { estados, fields, byRef, currentFields, current, sprint, yo } = await projectContext(connector);
+  const contexto = await projectContext(connector);
+  const { estados, fields, byRef, currentFields, current, sprint, yo } = contexto;
   const description = itemPlainBody(evt);
   const email = item.assignee.match(/<([^>]+@[^>]+)>/)?.[1] || '';
   const assignee = connector.assignee_map?.[email || item.assignee];
-  const ours = customFieldsFor(connector, item, fields);
-  let taskId = item.external?.[connector.name] || byRef.get(item.id);
-  // Tarea de una reunión (Acten): mismo endpoint, pero solo estado, responsable, título y descripción.
-  // Prioridad, campos propios, etiquetas o external_ref responderían 422, así que ni se envían.
-  if (esDeActen({ id: taskId })) {
-    const estado = connector.acten_status_map?.[item.stage] || ACTEN_STATUS[item.stage];
-    const cambios = soloCambios(current.get(taskId), {
-      title: taskTitle(item), description,
-      ...(ACTEN_STATES.includes(estado) ? { state: estado } : {}), ...(assignee ? { assignee_id: assignee } : {}),
-    });
-    if (!Object.keys(cambios).length) return;
-    const actualizada = await api(connector, 'PATCH', `/tasks/${encodeURIComponent(taskId)}`, cambios);
-    current.set(taskId, { ...current.get(taskId), ...cambios, ...actualizada });
-    recordPush(connector, { ...actualizada, id: taskId });
-    return;
+  const avisar = (texto) => { if (process.env.SN_SYNC_SILENCIO !== '1') console.log(`[altum] ${item.id}: ${texto}`); };
+
+  // ---- ¿Cuál es SU tarea? (regla 1) ----
+  let taskId = tareaIdDe(item, connector, byRef, current);
+  if (taskId && !current.has(taskId)) {
+    // No está entre las tareas de este proyecto: o se borró (se crea de nuevo) o es de otro proyecto.
+    let otra = null;
+    try {
+      otra = await fetchAltumTask(connector, taskId);
+    } catch (error) {
+      if (!/HTTP 404/.test(error.message)) throw error;
+    }
+    if (otra?.id && otra.project_id && otra.project_id !== connector.project_id) {
+      throw new NotRetryable(`${item.id} apunta a ${taskId}, que es de otro proyecto de Altum. No la toco: corrige "ext.altum" en la ficha.`);
+    }
+    if (otra?.id) current.set(otra.id, otra);
+    else taskId = ''; // se borró en Altum: se vuelve a crear abajo
   }
-  // De qué cuelga: el "parent:" de la ficha es el id de otro ítem; su tarea en Altum es la que se enlaza.
-  const padre = item.parent ? byRef.get(item.parent) || '' : '';
+  if (taskId) {
+    const veredicto = esLaTareaDeLaFicha(item, current.get(taskId));
+    if (!veredicto.ok) {
+      throw new NotRetryable(`no escribo en esa tarea: ${veredicto.motivo}. Si el enlace "ext.altum" de la ficha está mal, quítalo y corre "asegurar".`);
+    }
+  }
+
+  // Una ficha que terminó ANTES de conectar el repositorio y nunca tuvo tarea no se estrena en segundo
+  // plano: al conectar un repositorio con historia, Altum se llenaba de tareas viejas. Lo que termina
+  // después de conectar sí se registra. Si de verdad hace falta, "asegurar <ID>" la crea.
+  const modificado = instante(item.modificado);
+  if (!taskId && YA_TERMINO.has(item.stage) && !evt.forzado && modificado && modificado < desdeCuandoConectado()) return;
+
+  // ---- Crear (una sola vez, con todo) ----
+  const padre = item.parent ? tareaIdDe({ id: item.parent, external: {} }, connector, byRef, current) : '';
   const fechas = fechasDe(item);
+  const ours = customFieldsFor(connector, item, fields);
   if (!taskId) {
-    const created = await createTask(connector, item, description, { assignee, email, customFields: ours, padre, sprint, fechas });
-    taskId = created.id;
+    const creada = await createTask(connector, item, description, { assignee, email, customFields: ours, padre, sprint, fechas, evtId: evt.id });
+    taskId = creada.id;
     byRef.set(item.id, taskId);
-    currentFields.set(taskId, created.custom_fields || ours);
-    // Recién creada con título, descripción y prioridad: el PATCH de abajo solo lleva lo que falte (p. ej. el estado).
-    current.set(taskId, created);
-    recordPush(connector, created); // también es un cambio nuestro: el vigilante no debe avisarlo
-    if (item.file) setExternalId(item.file, connector.name, taskId); // queda en el repo con el siguiente commit
+    currentFields.set(taskId, creada.custom_fields || ours);
+    current.set(taskId, creada);
+    recordPush(connector, creada); // es un cambio nuestro: el vigilante no debe avisarlo
+    anotarEnviado(item.id, item.modificado);
   }
-  const tareaActual = current.get(taskId);
-  if (esAjena(tareaActual, yo) && !evt.forzado) {
-    if (process.env.SN_SYNC_SILENCIO !== '1') {
-      console.log(`[altum] ${item.id}: la tarea #${tareaActual.number ?? ''} es de otra persona, no la toco. Si te toca a ti, que el líder te la asigne.`);
-    }
+  const tarea = current.get(taskId);
+
+  // ---- Cada quien trabaja lo suyo ----
+  if (esAjena(tarea, yo) && !evt.forzado) {
+    avisar(`la tarea #${tarea.number ?? ''} es de otra persona, no la toco. Si te toca a ti, que el líder te la asigne.`);
     return;
   }
-  const estadoActual = tareaActual?.state || '';
-  const state = estadoQueViaja(connector, item, estados, estadoActual);
-  if (!state && estadoActual && process.env.SN_SYNC_SILENCIO !== '1') {
-    const pretendido = stateFor(connector, item, estados);
-    if (pretendido && pretendido !== estadoActual) {
-      console.log(`[altum] ${item.id}: en Altum va en "${estadoActual}" y aquí se ve "${pretendido}". No la devuelvo atrás: si de verdad hay que retroceder, cámbiala en Altum.`);
-    }
+
+  // ---- ¿El contenido de la ficha es más nuevo que lo que ya está en Altum? (regla 3) ----
+  const contenido = contenidoMasNuevo(item, ultimoEnviado(item.id), evt.forzado ? null : tarea);
+  if (!contenido) avisar('esta ficha es más vieja que lo que ya está en Altum (otra rama o un checkout atrasado): no reescribo su contenido.');
+
+  // ---- Tarea de una reunión (Acten): solo estado, responsable, título y descripción ----
+  if (esDeActen({ id: taskId, source: tarea?.source })) {
+    const quiero = connector.acten_status_map?.[item.stage] || ACTEN_STATUS[item.stage];
+    const desde = ACTEN_ORDEN[tarea?.state] ?? 0;
+    const sube = ACTEN_STATES.includes(quiero) && quiero !== tarea?.state && (ACTEN_ORDEN[quiero] ?? 0) > desde;
+    const cambios = soloCambios(tarea, {
+      ...(contenido ? { title: taskTitle(item), description } : {}),
+      ...(sube ? { state: quiero } : {}), ...(contenido && assignee ? { assignee_id: assignee } : {}),
+    });
+    const porMandar = evt.forzado ? cambios : sinLoYaRechazado(taskId, cambios);
+    if (!Object.keys(porMandar).length) return;
+    const actualizada = await enviarLoQueSePueda(connector, 'PATCH', `/tasks/${encodeURIComponent(taskId)}`, porMandar, {}, avisar,
+      (campos, cuerpo) => anotarRechazo(taskId, campos, cuerpo));
+    if (!actualizada) return;
+    current.set(taskId, { ...tarea, ...porMandar, ...actualizada });
+    recordPush(connector, { ...actualizada, id: taskId });
+    if (contenido) anotarEnviado(item.id, item.modificado);
+    return;
   }
-  const customFields = Object.keys(ours).length ? { custom_fields: { ...(currentFields.get(taskId) || {}), ...ours } } : {};
+
+  // ---- Tarea nativa ----
+  const state = estadoQueViaja(connector, item, estados, tarea?.state || '');
+  if (!state && tarea?.state) {
+    const pretendido = stateFor(connector, item, estados);
+    if (pretendido && pretendido !== tarea.state) avisar(`en Altum va en "${tarea.state}" y aquí se ve "${pretendido}". No la devuelvo atrás: si de verdad hay que retroceder, cámbiala en Altum.`);
+  }
   const criterios = criteriosDe(item);
-  const etiquetas = etiquetasPara(connector, item, current.get(taskId)?.tags || []);
-  const cambios = soloCambios(current.get(taskId), {
-    title: taskTitle(item), description, priority: priorityOf(item),
-    ...(criterios ? { acceptance_criteria: criterios } : {}),
-    ...(etiquetas?.length ? { tags: etiquetas } : {}),
-    ...fechas,
-    ...(padre ? { parent_id: padre } : {}),
-    ...(state ? { state } : {}), ...(assignee ? { assignee_id: assignee } : {}), ...customFields,
+  const etiquetas = etiquetasPara(connector, item, tarea?.tags || []);
+  const customFields = Object.keys(ours).length ? { custom_fields: { ...(currentFields.get(taskId) || {}), ...ours } } : {};
+  const { started_at: _sa, completed_at: _ca, ...fechasPrevistas } = fechas;
+  // La prioridad se pone al crear; después es del líder (no se le pisa la que puso en Altum).
+  const cambios = soloCambios(tarea, {
+    ...(contenido ? {
+      title: taskTitle(item), description,
+      ...(criterios ? { acceptance_criteria: criterios } : {}),
+      ...(etiquetas?.length ? { tags: etiquetas } : {}),
+      ...fechasPrevistas,   // start_date/due_date sí dependen del contenido; started_at/completed_at van aparte (guardia abajo)
+      ...(padre ? { parent_id: padre } : {}),
+      ...(assignee ? { assignee_id: assignee } : {}), ...customFields,
+    } : {}),
+    // Las fechas reales (empezó / terminó) salen del primer commit visto desde ESTA rama, que
+    // cambia con un squash-merge o al alternar de rama: sin una guardia, cambiarse de rama movía la
+    // fecha en los dos sentidos. Solo se manda si Altum no tiene una, o si la nueva es más antigua
+    // (de verdad más temprana, nunca "lo que esta rama ve ahora").
+    ...(fechas.started_at && (!tarea?.started_at || instante(fechas.started_at) < instante(tarea.started_at)) ? { started_at: fechas.started_at } : {}),
+    ...(fechas.completed_at && (!tarea?.completed_at || instante(fechas.completed_at) < instante(tarea.completed_at)) ? { completed_at: fechas.completed_at } : {}),
+    ...(state ? { state } : {}),
   });
-  // Los bloqueadores se declaran aunque la tarea no tenga otros cambios.
-  await declararBloqueadores(connector, taskId, item, byRef);
-  if (!Object.keys(cambios).length) return; // nada cambió: la tarea no se toca
-  const updated = await enviarLoQueSePueda(connector, 'PATCH', `/tasks/${taskId}`, cambios, {}, (motivo) => {
-    console.log(`[altum] ${item.id}: ${motivo}`);
-  });
-  if (updated?.custom_fields) currentFields.set(taskId, updated.custom_fields);
-  current.set(taskId, { ...current.get(taskId), ...cambios, ...updated });
+  // Lo que Altum ya rechazó para esta tarea no se vuelve a mandar (gastaba una petición y un aviso en
+  // cada sincronización). Si una persona lo pide a mano (asegurar), se reintenta.
+  const porMandar = evt.forzado ? cambios : sinLoYaRechazado(taskId, cambios);
+  if (item.blockers?.length) await declararBloqueadores(connector, taskId, item, byRef, (id) => tareaIdDe({ id, external: {} }, connector, byRef, current));
+  if (!Object.keys(porMandar).length) return; // nada cambió: la tarea no se toca
+  let recortado = false;
+  const updated = await enviarLoQueSePueda(connector, 'PATCH', `/tasks/${taskId}`, porMandar, {}, (motivo) => { recortado = true; avisar(motivo); },
+    (campos, cuerpo) => anotarRechazo(taskId, campos, cuerpo));
+  if (!updated) return; // todo lo que había que mandar era de planear y lo pone el líder
+  if (updated.custom_fields) currentFields.set(taskId, updated.custom_fields);
+  current.set(taskId, { ...tarea, ...porMandar, ...updated });
   recordPush(connector, { ...updated, id: taskId });
+  if (contenido && !recortado) anotarEnviado(item.id, item.modificado);
 }
 
 // Altum IGNORA el filtro external_ref en GET /tasks: devuelve TODAS las tareas del proyecto. Tomar
@@ -569,7 +755,7 @@ export async function tareaDeLaFicha(connector, externalRef) {
 // Responsable: el UUID de assignee_map o, si no está, el correo de git (assignee_email); si ese correo
 // no existe en la empresa (404), la tarea se crea sin responsable. Si external_ref ya existe (409), se reutiliza.
 // Devuelve la tarea creada (o la existente).
-async function createTask(connector, item, description, { assignee, email, customFields, padre = '', sprint = '', fechas = {} }) {
+async function createTask(connector, item, description, { assignee, email, customFields, padre = '', sprint = '', fechas = {}, evtId = '' }) {
   const body = {
     project_id: connector.project_id,
     title: taskTitle(item),
@@ -585,13 +771,14 @@ async function createTask(connector, item, description, { assignee, email, custo
     ...(sprint ? { sprint_id: sprint } : {}),
     ...(assignee ? { assignee_id: assignee } : email ? { assignee_email: email } : {}),
   };
-  // Si la tarea anterior se borró en Altum, la clave de idempotencia tiene que ser otra:
-  // con la misma, Altum devolvería la respuesta de la primera vez (la tarea borrada).
-  const headers = { 'Idempotency-Key': `sn-${connector.project_id}-${item.id}${item.recrear ? `-re-${String(item.recrear).slice(0, 8)}` : ''}` };
+  // La clave de idempotencia es la del EVENTO: si la red corta y se reintenta el mismo evento, Altum
+  // devuelve la misma tarea; pero si la tarea se borró y la ficha vuelve a cambiar, el evento es otro
+  // y se crea de nuevo (con la misma clave, Altum devolvería la tarea borrada).
+  const clave = `sn-${connector.project_id}-${item.id}-${createHash('sha256').update(String(evtId || item.recrear || 'x')).digest('hex').slice(0, 16)}`;
+  const crear = (cuerpo, sufijo = '') => enviarLoQueSePueda(connector, 'POST', '/tasks', cuerpo, { 'Idempotency-Key': `${clave}${sufijo}` },
+    (motivo) => console.log(`[altum] ${item.id}: ${motivo}`));
   try {
-    return await enviarLoQueSePueda(connector, 'POST', '/tasks', body, headers, (motivo) => {
-      console.log(`[altum] ${item.id}: ${motivo}`);
-    });
+    return await crear(body);
   } catch (error) {
     if (error.status === 409) {
       // 409 = "ese external_ref ya existe": la tarea está, hay que encontrar LA suya, no una cualquiera.
@@ -601,8 +788,8 @@ async function createTask(connector, item, description, { assignee, email, custo
         + ' No enlazo el ítem a otra tarea para no pisarla: búscala en Altum y enlázala a mano con "link", o quita el external_ref allá.', 409);
     }
     if (body.assignee_email && /HTTP 404/.test(error.message)) {
-      const { assignee_email: _, ...withoutAssignee } = body;
-      return api(connector, 'POST', '/tasks', withoutAssignee, { 'Idempotency-Key': `${headers['Idempotency-Key']}-sin-responsable` });
+      const { assignee_email: _, ...sinResponsable } = body;
+      return crear(sinResponsable, '-sin-responsable');
     }
     throw error;
   }

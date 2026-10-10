@@ -12,7 +12,9 @@ param([string]$Empresa = '')
 $ErrorActionPreference = 'Stop'
 $sufijo = ''
 if ($Empresa -ne '') {
-  $limpia = ($Empresa.ToUpperInvariant() -replace '[^A-Z0-9]', '_')
+  # Misma regla que sn-clave-altum.sh: se quita lo que no sea letra/número ASCII, espacio, - o _;
+  # mayúsculas; espacio y - pasan a _. ("Mi Empresa" -> SN_ALTUM_KEY_MI_EMPRESA en los dos sistemas).
+  $limpia = (($Empresa -creplace '[^A-Za-z0-9 _-]', '').ToUpperInvariant() -replace '[ -]', '_')
   $sufijo = "_$limpia"
 }
 $var = "SN_ALTUM_KEY$sufijo"

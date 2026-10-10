@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Prueba del conector nativo de Altum contra el contrato real (servidor falso).
 set -uo pipefail
+export SN_MOTOR_PROPIO=1   # las pruebas usan ESTE motor, no el plugin instalado en el computador
 T="$(cd "$(dirname "$0")" && pwd)"
 W="$T/tmp"; mkdir -p "$W"   # todo lo que la prueba crea vive aquí (no se versiona)
 PLUGIN="$(cd "$T/../plugin/scripts" && pwd)"
@@ -90,12 +91,17 @@ check "quitar-repo sin --si no borra: dice qué haría" "out=\$( (SN_ALTUM_KEY_P
 check "quitar-repo --si lo saca del proyecto" "SN_ALTUM_KEY_PRUEBA=sk_user_test_laura sn quitar-repo tienda api --si | grep -q 'ya no figura' && ! sn repos tienda | grep -q 'Otro Proyecto'"
 check "quitar-repo de algo que no está lo dice sin romperse" "(SN_ALTUM_KEY_PRUEBA=sk_user_test_laura sn quitar-repo tienda inventado --si 2>&1 || true) | grep -q 'Sus repositorios son'"
 
-check "AGENTS.md con otro líder escrito a mano: lead lo corrige con lo que dice Altum" "printf -- '- Líder técnico (valida sellos): Andrés Felipe Cortés <pipemas@gmail.com> · usuario GitHub: @pipejust\n' > AGENTS.md; sn lead | grep -q 'Lo corregí' && grep -q 'Marta Ríos <marta@softnexus.co> · GitHub @martarios — según Altum' AGENTS.md && ! grep -q pipejust AGENTS.md"
-check "Correrlo otra vez no cambia nada (ya coincide)" "! sn lead | grep -q 'Lo corregí'"
+printf -- '- Líder técnico (valida sellos): Andrés Felipe Cortés <pipemas@gmail.com> · usuario GitHub: @pipejust\n' > AGENTS.md
+printf -- '/docs/ @equipo-docs\n' > .github/CODEOWNERS 2>/dev/null || { mkdir -p .github && printf -- '/docs/ @equipo-docs\n' > .github/CODEOWNERS; }
+out=$(sn lead)
+check "lead NO toca archivos del equipo por su cuenta: AGENTS.md y CODEOWNERS quedan igual" "grep -q pipejust AGENTS.md && ! grep -q martarios .github/CODEOWNERS"
+check "Pero avisa que están desactualizados y cómo arreglarlo en un PR" "echo \"\$out\" | grep -q 'no lo toco por mi cuenta' && echo \"\$out\" | grep -q 'lead --escribir'"
+check "lead --escribir corrige AGENTS.md con lo que dice Altum" "sn lead --escribir | grep -q 'Lo corregí' && grep -q 'Marta Ríos <marta@softnexus.co> · GitHub @martarios — según Altum' AGENTS.md && ! grep -q pipejust AGENTS.md"
+check "Y agrega al líder en CODEOWNERS SIN borrar las reglas que ya tenía el repo" "grep -qx '\\* @martarios' .github/CODEOWNERS && grep -q '/docs/ @equipo-docs' .github/CODEOWNERS"
+check "Correrlo otra vez no cambia nada (ya coincide)" "! sn lead --escribir | grep -q 'Lo corregí' && ! sn lead | grep -q 'Desactualizado'"
 check "lead --github da el usuario del líder según Altum, no el de quien trabaja" "[ \"\$(sn lead --github)\" = martarios ]"
 mkdir -p "$W/gh-lider" && printf '#!/bin/sh\n[ "$1 $2" = "api user" ] && echo martarios\n' > "$W/gh-lider/gh" && chmod +x "$W/gh-lider/gh"
 check "Si el líder es la cuenta con la que trabajas, no se pide revisión a uno mismo: firma y une él" "(PATH=\"$W/gh-lider:\$PATH\" SN_SYNC_NO_GH= node scripts/sn/sn-sync.mjs lead --github 2>&1 || true) | grep -q 'lo unes tú'"
-check "lead deja al líder de Altum como revisor automático de los PR (CODEOWNERS)" "grep -qx '\\* @martarios' .github/CODEOWNERS"
 rm -f AGENTS.md
 rm -rf .github/CODEOWNERS
 
@@ -133,8 +139,8 @@ MD
 sn sync >/dev/null
 check "POST /tasks con project_id, kind=bug, prioridad 3 (R2) y X-API-Key" "state | python3 -c 'import json,sys; t=[x for x in json.load(sys.stdin) if x[\"title\"].startswith(\"[CLI-0001]\")][0]; assert t[\"kind\"]==\"bug\" and t[\"priority\"]==3 and t[\"project_id\"]==\"$PROJECT\"'"
 check "Descripción en texto plano (Altum no interpreta Markdown): historia y trazabilidad, sin ** ni marca oculta" "state | python3 -c 'import json,sys; d=[x for x in json.load(sys.stdin) if x[\"title\"].startswith(\"[CLI-0001]\")][0][\"description\"]; assert \"TRAZABILIDAD\" in d and \"HISTORIA\" in d and \"Commits (\" not in d and \"**\" not in d and \"<!--\" not in d and \"\x60\" not in d, d'"
-check "El id de Altum quedó guardado en el ítem (ext.altum)" "grep -qE '^ext.altum: [0-9a-f-]{36}$' docs/items/CLI-0001.md"
-check "POST con external_ref=CLI-0001 e Idempotency-Key (no duplica si la red falla)" "grep '\"method\":\"POST\"' '$LOG' | grep -q '\"external_ref\":\"CLI-0001\"' && grep '\"method\":\"POST\"' '$LOG' | grep -q '\"idem\":\"sn-$PROJECT-CLI-0001\"'"
+check "La sincronización de fondo NO escribe en la ficha (el repo no queda con cambios que nadie pidió)" "! grep -q '^ext.altum:' docs/items/CLI-0001.md"
+check "POST con external_ref=CLI-0001 e Idempotency-Key (no duplica si la red falla)" "grep '\"method\":\"POST\"' '$LOG' | grep -q '\"external_ref\":\"CLI-0001\"' && grep '\"method\":\"POST\"' '$LOG' | grep -q '\"idem\":\"sn-$PROJECT-CLI-0001-'"
 check "Responsable por correo de git (assignee_email) sin mapear UUIDs" "state | python3 -c 'import json,sys; t=[x for x in json.load(sys.stdin) if x[\"title\"].startswith(\"[CLI-0001]\")][0]; assert t[\"assignee_id\"]==\"e2\", t[\"assignee_id\"]'"
 
 check "Campos propios: riesgo y tamaño en custom_fields; etapa no se envía (el proyecto no la definió)" "state | python3 -c 'import json,sys; t=[x for x in json.load(sys.stdin) if x[\"title\"].startswith(\"[CLI-0001]\")][0]; cf=t[\"custom_fields\"]; assert cf.get(\"riesgo\")==\"R2\" and cf.get(\"tamano\")==\"XS\" and \"etapa\" not in cf, cf'"
@@ -193,6 +199,8 @@ check "Los subtítulos ### de la historia salen como títulos, sin almohadillas"
 git add -A >/dev/null && git commit -qm "chore: otra cosa" -m "Se registra aparte CLI-0011 para después." && git commit -q --allow-empty -m "feat: saldo" -m "Refs: CLI-0011"
 check "Solo cuentan los commits con Refs: <ID>, no los que apenas mencionan el id" "node -e \"import('./scripts/sn/sync/trace.mjs').then(m => { const s = m.commitsFor({ id: 'CLI-0011' }).map(c => c.subject); process.exit(s.includes('feat: saldo') && !s.includes('chore: otra cosa') ? 0 : 1); })\""
 check "Cada petición a Altum dice quién escribe: Plugin Softnexus" "! grep '\"method\":\"PATCH\"\|\"method\":\"POST\"' '$LOG' | grep -v '\"cliente\":\"Plugin Softnexus\"' | grep -q ."
+printf -- '---\nid: CLI-0012\ntype: bug\ntitle: html duplicado\nrisk: R2\n---\n## Historia\nx\n' > docs/items/CLI-0012.md
+sn sync >/dev/null 2>&1
 printf -- '---\nid: CLI-0012\ntype: bug\ntitle: html duplicado\nrisk: R2\ndescartado: se reescribe en Angular en la Fase 3\n---\n## Historia\nx\n' > docs/items/CLI-0012.md
 sn sync >/dev/null 2>&1
 check "Con el workflow de siempre, descartado va a 'removed' (cancelado)" "node -e \"import('./scripts/sn/sync/altum.mjs').then(m => process.exit(m.estadoPara('discarded',[{key:'new',kind:'open'},{key:'closed',kind:'done'},{key:'removed',kind:'cancelled'}])==='removed' ? 0 : 1))\""
@@ -244,6 +252,9 @@ check "Correo alterno que Altum devuelve en emails: la firma vale sin poner el u
 sed -i '' 's|Valida: Marta Ríos <marta.rios.personal@gmail.com>|Valida: Marta Ríos <marta.otro.correo@gmail.com>|' openspec/changes/add-firma/validacion.md
 sed -i '' 's|Valida: Marta Ríos <marta.otro.correo@gmail.com>|Valida: Pedro <pedro@x.com> · GitHub @pedrox|' openspec/changes/add-firma/validacion.md
 check "Otra persona, con su propio usuario de GitHub: no vale (el candado sigue puesto)" "[ \"\$(estado)\" = 'firma inválida' ]"
+printf -- "## 2026-09-21 10:00 · APROBADO · sello: plano\n- Valida: Marta Ríos <marta@softnexus.co>\n- Commit validado: 0000000\n" > openspec/changes/add-firma/validacion.md
+check "Un commit inventado o inalcanzable NO cuenta como sellado (ni como vencido): no se puede verificar" "[ \"\$(estado)\" = 'sin commit verificable' ] && node -e \"import('./scripts/sn/validation-state.mjs').then(m => process.exit(m.planoSellado('add-firma') ? 1 : 0))\""
+
 rm -rf openspec/changes/add-firma
 
 echo "== Criterios de aceptación en los dos sentidos"
@@ -364,6 +375,11 @@ check "Las fechas previstas de la ficha van a los campos propios de Altum (start
 check "La tarea nueva entra al sprint activo del proyecto" "tarea | python3 -c 'import json,sys; t=json.load(sys.stdin); assert t[\"sprint_id\"]==\"sp-1\", t[\"sprint_id\"]'"
 git commit -q --allow-empty -m "feat: recibo con IVA" -m "Refs: CLI-0050" && sn sync >/dev/null 2>&1
 check "La fecha real de inicio sale del primer commit del ítem (started_at)" "tarea | python3 -c 'import json,sys; t=json.load(sys.stdin); assert (t[\"started_at\"] or \"\").startswith(\"20\"), t[\"started_at\"]'"
+T50=$(tarea | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
+api -X PATCH "localhost:$PORT/api/v1/api/tasks/$T50" -d '{"started_at":"2020-01-01T00:00:00Z"}' >/dev/null   # alguien puso a mano la fecha real de verdad
+git commit -q --allow-empty -m "feat: otro cambio" -m "Refs: CLI-0050"   # un commit MÁS NUEVO se ve como "primero" desde otra rama
+sn sync >/dev/null 2>&1
+check "started_at no retrocede: lo que ya hay en Altum (más antiguo) no se pisa con una fecha más reciente" "tarea | python3 -c 'import json,sys; t=json.load(sys.stdin); assert t[\"started_at\"].startswith(\"2020\"), t[\"started_at\"]'"
 check "Una fecha mal escrita no se manda (y Altum la rechazaría con 422)" "printf -- '---\\nid: CLI-0051\\ntype: bug\\ntitle: Fecha rara\\nfin: 12/10/2026\\n---\\n## Historia\\nx\\n' > docs/items/CLI-0051.md; sn sync >/dev/null 2>&1; ! grep -q '12/10/2026' '$LOG'"
 check "La tarea nace etiquetada por tipo, riesgo y tamaño" "tarea | python3 -c 'import json,sys; g=set(json.load(sys.stdin)[\"tags\"]); assert {\"sn:bug\",\"sn:r2\",\"sn:tamano-m\"} <= g, g'"
 curl -s "localhost:$PORT/_tag?ref=CLI-0050&tag=urgente" >/dev/null
@@ -417,10 +433,15 @@ check "Cuando lo mira el líder (asegurar), las fechas que faltaban sí entran" 
 
 echo "== Padre y bloqueadores"
 printf -- '---\nid: CLI-0061\ntype: feature\ntitle: Pagos\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0061.md
-printf -- '---\nid: CLI-0062\ntype: historia\ntitle: Pago con tarjeta\nrisk: R1\nparent: CLI-0061\nbloqueado_por: CLI-0061\n---\n## Historia\nx\n' > docs/items/CLI-0062.md
+printf -- '---\nid: CLI-0062\ntype: bug\ntitle: Pago con tarjeta\nrisk: R1\nparent: CLI-0061\nbloqueado_por: CLI-0061\n---\n## Historia\nx\n' > docs/items/CLI-0062.md
 sn sync >/dev/null 2>&1; sn sync >/dev/null 2>&1
 check "El ítem cuelga de su padre en Altum (parent_id)" "state | python3 -c 'import json,sys; d=json.load(sys.stdin); hijo=[x for x in d if \"CLI-0062\" in x[\"title\"]][0]; padre=[x for x in d if \"CLI-0061\" in x[\"title\"]][0]; assert hijo[\"parent_id\"]==padre[\"id\"], hijo[\"parent_id\"]'"
-check "Lo que la ficha dice que la bloquea queda declarado en Altum" "node -e \"const h=require('fs').readFileSync('docs/items/CLI-0062.md','utf8').match(/^ext.altum: (.*)$/m)[1]; fetch('http://localhost:$PORT/api/v1/api/tasks/'+h+'/dependencies',{headers:{'X-API-Key':process.env.SN_ALTUM_KEY_PRUEBA}}).then(r=>r.json()).then(d=>process.exit(d.items.length===1?0:1))\""
+check "Lo que la ficha dice que la bloquea queda declarado en Altum" "node -e \"const h=JSON.parse(require('child_process').execSync('curl -s localhost:$PORT/_state')).find(t=>t.external_ref==='CLI-0062').id; fetch('http://localhost:$PORT/api/v1/api/tasks/'+h+'/dependencies',{headers:{'X-API-Key':process.env.SN_ALTUM_KEY_PRUEBA}}).then(r=>r.json()).then(d=>process.exit(d.items.length===1?0:1))\""
+p0=$(grep -c "dependencies" "$LOG"); sn sync >/dev/null 2>&1; sn sync >/dev/null 2>&1; p1=$(grep -c "dependencies" "$LOG")
+check "Una vez declarados, las siguientes sincronizaciones NO vuelven a consultar los bloqueadores (gasta el límite de 120/min)" "[ \"\$p1\" = \"\$p0\" ]"
+sed -i '' 's/^title: Pagos/title: Pagos en línea/' docs/items/CLI-0061.md
+sn sync >/dev/null 2>&1; p2=$(grep -c "dependencies" "$LOG")
+check "Un cambio que no toca los bloqueadores tampoco gasta esa petición" "[ \"\$p2\" = \"\$p1\" ]"
 
 echo "== Fichas guardadas en Windows (CRLF y BOM): se leen igual"
 printf -- '---\r\nid: CLI-0040\r\ntype: feature\r\ntitle: Pago con tarjeta\r\nrisk: R2\r\n---\r\n## Historia\r\nComo cliente quiero pagar con tarjeta\r\n\r\n## Criterios de aceptación\r\n- Dado un pago aprobado, entonces veo el recibo\r\n' > docs/items/CLI-0040.md
@@ -446,6 +467,95 @@ printf -- '---\nid: CLI-0101\ntype: feature\ntitle: Enlace torcido\nrisk: R1\nex
 out=$(sn asegurar CLI-0101 2>&1 || true)
 check "Una ficha normal enlazada por error a una tarea de reunión: no se toca y se dice cómo arreglarlo" "echo \"\$out\" | grep -q 'nacida en una reunión y no le corresponde' && echo \"\$out\" | grep -q 'Quita la línea'"
 check "La tarea de la reunión sigue con su título" "api \"\$ACTEN\" | grep -q 'Acuerdo de la reunión'"
+
+echo "== Regresiones de la revisión del 8-oct (cada daño real tiene su prueba)"
+printf -- '---\nid: CLI-0117\ntype: feature\ntitle: Hecha antes de conectar\nrisk: R1\ndescartado: ya no aplica\n---\n## Historia\nx\n' > docs/items/CLI-0117.md
+git add docs/items/CLI-0117.md && GIT_COMMITTER_DATE='2020-01-01T10:00:00Z' git commit -q -m "chore: ficha de 2020"
+p0=$(posts); sn sync >/dev/null 2>&1
+check "Una ficha que terminó antes de conectar y nunca tuvo tarea no se estrena en segundo plano (Altum no se llena de tareas viejas)" "! grep '\"method\":\"POST\"' '$LOG' | grep -q '\"external_ref\":\"CLI-0117\"'"
+check "Si una persona la pide, asegurar sí la crea" "sn asegurar CLI-0117 2>&1 | grep -qE 'Tarea en Altum #[0-9]+'"
+t() { state | python3 -c 'import json,sys; r=[x for x in json.load(sys.stdin) if x.get("external_ref")==sys.argv[1] or x["title"].startswith(sys.argv[1])]; print(json.dumps(r[0] if r else None))' "$1"; }
+campo() { t "$1" | python3 -c 'import json,sys; print((json.load(sys.stdin) or {}).get(sys.argv[1]))' "$2"; }
+
+# Caso real (EFU-261005-3137): una historia colgada de otra historia. Altum rechaza el parent_id con
+# 422 y antes eso tumbaba el envío COMPLETO, estado incluido: la tarea no se cerraba nunca.
+printf -- '---\nid: CLI-0120\ntype: historia\ntitle: Pagos del portal\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0120.md
+printf -- '---\nid: CLI-0121\ntype: historia\ntitle: Pago con PSE\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0121.md
+sn sync >/dev/null 2>&1                     # las dos tareas nacen sin padre
+printf -- '---\nid: CLI-0121\ntype: historia\ntitle: Pago con PSE\nrisk: R1\nparent: CLI-0120\nchange: pse-121\n---\n## Historia\nx\n' > docs/items/CLI-0121.md
+mkdir -p openspec/changes/pse-121 && echo p > openspec/changes/pse-121/proposal.md
+mkdir -p openspec/changes/archive/2026-10-08-pse-121   # archivada: debería cerrarse en el mismo PATCH
+out=$(sn sync 2>&1)   # el PATCH lleva parent_id (rechazado) Y state (debe llegar igual)
+check "Altum rechaza el padre (historia bajo historia): se dice cuál campo fue y con qué motivo" "echo \"\$out\" | grep -q 'lo mando sin parent_id' && echo \"\$out\" | grep -qi 'no puede colgar de'"
+check "El rechazo del padre NO se lleva el estado: la tarea SÍ se cierra" "campo CLI-0121 state | grep -q '^closed$'"
+check "Y el padre no quedó puesto (Altum lo rechazó de verdad)" "campo CLI-0121 parent_id | grep -qx 'None'"
+p1=$(curl -s "localhost:$PORT/_patches?ref=CLI-0121"); out2=$(sn sync 2>&1); p2=$(curl -s "localhost:$PORT/_patches?ref=CLI-0121")
+check "En la siguiente sincronización NO se vuelve a gastar el envío rechazado ni se repite el aviso" "[ \"\$p2\" = \"\$p1\" ] && ! echo \"\$out2\" | grep -q 'parent_id'"
+sed -i '' 's/^parent: CLI-0120/parent: CLI-0060/' docs/items/CLI-0121.md   # un bug sí puede ser padre
+sn sync >/dev/null 2>&1
+check "Si la ficha cambia de padre, sí se vuelve a intentar (y ahora sí entra)" "campo CLI-0121 parent_id | grep -q '^[0-9a-f-]\{36\}$'"
+
+OTRA=$(state | python3 -c 'import json,sys; print([x for x in json.load(sys.stdin) if x["title"].startswith("Portal de facturación")][0]["id"])')
+printf -- '---\nid: CLI-0110\ntype: feature\ntitle: Ficha mal enlazada\nrisk: R1\next.altum: %s\n---\n## Historia\nx\n' "$OTRA" > docs/items/CLI-0110.md
+out=$(sn sync 2>&1; sn asegurar CLI-0110 2>&1 || true)
+check "Ficha enlazada a una tarea de OTRO proyecto: no se toca y se dice por qué" "campo 'Portal de facturación' title | grep -q '^Portal de facturación (otro proyecto)$' && echo \"\$out\" | grep -q 'es de otro proyecto de Altum'"
+rm -f docs/items/CLI-0110.md
+printf -- '---\nid: CLI-0116\ntype: feature\ntitle: Pisaría la reunión\nrisk: R1\next.altum: acten:abc123\n---\n## Historia\nx\n' > docs/items/CLI-0116.md
+out=$(sn sync 2>&1)
+check "La sincronización de fondo tampoco escribe en una tarea de reunión ajena a la ficha" "! api \"\$ACTEN\" | grep -q 'Pisaría' && echo \"\$out\" | grep -q 'no le corresponde a CLI-0116'"
+rm -f docs/items/CLI-0116.md
+
+printf -- '---\nid: CLI-0111\ntype: feature\ntitle: Título nuevo\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0111.md
+sn sync >/dev/null 2>&1
+printf '{"connector":"altum","attempts":1,"error":"caído","event":{"specversion":"1.0","id":"CLI-0111:viejo","type":"sn.item.upserted","item":{"id":"CLI-0111","title":"Título VIEJO","type":"feature"}}}\n' > .sn/state/outbox.jsonl
+sn sync >/dev/null 2>&1
+check "Un reintento viejo de la cola NO revierte Altum: se usa la ficha de ahora" "[ \"\$(campo CLI-0111 title)\" = '[CLI-0111] Título nuevo' ]"
+
+curl -s "localhost:$PORT/_permisos?modo=no-lider" >/dev/null
+printf -- '---\nid: CLI-0112\ntype: bug\ntitle: Sin líder ni correo conocido\nrisk: R1\nassignee: Pedro <pedro@desconocido.co>\n---\n## Historia\nx\n' > docs/items/CLI-0112.md
+sn sync >/dev/null 2>&1
+check "Sin ser líder y con un correo que Altum no conoce, la tarea se crea igual (sin responsable)" "[ \"\$(campo CLI-0112 title)\" = '[CLI-0112] Sin líder ni correo conocido' ]"
+curl -s "localhost:$PORT/_permisos?modo=lider" >/dev/null
+
+rm -f .sn/state/pull-altum.json
+N1=$(campo CLI-0001 number)
+out=$(sn pull altum 2>&1)
+check "pull no trae como 'nuevas' las tareas que ya son de una ficha (tienen external_ref)" "! echo \"\$out\" | grep -qw \"ALT-$N1\" && [ ! -f docs/items/ALT-$N1.md ]"
+
+api -X PATCH "$ACTEN" -d '{"state":"done"}' >/dev/null
+sed -i '' 's/^title: .*/title: Acuerdo del lunes (editado)/' docs/items/ACT-abc123.md
+sn sync >/dev/null 2>&1
+check "Tarea de reunión terminada en Altum: la ficha no la devuelve a pendiente" "api \"\$ACTEN\" | grep -q '\"state\":\"done\"'"
+
+curl -s "localhost:$PORT/_prioridad?ref=CLI-0001&p=1" >/dev/null
+sed -i '' 's/^title: .*/title: Guardar falla sin ciudad ni barrio/' docs/items/CLI-0001.md
+sn sync >/dev/null 2>&1
+check "La prioridad que el líder cambió en Altum no se pisa (solo se pone al crear)" "[ \"\$(campo CLI-0001 priority)\" = 1 ] && campo CLI-0001 title | grep -q 'ni barrio'"
+
+curl -s "localhost:$PORT/_429?n=2" >/dev/null
+printf -- '---\nid: CLI-0114\ntype: feature\ntitle: Con límite de peticiones\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0114.md
+out=$(sn asegurar CLI-0114 2>&1)
+check "Altum responde 429 (límite por minuto): se espera y se reintenta, la tarea nace" "echo \"\$out\" | grep -qE 'Tarea en Altum #[0-9]+: \\[CLI-0114\\]'"
+
+printf -- '---\nid: CLI-0115\ntype: feature\ntitle: Fechas en otra zona\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0115.md
+git add docs/items/CLI-0115.md && GIT_COMMITTER_DATE='2026-10-08T10:00:00-05:00' GIT_AUTHOR_DATE='2026-10-08T10:00:00-05:00' git commit -q -m "feat: fechas" -m "Refs: CLI-0115"
+sn sync >/dev/null 2>&1
+antes=$(curl -s "localhost:$PORT/_patches?ref=CLI-0115"); sn sync >/dev/null 2>&1; sn sync >/dev/null 2>&1
+check "Fecha real con desfase (-05:00) que Altum guarda en UTC: no se reescribe en cada sincronización" "[ \"\$(curl -s localhost:$PORT/_patches?ref=CLI-0115)\" = \"\$antes\" ] && campo CLI-0115 started_at | grep -q '2026-10-08T15:00:00'"
+
+printf -- '---\nid: CLI-0113\ntype: feature\ntitle: Versión A\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0113.md
+git add docs/items/CLI-0113.md && git commit -q -m "chore: ficha A"
+sn sync >/dev/null 2>&1
+git checkout -q -b rama-nueva; sleep 1
+sed -i '' 's/^title: Versión A/title: Versión B/' docs/items/CLI-0113.md && git commit -q docs/items/CLI-0113.md -m "chore: ficha B"
+sn sync >/dev/null 2>&1
+check "En la rama nueva la ficha cambia y Altum se actualiza" "campo CLI-0113 title | grep -q 'Versión B'"
+git checkout -q trunk; sn sync >/dev/null 2>&1
+check "Volver a una rama vieja NO revierte el contenido en Altum" "campo CLI-0113 title | grep -q 'Versión B'"
+
+cp .sn/connectors.json "$W/conectores.bak" && printf '\xef\xbb\xbf' | cat - "$W/conectores.bak" > .sn/connectors.json
+check "connectors.json guardado con BOM (Bloc de notas de Windows) se sigue leyendo" "sn test | grep -q '^OK'"
+cp "$W/conectores.bak" .sn/connectors.json
 
 echo "== Firma de webhooks de Altum"
 cat > /tmp/sn-verify-$$.mjs <<'JS'

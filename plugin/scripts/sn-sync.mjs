@@ -20,7 +20,7 @@
 //   node sn-sync.mjs status                                              conectores, pendientes, última sync
 //   node sn-sync.mjs githooks                                            activa la sync en commit/merge/pull (agrega, no reemplaza)
 // Se ejecuta en la raíz del repositorio. Sin .sn/connectors.json no hace nada (proyecto no conectado).
-import { execFileSync, spawn } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,11 +36,12 @@ import { takeSnapshot } from './sync/snapshot.mjs';
 import { mensajeValidacion } from './sync/validacion-mensaje.mjs';
 import { aprobacionesPr, firmaDelLider, origenRepo, prDeRama } from './sync/pr.mjs';
 import { siguientePaso } from './sync/siguiente.mjs';
-import { catalogo, comoActualizar, ejecutarPasos, esMasNueva, gitAtrasado, instalaciones, pasosGenerales, pasosInstalacionGeneral, pasosLimpieza, pasosParaActualizar, proyectosConCopia, ultimaPublicada, versionInstalada } from './sync/version.mjs';
+import { catalogo, comoActualizar, declaraElPlugin, dejarDeDeclarar, ejecutarPasos, esMasNueva, gitAtrasado, instalaciones, pasosInstalacionGeneral, pasosLimpieza, pasosParaActualizar, proyectosConCopia, ultimaPublicada, versionInstalada, versionPublicadaDeVerdad } from './sync/version.mjs';
 import { parseLog } from './validation-state.mjs';
 import { leerTexto } from './sync/texto.mjs';
+import { codeownersConLider } from './sync/lider.mjs';
 import {
-  acquireLock, appendOutbox, CONFIG_FILE, loadConfig, loadSnapshot, readOutbox, releaseLock, saveSnapshot, writeOutbox,
+  acquireLock, anotarDescartado, appendOutbox, CONFIG_FILE, DESCARTADOS_FILE, loadConfig, loadSnapshot, readOutbox, refreshLock, releaseLock, saveSnapshot, writeOutbox,
 } from './sync/store.mjs';
 
 const SELF = fileURLToPath(import.meta.url);
@@ -82,8 +83,11 @@ async function attempt(connector, evt, attempts = 0) {
     return true;
   } catch (error) {
     if (error instanceof NotRetryable) {
+      // Reintentar no cambia nada (es una regla del sistema externo), pero NO se da por entregado:
+      // en segundo plano nadie ve la consola, así que queda escrito y "status" lo muestra.
       console.error(`sn-sync: ${connector.name} ${evt.item?.id || ''}: ${error.message}`);
-      return true; // regla de negocio del sistema externo: reintentar no cambia nada
+      anotarDescartado({ conector: connector.name, item: evt.item?.id || '', error: error.message });
+      return false;
     }
     appendOutbox({ connector: connector.name, event: evt, attempts: attempts + 1, error: error.message, at: new Date().toISOString() });
     return false;
@@ -93,12 +97,28 @@ async function attempt(connector, evt, attempts = 0) {
 async function retryOutbox(config) {
   const pending = readOutbox();
   if (!pending.length) return { retried: 0, dropped: 0 };
+  // La foto se toma ANTES de tocar la cola: si leerla falla (git, red, gh), la cola sigue intacta.
+  // Antes se vaciaba primero y un error aquí la borraba completa, sin dejar rastro.
+  const fresca = new Map(takeSnapshot(config.project).items.map((i) => [i.id, i]));
   writeOutbox([]);
   const byName = new Map(config.connectors.map((c) => [c.name, c]));
   let retried = 0;
+  // Al reintentar se usa la ficha de AHORA, no la que quedó guardada cuando falló: si entre tanto la
+  // ficha cambió, reenviar la versión vieja revertía Altum. Si la ficha ya no existe, el evento sobra.
   for (const entry of pending) {
     const connector = byName.get(entry.connector);
-    if (connector && await attempt(connector, entry.event, entry.attempts)) retried += 1;
+    const id = entry.event?.item?.id;
+    if (id && !fresca.has(id)) {
+      anotarDescartado({ conector: entry.connector, item: id, error: 'su ficha ya no existe en el repositorio' });
+      continue;
+    }
+    if (!connector) {
+      // El conector se apagó o se renombró: el evento no se puede entregar, y eso se dice.
+      anotarDescartado({ conector: entry.connector, item: id || '', error: 'ese conector ya no está en .sn/connectors.json (o quedó apagado)' });
+      continue;
+    }
+    const evento = id ? { ...entry.event, item: fresca.get(id) } : entry.event;
+    if (await attempt(connector, evento, entry.attempts)) retried += 1;
   }
   const dropped = writeOutbox(readOutbox());
   return { retried, dropped };
@@ -132,6 +152,7 @@ async function sync(config) {
         if (flag('--dry-run')) {
           console.log(`[dry-run] ${connector.name} <- ${evt.type} ${evt.item.id} (${evt.item.stage})`);
         } else if (await attempt(connector, evt)) sent += 1; else failed += 1;
+        refreshLock();   // una corrida larga no debe perder el candado a mitad de camino
       }
     }
     if (!flag('--dry-run')) saveSnapshot(snapshot);
@@ -322,26 +343,42 @@ async function lead(config) {
     return console.log(l.github);
   }
   process.stdout.write(leadText(l));
-  // CODEOWNERS: el líder de Altum es el dueño del código; GitHub le pide la revisión de cada PR solo.
+  // AGENTS.md y CODEOWNERS son archivos VERSIONADOS del proyecto: el plugin no los cambia por su
+  // cuenta (dejaba cambios sin guardar en el repo cada vez que alguien pedía una validación). Solo
+  // dice si están desactualizados; los cambia quien corre "lead --escribir" (lo hace /sn-setup) y
+  // ese cambio va en un commit, como cualquier otro.
+  const escribir = flag('--escribir');
+  const pendientes = [];
   if (l?.github && existsSync('.git') && origenRepo().provider !== 'azure_devops') {
-    const linea = `* @${l.github}`;
     const archivo = '.github/CODEOWNERS';
-    const actual = existsSync(archivo) ? readFileSync(archivo, 'utf8') : '';
-    if (!actual.split('\n').includes(linea)) {
-      mkdirSync('.github', { recursive: true });
-      writeFileSync(archivo, `# Lo mantiene el plugin Softnexus desde Altum (líder del proyecto). No se edita a mano.\n${linea}\n`);
-      console.log(`CODEOWNERS: ${l.name} (@${l.github}) queda como revisor de todos los PR.`);
+    const actual = existsSync(archivo) ? leerTexto(archivo) : '';
+    const conLider = codeownersConLider(actual, l.github);
+    if (conLider !== actual) {
+      if (escribir) {
+        mkdirSync('.github', { recursive: true });
+        writeFileSync(archivo, conLider);
+        console.log(`CODEOWNERS: ${l.name} (@${l.github}) queda como revisor (las demás reglas del archivo se conservan).`);
+      } else {
+        pendientes.push(`CODEOWNERS no tiene al líder (@${l.github}) como revisor general`);
+      }
     }
   }
-  // AGENTS.md: si su línea del líder no coincide con Altum, se corrige.
   if (l?.name && existsSync('AGENTS.md')) {
     const texto = leerTexto('AGENTS.md');
     const actual = texto.match(LINEA_LIDER)?.[0];
     const correcta = lineaLider(l);
     if (actual && actual !== correcta) {
-      writeFileSync('AGENTS.md', texto.replace(LINEA_LIDER, correcta));
-      console.log(`AGENTS.md decía otro líder. Lo corregí con lo que dice Altum:\n  antes:  ${actual}\n  ahora:  ${correcta}`);
+      if (escribir) {
+        writeFileSync('AGENTS.md', texto.replace(LINEA_LIDER, correcta));
+        console.log(`AGENTS.md decía otro líder. Lo corregí con lo que dice Altum:\n  antes:  ${actual}\n  ahora:  ${correcta}`);
+      } else {
+        pendientes.push(`AGENTS.md dice otro líder (${actual.replace(/^- Líder técnico[^:]*:\s*/, '').slice(0, 60)})`);
+      }
     }
+  }
+  if (pendientes.length) {
+    console.log(`\nDesactualizado en el repositorio (no lo toco por mi cuenta): ${pendientes.join('; ')}.`);
+    console.log('Para dejarlo igual que Altum, en una rama: lead --escribir, y entrégalo en un PR.');
   }
 }
 
@@ -518,24 +555,33 @@ async function actualizar() {
   const raiz = path.join(path.dirname(SELF), '..');
   // --solo-revisar: lo corre el hook en segundo plano para dejar la última versión consultada en caché.
   if (flag('--solo-revisar')) { await ultimaPublicada(); return; }
-  const actual = versionInstalada(raiz);
-  const ultima = await ultimaPublicada();
   const cat = catalogo();
   const installs = instalaciones();
   // --general: dejar el plugin UNA sola vez en este computador. Quita las copias que viven dentro de
   // proyectos (y la línea que las pedía) y deja al día la general, la que sirve para todos.
   if (flag('--general')) {
-    const generales = pasosGenerales({ cat, installs });
+    // Primero la general, sola: si no queda bien (sin red, catálogo movido), no se tocan las copias
+    // de los proyectos — dejarlas ahí es mejor que quitarlas y quedarse sin ningún plugin.
+    console.log('\nPrimero dejo al día la copia general (la de tu usuario):');
+    const resultadoGeneral = ejecutarPasos(pasosInstalacionGeneral({ cat, installs }));
+    if (resultadoGeneral.some((r) => !r.ok)) {
+      resumen(resultadoGeneral, '');
+      console.log('\nNo quito las copias de los proyectos: si la general no quedó instalada, eso te dejaría sin plugin. Corrige esto y vuelve a intentar "actualizar --general".');
+      return;
+    }
     const copias = proyectosConCopia(installs);
     console.log(copias.length
-      ? `\n${copias.length} proyecto(s) tienen su propia copia del plugin. Se quitan y queda una sola, la de tu usuario:`
-      : '\nNo hay copias dentro de proyectos. Solo dejo al día la general:');
-    resumen(ejecutarPasos(generales), 'Listo: una sola instalación, para todos los proyectos.');
+      ? `\nListo. Ahora quito las ${copias.length} copia(s) que viven dentro de proyectos, para que quede una sola:`
+      : '\nListo. No hay copias dentro de proyectos: nada más que hacer.');
+    resumen([...resultadoGeneral, ...ejecutarPasos(pasosLimpieza({ installs }))], 'Listo: una sola instalación, para todos los proyectos.');
     if (!process.exitCode) console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir.');
     return;
   }
 
-  console.log(`Plugin Softnexus: tienes ${actual || '?'}${ultima ? ` · publicada ${ultima}` : ' (no pude consultar la última: sin red)'}`);
+  const actual = versionInstalada(raiz);
+  // Lo pide una persona: se le dice la VERDAD, no un dato de caché disfrazado de fresco.
+  const { ultima, red } = await versionPublicadaDeVerdad();
+  console.log(`Plugin Softnexus: tienes ${actual || '?'}${ultima ? ` · publicada ${ultima}${red ? '' : ' (de la última vez que hubo conexión; ahora no pude consultar)'}` : ' (no pude consultar la última: sin red)'}`);
   if (cat.tipo === 'carpeta') {
     const atrasado = gitAtrasado(cat.carpeta);
     console.log(`El catálogo de este computador es una CARPETA (${cat.carpeta}), no GitHub:`
@@ -546,12 +592,17 @@ async function actualizar() {
     console.log(`Está instalado ${installs.length} veces: ${installs.map((i) => `${i.scope} ${i.version}`).join(', ')}.`
       + ' Dentro de un proyecto, la copia del proyecto manda sobre la del usuario.');
   }
-  if (ultima && !esMasNueva(ultima, actual) && !viejas.length) return console.log('Todo al día. No hay nada que hacer.');
+  if (ultima && !esMasNueva(ultima, actual) && !viejas.length) {
+    return console.log(red ? 'Todo al día. No hay nada que hacer.' : 'Parece al día según la última vez que hubo conexión, pero no pude confirmarlo ahora mismo (sin red). Vuelve a intentarlo cuando tengas conexión.');
+  }
   const pasos = pasosParaActualizar({ cat, installs });
   if (flag('--arreglar')) {
     console.log(`\nActualizando todo en esta máquina (${pasos.length} pasos):`);
     resumen(ejecutarPasos(pasos), 'Listo: todo quedó al día.');
     if (!process.exitCode) console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir. Hasta que no reinicies sigue corriendo la versión vieja.');
+    else if (installs.some((i) => i.scope !== 'user')) {
+      console.log('\nSi sigue sin quedar, prueba con una sola instalación para todos los proyectos:  node "' + SELF + '" actualizar --general');
+    }
     return;
   }
   console.log('\nPara ponerlo al día en esta máquina, en este orden:');
@@ -573,6 +624,13 @@ async function actualizar() {
 // Decir la verdad al final: si algo falló, se ve, se explica cómo terminarlo a mano y el comando
 // sale con error (quien lo llama no puede dar por bueno algo que no se hizo).
 function resumen(hechos, bien) {
+  const conPr = hechos.filter((h) => h.paso?.pendientePr).map((h) => h.paso.pendientePr);
+  if (conPr.length) {
+    console.log(`\n${conPr.length} repositorio(s) piden el plugin en un archivo VERSIONADO (.claude/settings.json).`
+      + ' No lo toqué: es del equipo. Quien administre cada uno, dentro del repo y en una rama:');
+    console.log('   node "' + SELF + '" dejar-de-declarar   y entregarlo en un PR');
+    conPr.forEach((c) => console.log(`   · ${c}`));
+  }
   const fallaron = hechos.filter((h) => !h.ok);
   if (!fallaron.length) return console.log(`\n${bien}`);
   process.exitCode = 1;
@@ -583,6 +641,17 @@ function resumen(hechos, bien) {
   }
   console.log('\nLo que falló hay que hacerlo a mano (copia el comando de arriba) o decírselo al líder. NO quedó completo.');
   console.log('Para mandar el detalle completo: node "' + SELF + '" actualizar --general > /tmp/sn-plugin.txt 2>&1   y pasa ese archivo.');
+}
+
+// dejar-de-declarar: quita "softnexus-sdd@softnexus" del .claude/settings.json de ESTE repositorio.
+// Es un cambio del equipo, así que se hace a propósito, en una rama, y se entrega en un PR. Desde ahí
+// el plugin solo se activa a nivel de usuario (una instalación por computador).
+function dejarDeDeclararAqui() {
+  const carpeta = process.cwd();
+  if (!declaraElPlugin(carpeta)) return console.log('Este repositorio no pide el plugin en .claude/settings.json: no hay nada que quitar.');
+  dejarDeDeclarar(carpeta);
+  console.log('Listo: .claude/settings.json ya no pide el plugin (el resto del archivo quedó igual).');
+  console.log('Entrégalo en un PR: "chore: el plugin Softnexus se activa por usuario, no por proyecto".');
 }
 
 // limpiar-copias: quita el plugin de TODOS los proyectos de este computador (las copias instaladas
@@ -681,7 +750,12 @@ function motor() {
   if (path.resolve(origen) === destino) {
     return console.log('Este repositorio no tiene copia propia del motor: usa la del plugin, que siempre está al día.');
   }
-  if (!existsSync(destino)) return console.log('Este repositorio todavía no tiene el motor (scripts/sn). Lo instala /sn-setup.');
+  // Primera vez: con --actualizar se instala completo (así siempre queda con su .version, que es lo
+  // que le dice a cada computador si su plugin es más nuevo que esta copia).
+  if (!existsSync(destino) && !flag('--actualizar')) {
+    return console.log('Este repositorio todavía no tiene el motor (scripts/sn). Para instalarlo: motor --actualizar.');
+  }
+  mkdirSync(destino, { recursive: true });
   const nombres = [...new Set([...archivosDelMotor(origen), ...archivosDelMotor(destino)])];
   const distintos = nombres.filter((f) => {
     const a = path.join(origen, f);
@@ -703,6 +777,9 @@ function motor() {
     mkdirSync(path.dirname(b), { recursive: true });
     copyFileSync(a, b);
   }
+  // La copia anota de qué versión salió: así sabe si el plugin de cada computador es más nuevo que ella.
+  const version = versionInstalada(path.join(origen, '..'));
+  if (version) writeFileSync(path.join(destino, VERSION_DE_LA_COPIA), `${version}\n`);
   console.log(`Motor actualizado en scripts/sn (${distintos.length} archivo(s)). Entrégalo con /sn-ship: es lo que usa el CI.`);
 }
 
@@ -717,19 +794,20 @@ async function conectar(config) {
   const todos = await listProjects(connector);
   if (!todos.length) throw new Error('tu clave de Altum no ve ningún proyecto: pide al líder que te asigne al proyecto en Altum.');
   const delRepo = projectsForRepo(todos, remoto, identificarRepo);
-  const entre = nombre ? findProject(delRepo.length ? delRepo : todos, nombre) : {};
+  const entre = nombre ? findProject(delRepo.length ? delRepo : todos, nombre, { exacta: true }) : {};
   const elegido = entre.match || (!nombre && delRepo.length === 1 ? delRepo[0] : null);
   if (!elegido) {
     const opciones = entre.candidates || (delRepo.length ? delRepo : todos);
     console.log(delRepo.length > 1 && !nombre
       ? `Este repositorio lo usan ${delRepo.length} proyectos: ${opciones.map((p) => p.name).join(', ')}. ¿En cuál vas a trabajar?`
       : nombre && !entre.candidates ? `Ninguno de tus proyectos se llama "${nombre}". Tus proyectos: ${opciones.map((p) => p.name).join(', ')}.`
+        : nombre ? `"${nombre}" no es el nombre exacto de un proyecto. ¿Cuál de estos es? ${opciones.map((p) => p.name).join(', ')}.`
         : `¿En cuál de tus proyectos vas a trabajar? ${opciones.map((p) => p.name).join(', ')}.`);
     console.log('(Pregúntale a la persona por el NOMBRE del proyecto y vuelve a correr: conectar "<nombre>")');
     process.exitCode = 1;
     return;
   }
-  const crudo = existsSync(CONFIG_FILE) ? JSON.parse(readFileSync(CONFIG_FILE, 'utf8')) : { connectors: [] };
+  const crudo = existsSync(CONFIG_FILE) ? JSON.parse(readFileSync(CONFIG_FILE, 'utf8').replace(/^\uFEFF/, '')) : { connectors: [] };
   const lista = crudo.connectors || [];
   const previo = lista.find((c) => c.kind === 'altum');
   if (previo?.project_id === elegido.id) return console.log(`Este repositorio ya está conectado con "${elegido.name}" en Altum.`);
@@ -756,7 +834,7 @@ async function setRepo(config) {
   if (!query) throw new Error('uso: set-repo <nombre del proyecto> [url del repositorio]');
   if (!url) throw new Error('este repositorio no tiene remoto "origin": pasa la dirección como segundo argumento');
   const connector = anyAltum(config);
-  const { match, candidates } = findProject(await listProjects(connector), query);
+  const { match, candidates } = findProject(await listProjects(connector), query, { exacta: true });
   if (candidates) {
     console.log(`Hay ${candidates.length} proyectos parecidos a "${query}". ¿Cuál es?`);
     candidates.forEach((p) => console.log(`  ${p.name}`));
@@ -829,9 +907,13 @@ async function asegurar(config) {
     // Si el ítem apuntaba a una tarea que ya no existe (se borró en Altum), se olvida ese enlace y se crea de nuevo.
     const anterior = item.external?.[connector.name];
     const sinEnlace = { ...item, external: { ...(item.external || {}), [connector.name]: undefined }, ...(anterior ? { recrear: anterior } : {}) };
-    await deliver(connector, { specversion: '1.0', id: `${item.id}:asegurar`, type: 'sn.item.upserted', project: config.project, time: new Date().toISOString(), actor: localActor(), item: sinEnlace });
+    // Evento nuevo (con la hora): con el id de siempre, la clave de idempotencia sería la de la tarea
+    // borrada y Altum devolvería esa misma en vez de crear otra.
+    await deliver(connector, { specversion: '1.0', id: `${item.id}:asegurar:${Date.now()}`, type: 'sn.item.upserted', project: config.project, time: new Date().toISOString(), actor: localActor(), item: sinEnlace, forzado: true });
     item = buscar();
-    tarea = await existente(item.external?.[connector.name]);
+    // Se busca por su external_ref (coincidencia exacta), no por el enlace viejo de la ficha, que
+    // apunta a la tarea borrada. Al encontrarla, asegurar sí escribe el enlace nuevo: es explícito.
+    tarea = await existente('');
   }
   if (!tarea) throw new Error(`no pude confirmar la tarea de ${item.id} en Altum. Revisa "status" y vuelve a intentar antes de construir.`);
   const numero = tarea.number ? `#${tarea.number}` : tarea.id;
@@ -967,6 +1049,13 @@ function status(config) {
   console.log(`Proyecto: ${config.project || path.basename(process.cwd())}`);
   config.connectors.forEach((c) => console.log(`  ${c.name.padEnd(14)} ${c.kind.padEnd(8)} eventos: ${(c.events || ['*']).join(', ')}`));
   console.log(`Última sincronización: ${last?.taken_at || 'nunca'} · ítems: ${last?.items.length ?? 0} · en cola: ${readOutbox().length}`);
+  // Lo que se rindió tras varios intentos: nunca en silencio.
+  const descartados = existsSync(DESCARTADOS_FILE) ? readFileSync(DESCARTADOS_FILE, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
+  if (descartados.length) {
+    console.log(`No llegaron a Altum (${descartados.length}; se dejaron de reintentar):`);
+    descartados.slice(-10).forEach((e) => console.log(`  ${e.at.slice(0, 16)}  ${e.item || '?'}  ${e.error || ''}`));
+    console.log('  Para volver a mandarlos: asegurar <ID>');
+  }
 }
 
 // Agrega una línea marcada a los hooks de git (sin reemplazar hooks existentes como husky).
@@ -977,7 +1066,18 @@ function githooks() {
   const configured = (() => {
     try { return execFileSync('git', ['config', 'core.hooksPath'], { encoding: 'utf8', windowsHide: true }).trim(); } catch { return ''; }
   })();
-  const dir = configured || execFileSync('git', ['rev-parse', '--git-path', 'hooks'], { windowsHide: true, encoding: 'utf8' }).trim();
+  const raiz = gitOut(['rev-parse', '--show-toplevel']);
+  const dir = configured ? path.resolve(raiz || '.', configured) : execFileSync('git', ['rev-parse', '--git-path', 'hooks'], { windowsHide: true, encoding: 'utf8' }).trim();
+  // Ganchos versionados (core.hooksPath dentro del repositorio, p. ej. .husky): son archivos del equipo.
+  // Escribirlos desde cada computador dejaría cambios que nadie pidió: se dice qué agregar, en un PR.
+  const enElRepo = raiz && path.resolve(dir).startsWith(`${path.resolve(raiz)}${path.sep}`)
+    && !path.resolve(dir).startsWith(`${path.resolve(raiz, '.git')}${path.sep}`);
+  const ignorado = (f) => { try { execFileSync('git', ['check-ignore', '-q', f], { windowsHide: true, stdio: 'ignore' }); return true; } catch { return false; } };
+  if (enElRepo && !ignorado(path.join(dir, 'post-commit'))) {
+    console.log(`Este repositorio usa ganchos de git versionados (${path.relative(raiz, dir)}): son del equipo y no los toco por mi cuenta.`);
+    console.log(`Para sincronizar en cada commit, agrega esta línea al final de post-commit, post-merge, post-checkout y post-rewrite de esa carpeta, en un PR:\n  ${HOOK_LINE}`);
+    return;
+  }
   mkdirSync(dir, { recursive: true });
   for (const hook of ['post-commit', 'post-merge', 'post-checkout', 'post-rewrite']) {
     const file = path.join(dir, hook);
@@ -987,6 +1087,25 @@ function githooks() {
   }
   console.log(`Sincronización enganchada a commit, merge, checkout y rebase (${dir}).`);
 }
+
+// ---- La copia del repositorio cede al motor del plugin ----
+// scripts/sn viaja con las ramas: al cambiarse a una rama vieja vuelve un motor viejo, con reglas que
+// ya dañaron tareas en Altum. Si este computador tiene el plugin general (alcance usuario) igual o más
+// nuevo que esta copia, el trabajo lo hace el del plugin. En el CI no hay plugin: sigue la copia.
+const VERSION_DE_LA_COPIA = '.version';
+function cederAlPlugin() {
+  if (process.env.SN_MOTOR_PROPIO) return;
+  const aqui = path.dirname(SELF);
+  if (existsSync(path.join(aqui, '..', '.claude-plugin', 'plugin.json'))) return;   // este YA es el del plugin
+  const general = instalaciones().find((i) => i.scope === 'user' && i.ruta);
+  const suyo = general && path.join(general.ruta, 'scripts', 'sn-sync.mjs');
+  if (!suyo || !existsSync(suyo) || path.resolve(suyo) === path.resolve(SELF)) return;
+  const mia = existsSync(path.join(aqui, VERSION_DE_LA_COPIA)) ? readFileSync(path.join(aqui, VERSION_DE_LA_COPIA), 'utf8').trim() : '';
+  if (mia && esMasNueva(mia, versionInstalada(general.ruta) || general.version)) return;   // la copia es más nueva: manda ella
+  const r = spawnSync(process.execPath, [suyo, ...args], { stdio: 'inherit', windowsHide: true, env: { ...process.env, SN_MOTOR_PROPIO: '1' } });
+  process.exit(r.status ?? 1);
+}
+cederAlPlugin();
 
 const command = args[0] || 'sync';
 const config = loadConfig();
@@ -1016,6 +1135,7 @@ else if (command === 'conectar') await conectar(config);
 else if (command === 'motor') motor();
 else if (command === 'actualizar' || command === 'version') await actualizar();
 else if (command === 'limpiar-copias') limpiarCopias();
+else if (command === 'dejar-de-declarar') dejarDeDeclararAqui();
 else if (command === 'instalar-general') await instalarGeneral();
 else if (command === 'sin-asignar') await sinAsignar(config);
 else if (command === 'asignar') await asignar(config);
@@ -1051,6 +1171,6 @@ else if (command === 'fetch') {
   if (!connector) throw new Error(`no existe el conector ${args[1]}`);
   process.stdout.write(`${JSON.stringify(await fetchExternal(connector, args[2]), null, 2)}\n`);
 } else {
-  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|pedir-config|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|conectar|motor|actualizar|limpiar-copias|instalar-general|sin-asignar|asignar|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
+  console.log('Uso: sn-sync.mjs sync|test|list|show|export|fetch|projects|repos|pedir-config|siguiente|dividir|verificar-firma|proteger-rama|asegurar|whoami|lead|mensaje|clone|conectar|motor|actualizar|limpiar-copias|dejar-de-declarar|instalar-general|sin-asignar|asignar|set-repo|quitar-repo|repo-check|backlog|pull|link|watch|watch-stop|inbox|status|githooks');
   process.exitCode = 2;
 }

@@ -14,7 +14,9 @@ export function projectKey(name) {
 
 // Busca por clave exacta, luego por texto contenido y, si no, por palabras en común.
 // Devuelve { match } si hay una sola, { candidates } si hay varias, {} si ninguna.
-export function findProject(projects, query) {
+// exacta: para lo que ESCRIBE (conectar, set-repo) solo vale el nombre exacto; los parecidos se
+// muestran para preguntar, nunca se eligen solos (un "clientes" no puede caer en "Clientes VIP").
+export function findProject(projects, query, { exacta: soloExacta = false } = {}) {
   const wanted = projectKey(query);
   if (!wanted) return {};
   const conKey = projects.map((p) => ({ ...p, key: p.key || projectKey(p.name) }));
@@ -23,6 +25,7 @@ export function findProject(projects, query) {
   const palabras = wanted.split('-').filter((w) => w.length > 2);
   const porPalabra = conKey.filter((p) => palabras.some((w) => p.key.includes(w)));
   const lista = exacta.length ? exacta : contiene.length ? contiene : porPalabra;
+  if (soloExacta && !exacta.length) return lista.length ? { candidates: lista } : {};
   if (lista.length === 1) return { match: lista[0] };
   if (lista.length > 1) return { candidates: lista };
   return {};
