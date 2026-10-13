@@ -6,15 +6,18 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
-## Versión 0.64.0
+## Versión 0.65.0
 
-Actualizador independiente en `herramientas/actualizar-plugin.mjs`, descargable y ejecutable desde
-cualquier carpeta en Mac, Linux y Windows, sin SN instalado. Consulta la versión publicada sin
-caché, actualiza todos los ámbitos registrados y exige coincidencia entre registro, manifiesto
-real y motor existente. Una copia atrasada impide declarar éxito. `actualizar --general` y
-`actualizar --arreglar` usan el mismo código; se conservan las configuraciones compartidas.
+El actualizador independiente `herramientas/actualizar-plugin.mjs` instala o actualiza primero
+la copia de usuario y verifica sus archivos. Después desinstala las copias project/local con
+`--keep-data` y retira únicamente la declaración Softnexus en los ajustes de los proyectos
+conocidos por Claude y la carpeta actual, con respaldo previo. No borra carpetas ni credenciales.
+Los cambios de ajustes versionados deben entregarse mediante PR.
+Solo declara `GENERAL VERIFICADA` si queda una copia de usuario habilitada y actualizada.
 
-Comprobar sin modificar: `node actualizar-plugin.mjs --verificar`.
+Funciona desde cualquier carpeta con Claude Code y Node.js 18+. Descárgalo de nuevo en cada
+actualización para no depender de un motor antiguo. `--verificar` comprueba sin modificar;
+`--conservar-proyectos` conserva y actualiza las copias particulares como excepción voluntaria.
 Los motores versionados de CI se actualizan aparte mediante PR; la API personal no cambia.
 
 ## Cambios de 0.63.0
@@ -36,8 +39,8 @@ Altum, reintentos de dependencias, guardas de comandos anidados y borrado de ram
 firmas sin identidad y cachés de líder vencidas o de otro proyecto. Cambiar el diseño sin commit
 invalida su sello; un commit de otra rama tampoco cuenta como aprobación.
 
-La actualización general también pone al día las copias de proyecto cuya configuración compartida
-se conserva hasta un PR. Los errores del catálogo o un motor inexistente impiden declarar éxito.
+En 0.62–0.64 la actualización conservaba copias de proyecto. Desde 0.65 la ruta normal las migra
+a una sola instalación de usuario con respaldo de ajustes. Los errores del catálogo o un motor inexistente impiden declarar éxito.
 No hay que actualizar por chat: se hace una vez por computador y se reinicia Claude Code.
 
 Evidencia: [auditoría del código](pruebas/evidencia/auditoria-2026-10-10.md) y

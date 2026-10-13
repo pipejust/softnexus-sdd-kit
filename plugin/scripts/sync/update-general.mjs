@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Arranque independiente del plugin y de la carpeta del proyecto. Mac, Linux y Windows.
 import {execFileSync} from 'node:child_process';
-import {existsSync,readFileSync} from 'node:fs';
+import {existsSync,readFileSync,realpathSync,mkdirSync,writeFileSync} from 'node:fs';
 import os from 'node:os';
+import {randomUUID} from 'node:crypto';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 const PLUGIN='softnexus-sdd@softnexus';
@@ -53,11 +54,63 @@ function ejecutar(cmd,args,cwd) {
   const out=execFileSync(cmd,args,{...options,windowsHide:true});
   if(out?.trim())console.log(out.trim()); return out;
 }
-export async function actualizarTodo({casa=os.homedir(),consultar=publicada,correr=ejecutar,log=console.log,verificarSolo=false}={}) {
+// Solo se retira la declaración de este plugin. Nunca se borran .claude, credenciales o skills ajenos.
+export function proyectosConocidos(casa,rows,cwd) {
+  const history=path.join(casa,'.claude.json');
+  const dirs=[...rows.filter(i=>i.scope!=='user').map(i=>i.projectPath),
+    ...Object.keys(existsSync(history)?json(history).projects||{}:{}),cwd];
+  return [...new Set(dirs.filter(Boolean).map(d=>existsSync(d)?realpathSync(d):path.resolve(d)))].filter(d=>d!==(existsSync(casa)?realpathSync(casa):path.resolve(casa)));
+}
+function ajustesProyecto(dirs) {
+  return dirs.flatMap(dir=>['settings.json','settings.local.json'].map(name=>path.join(dir,'.claude',name)))
+    .filter(existsSync).map(file=>({file,data:json(file)}))
+    .filter(({data})=>Object.hasOwn(data.enabledPlugins||{},PLUGIN));
+}
+export function comprobarGeneral(casa,rows,dirs) {
+  if(rows.length!==1||rows[0].scope!=='user')throw new Error('Migración incompleta: todavía hay instalaciones particulares o duplicadas.');
+  const user=path.join(casa,'.claude/settings.json');
+  if(!existsSync(user)||json(user).enabledPlugins?.[PLUGIN]!==true)throw new Error('El plugin general no está habilitado en los ajustes del usuario.');
+  const pendientes=ajustesProyecto(dirs);
+  if(pendientes.length)throw new Error(`Todavía hay declaraciones de proyecto: ${pendientes.map(i=>i.file).join(', ')}`);
+}
+function migrar(casa,rows,dirs,correr,log) {
+  const copias=rows.filter(i=>i.scope!=='user');
+  for(const i of copias) {
+    if(!['project','local'].includes(i.scope))throw new Error(`Ámbito ${i.scope} administrado: requiere intervención del administrador.`);
+    if(!i.projectPath||!existsSync(i.projectPath))throw new Error(`No se puede retirar la copia ${i.scope}: proyecto no disponible ${i.projectPath||''}. Conecta el disco o restaura esa ruta y repite.`);
+    if(realpathSync(i.projectPath)===realpathSync(casa))throw new Error('Hay una instalación de proyecto en la carpeta de usuario; requiere revisión manual para proteger los ajustes generales.');
+  }
+  const ajustes=ajustesProyecto(dirs); // Validar TODOS los JSON antes de retirar la primera copia.
+  const generales=['settings.json','settings.local.json'].map(n=>path.join(casa,'.claude',n)).filter(existsSync).map(f=>realpathSync(f));
+  if(ajustes.some(({file})=>generales.includes(realpathSync(file))))throw new Error('Un proyecto enlaza los ajustes generales del usuario: revisa ese enlace antes de migrar.');
+  if(ajustes.length) {
+    const backup=path.join(casa,'.claude/backups/softnexus',randomUUID());
+    mkdirSync(backup,{recursive:true,mode:0o700});
+    ajustes.forEach(({file},i)=>writeFileSync(path.join(backup,`${i}.json`),readFileSync(file),{mode:0o600}));
+    writeFileSync(path.join(backup,'rutas.json'),JSON.stringify(ajustes.map(({file},i)=>({original:file,respaldo:`${i}.json`})),null,2),{mode:0o600});
+    log(`Respaldo de ajustes: ${backup}`);
+  }
+  for(const i of copias) {
+    log(`Retirando instalación ${i.scope}: ${i.projectPath}`);
+    correr('claude',['plugin','uninstall',PLUGIN,'--scope',i.scope,'--keep-data'],i.projectPath);
+  }
+  // También cubre declaraciones sin instalación registrada y bloqueos locales enabledPlugins:false.
+  for(const {file} of ajustes) {
+    const data=json(file);
+    if(Object.hasOwn(data.enabledPlugins||{},PLUGIN)) {
+      delete data.enabledPlugins[PLUGIN];
+      if(!Object.keys(data.enabledPlugins).length)delete data.enabledPlugins;
+      writeFileSync(file,JSON.stringify(data,null,2)+'\n');
+    }
+    log(`Ajuste migrado: ${file}. Si está versionado, entrega este cambio mediante PR.`);
+  }
+}
+export async function actualizarTodo({casa=os.homedir(),consultar=publicada,correr=ejecutar,log=console.log,verificarSolo=false,conservarProyectos=false,cwd=process.cwd()}={}) {
   const esperada=await consultar(); // Sin versión fresca no se modifica nada ni se usa una caché como prueba.
   log(`Versión publicada: ${esperada}`);
   let rows=leerInstalaciones(casa);
-  if(verificarSolo)return comprobarVersiones(esperada,rows);
+  const dirs=proyectosConocidos(casa,rows,cwd);
+  if(verificarSolo){const checked=comprobarVersiones(esperada,rows);if(!conservarProyectos)comprobarGeneral(casa,rows,dirs);return checked;}
   const known=path.join(casa,'.claude/plugins/known_marketplaces.json');
   const market=existsSync(known)?json(known).softnexus:null;
   const src=market?.source;
@@ -76,20 +129,25 @@ export async function actualizarTodo({casa=os.homedir(),consultar=publicada,corr
     const text=`${e.stdout||''}\n${e.stderr||''}\n${e.message||''}`;
     if(!/already enabled|ya está (habilitado|activado|encendid)/i.test(text))throw e;
   }
-  for(const i of rows.filter(i=>i.scope!=='user')) {
+  if(!conservarProyectos)migrar(casa,rows,dirs,correr,log);
+  for(const i of rows.filter(i=>conservarProyectos&&i.scope!=='user')) {
     if(!['project','local'].includes(i.scope))throw new Error(`Ámbito ${i.scope} administrado: requiere actualizarlo con su administrador.`);
     if(!i.projectPath||!existsSync(i.projectPath))throw new Error(`No puedo comprobar la copia ${i.scope}: proyecto inexistente ${i.projectPath||''}.`);
     log(`Actualizando ${i.scope}: ${i.projectPath}`);
     correr('claude',['plugin','update',PLUGIN,'--scope',i.scope],i.projectPath);
   }
   const final=comprobarVersiones(esperada,leerInstalaciones(casa));
+  if(!conservarProyectos)comprobarGeneral(casa,leerInstalaciones(casa),dirs);
   final.forEach(i=>log(`VERIFICADO: ${i.scope} ${i.version}${i.project?' · '+i.project:''}`));
-  log('Todas las copias registradas quedaron verificadas. Cierra todas las sesiones de Claude Code y vuelve a abrirlo.');
+  log(conservarProyectos?'Todas las copias registradas quedaron verificadas.':'GENERAL VERIFICADA: una instalación de usuario; sin copias ni declaraciones en los proyectos comprobados.');
+  log('Cierra todas las sesiones de Claude Code y vuelve a abrirlo. Las credenciales de Altum siguen vigentes.');
   return final;
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
   try {
-    const result=await actualizarTodo({verificarSolo:process.argv.includes('--verificar')});
-    if(process.argv.includes('--verificar'))result.forEach(i=>console.log(`VERIFICADO: ${i.scope} ${i.version}${i.project?' · '+i.project:''}`));
+    const flags=process.argv.slice(2);
+    if(flags.some(f=>!['--verificar','--conservar-proyectos'].includes(f)))throw new Error('Opciones: --verificar, --conservar-proyectos. Sin opciones migra a instalación general.');
+    const result=await actualizarTodo({verificarSolo:flags.includes('--verificar'),conservarProyectos:flags.includes('--conservar-proyectos')});
+    if(flags.includes('--verificar')){result.forEach(i=>console.log(`VERIFICADO: ${i.scope} ${i.version}${i.project?' · '+i.project:''}`));if(!flags.includes('--conservar-proyectos'))console.log('GENERAL VERIFICADA');}
   } catch(e) {console.error(`ACTUALIZACIÓN NO CONFIRMADA: ${e.message}`);process.exitCode=1;}
 }

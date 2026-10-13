@@ -15,7 +15,7 @@ function copy(scope,version){const dir=path.join(root,scope);mkdirSync(path.join
 let rows;let calls;let logs;
 function reset(){rows=[copy('user','0.62.0'),copy('project','0.62.0')];calls=[];logs=[];writeFileSync(registry,JSON.stringify({plugins:{'softnexus-sdd@softnexus':rows}}))}
 function update(scope){for(const i of rows.filter(i=>i.scope===scope)){i.version='0.63.0';writeFileSync(path.join(i.installPath,'.claude-plugin/plugin.json'),'{"version":"0.63.0"}')}writeFileSync(registry,JSON.stringify({plugins:{'softnexus-sdd@softnexus':rows}}))}
-const options=(correr)=>({casa,consultar:async()=> '0.63.0',correr,log:l=>logs.push(l)});
+const options=(correr)=>({casa,consultar:async()=> '0.63.0',correr,log:l=>logs.push(l),conservarProyectos:true});
 try {
  await check('El CLI dice éxito pero usuario sigue 0.62: falla antes de tocar proyectos',async()=>{reset();await assert.rejects(actualizarTodo(options((cmd,args,cwd)=>calls.push({cmd,args,cwd}))),/0.62.0.*0.63.0/);assert.equal(calls.some(c=>c.args.includes('project')),false);assert.equal(logs.some(l=>l.includes('Todas las copias')),false)});
  await check('Usuario 0.63 pero proyecto 0.62: no declara éxito',async()=>{reset();await assert.rejects(actualizarTodo(options((cmd,args,cwd)=>{calls.push({cmd,args,cwd});if(args.includes('user')&&args.includes('update'))update('user')})),/project.*0.62.0.*0.63.0/);assert.equal(logs.some(l=>l.includes('Todas las copias')),false)});
@@ -31,6 +31,33 @@ try {
  await check('Motor ausente no cuenta como instalación válida',()=>{reset();rmSync(path.join(rows[0].installPath,'scripts/sn-sync.mjs'));rows[0].version='0.63.0';writeFileSync(path.join(rows[0].installPath,'.claude-plugin/plugin.json'),'{"version":"0.63.0"}');assert.throws(()=>comprobarVersiones('0.63.0',rows),/falta el motor/)});
  await check('Registro corrupto no se interpreta como instalación vacía',async()=>{reset();writeFileSync(registry,'no es JSON');await assert.rejects(actualizarTodo(options(()=>calls.push('mutation'))));assert.equal(calls.length,0)});
  await check('Versiones semánticas y versiones ilegibles',()=>{assert.ok(versionAlMenos('0.64.0','0.63.0'));assert.equal(versionAlMenos('0.62.0','0.63.0'),false);assert.equal(versionAlMenos('ultima','0.63.0'),false)});
+ await check('Migración predeterminada retira project y local, preserva API y otros ajustes',async()=>{
+   reset();rows.push(copy('local','0.62.0'));writeFileSync(registry,JSON.stringify({plugins:{'softnexus-sdd@softnexus':rows}}));
+   writeFileSync(settings,JSON.stringify({enabledPlugins:{'softnexus-sdd@softnexus':true,otro:true},permissions:{allow:['Read']}}));
+   const local=path.join(project,'.claude/settings.local.json');writeFileSync(local,'{"enabledPlugins":{"softnexus-sdd@softnexus":false},"env":{"API":"conservar"}}');
+   const final=await actualizarTodo({...options((cmd,args,cwd)=>{
+     calls.push({cmd,args,cwd});if(args.includes('update')&&args.includes('user'))update('user');
+     if(args.includes('enable'))writeFileSync(path.join(casa,'.claude/settings.json'),'{"enabledPlugins":{"softnexus-sdd@softnexus":true}}');
+     if(args.includes('uninstall')){assert.ok(args.includes('--keep-data'));rows=rows.filter(i=>i.scope!==args[args.indexOf('--scope')+1]);writeFileSync(registry,JSON.stringify({plugins:{'softnexus-sdd@softnexus':rows}}));}
+   }),conservarProyectos:false,cwd:project});
+   assert.equal(final.length,1);assert.equal(final[0].scope,'user');
+   assert.deepEqual(JSON.parse(readFileSync(settings)),{enabledPlugins:{otro:true},permissions:{allow:['Read']}});
+   assert.equal(JSON.parse(readFileSync(local)).env.API,'conservar');assert.ok(logs.some(l=>l.startsWith('Respaldo')));assert.ok(logs.some(l=>l.startsWith('GENERAL VERIFICADA')));
+ });
+ await check('Uninstall con éxito aparente pero registro intacto no termina verde',async()=>{
+   reset();await assert.rejects(actualizarTodo({...options((cmd,args)=>{if(args.includes('update')&&args.includes('user'))update('user')}),conservarProyectos:false,cwd:project}));assert.ok(!logs.some(l=>l.startsWith('GENERAL VERIFICADA')));
+ });
+ await check('Verificar rechaza dos copias aunque ambas estén actualizadas',async()=>{
+   reset();update('user');update('project');await assert.rejects(actualizarTodo({...options(()=>{}),conservarProyectos:false,verificarSolo:true,cwd:project}),/Migración incompleta/);
+ });
+ await check('Declaración sin registro de plugin también se retira y repetir es idempotente',async()=>{
+   reset();rows=[copy('user','0.63.0')];writeFileSync(registry,JSON.stringify({plugins:{'softnexus-sdd@softnexus':rows}}));writeFileSync(settings,'{"enabledPlugins":{"softnexus-sdd@softnexus":true}}');
+   writeFileSync(path.join(casa,'.claude.json'),JSON.stringify({projects:{[project]:{}}}));
+   const opt={...options(()=>{}),conservarProyectos:false,cwd:root};await actualizarTodo(opt);assert.equal(JSON.parse(readFileSync(settings)).enabledPlugins,undefined);await actualizarTodo(opt);
+ });
+ await check('Proyecto desconectado impide anunciar migración completa',async()=>{
+   reset();rows[1].projectPath=path.join(root,'no-existe');writeFileSync(registry,JSON.stringify({plugins:{'softnexus-sdd@softnexus':rows}}));await assert.rejects(actualizarTodo({...options((cmd,args)=>{if(args.includes('update')&&args.includes('user'))update('user')}),conservarProyectos:false,cwd:root}),/proyecto no disponible/);
+ });
  await check('La descarga standalone y el motor usan exactamente el mismo actualizador',()=>{const dir=new URL('../',import.meta.url);assert.equal(readFileSync(new URL('herramientas/actualizar-plugin.mjs',dir),'utf8'),readFileSync(new URL('plugin/scripts/sync/update-general.mjs',dir),'utf8'))});
 } finally{rmSync(root,{recursive:true,force:true})}
 console.log(`\nRESULTADO: ${ok} OK · ${fallas} fallas`);process.exitCode=fallas?1:0;
