@@ -6,7 +6,9 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
-## Versión 0.65.0
+## Versión 0.65.1
+
+Corrección 0.65.1: el arranque reconoce alias de carpetas, incluido `/tmp` en macOS.
 
 El actualizador independiente `herramientas/actualizar-plugin.mjs` instala o actualiza primero
 la copia de usuario y verifica sus archivos. Después desinstala las copias project/local con

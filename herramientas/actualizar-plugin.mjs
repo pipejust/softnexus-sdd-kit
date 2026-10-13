@@ -143,7 +143,7 @@ export async function actualizarTodo({casa=os.homedir(),consultar=publicada,corr
   log('Cierra todas las sesiones de Claude Code y vuelve a abrirlo. Las credenciales de Altum siguen vigentes.');
   return final;
 }
-if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)) {
+if(process.argv[1]&&existsSync(process.argv[1])&&realpathSync(process.argv[1])===realpathSync(fileURLToPath(import.meta.url))) {
   try {
     const flags=process.argv.slice(2);
     if(flags.some(f=>!['--verificar','--conservar-proyectos'].includes(f)))throw new Error('Opciones: --verificar, --conservar-proyectos. Sin opciones migra a instalación general.');
