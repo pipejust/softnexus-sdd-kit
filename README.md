@@ -6,7 +6,14 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
-## Versión 0.66.0
+## Versión 0.66.1
+
+`lead --escribir` reemplaza el párrafo completo de líderes en AGENTS.md, incluidas las
+continuaciones antiguas y los saltos CRLF de Windows. Conserva los apartados siguientes.
+Cualquiera de los líderes registrados en Altum conserva su permiso para aprobar y unir
+su propio PR. Esta corrección no cambia las protecciones ni los permisos de GitHub.
+
+## Cambios de 0.66.0
 
 Un descargable detecta Claude Code y el runtime Codex/ChatGPT local, instala o actualiza
 cada plugin en el usuario y verifica registro, habilitación y archivos. No requiere Claude

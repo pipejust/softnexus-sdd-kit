@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {lideresDelProyecto} from '../plugin/scripts/sync/altum-backlog.mjs';
-import {esElLider,codeownersConLider} from '../plugin/scripts/sync/lider.mjs';
+import {esElLider,codeownersConLider,agentsConLider,lineaLider} from '../plugin/scripts/sync/lider.mjs';
 import {firmaDelLider} from '../plugin/scripts/sync/pr.mjs';
 import {statusOf} from '../plugin/scripts/validation-state.mjs';
 let ok=0,fallas=0;
@@ -21,6 +21,19 @@ check('Desarrollador no adquiere permiso de líder',()=>assert.equal(esElLider(d
 check('Aprobación ajena sigue rechazada',()=>assert.equal(firmaDelLider({autor:{usuario:'dev'},aprobaron:[{usuario:'otra'}]},data).valida,false));
 check('No se mezclan correo del segundo con GitHub del primero',()=>{const second=data.leaders.find(x=>x.name==='Juan');assert.equal(esElLider(second,{github:'ana'}),false)});
 check('CODEOWNERS registra todos y preserva reglas específicas',()=>assert.equal(codeownersConLider('* @viejo\nsrc/ @frontend\n',['ana','TON618-Q']),'* @ana @TON618-Q\nsrc/ @frontend\n'));
+for (const eol of ['\n','\r\n']) {
+ check('Párrafo multilínea se reemplaza completo '+JSON.stringify(eol),()=>{
+  const old=['# Proyecto','- Líder técnico: anterior','  - Ana vieja','  - Otro viejo','- Prefijo de ítems: FC','','## Stack','No tocar'].join(eol);
+  const expected=['# Proyecto',lineaLider(data),'- Prefijo de ítems: FC','','## Stack','No tocar'].join(eol);
+  assert.equal(agentsConLider(old,data),expected);
+  assert.equal(agentsConLider(expected,data),expected);
+ });
+ check('Línea actual correcta no conserva continuación vieja '+JSON.stringify(eol),()=>{
+  const old=[lineaLider(data),'  Persona anterior','','Texto propio'].join(eol);
+  assert.equal(agentsConLider(old,data),[lineaLider(data),'','Texto propio'].join(eol));
+ });
+}
+check('Sin párrafo de líderes no cambia el documento',()=>assert.equal(agentsConLider('# Otro\n',data),'# Otro\n'));
 const request={type:'SOLICITUD',seal:'plano',fields:{},raw:''};
 for(const name of ['Ana <ana@x>','Juan <juan@x>']) check('Firma de plano reconocida: '+name,()=>assert.notEqual(statusOf([request,{type:'APROBADO',seal:'plano',fields:{Valida:name},raw:''}],'a',data).status,'firma inválida'));
 check('Sin líderes no se concede acceso',()=>assert.equal(esElLider({leaders:[]},{github:'ana'}),false));

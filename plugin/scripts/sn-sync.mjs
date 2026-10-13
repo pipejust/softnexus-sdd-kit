@@ -39,7 +39,7 @@ import { siguientePaso } from './sync/siguiente.mjs';
 import { instalaciones, motoresGenerales, versionInstalada, esMasNueva } from './sync/version.mjs';
 import { actualizar, dejarDeDeclararAqui, limpiarCopias, instalarGeneral } from './sync/maintenance.mjs';
 import { leerTexto } from './sync/texto.mjs';
-import { codeownersConLider, lideresDe, esElLider } from './sync/lider.mjs';
+import { codeownersConLider, lideresDe, esElLider, agentsConLider } from './sync/lider.mjs';
 import {
   acquireLock, anotarDescartado, appendOutbox, CONFIG_FILE, DESCARTADOS_FILE, loadConfig, loadSnapshot, readOutbox, refreshLock, releaseLock, saveSnapshot, writeOutbox,
 } from './sync/store.mjs';
@@ -265,14 +265,6 @@ function anyAltum(config) {
 // Quién firma lo dice Altum, siempre. AGENTS.md es solo una copia para leer: si dice otra cosa (se
 // escribió a mano antes, o cambió el líder en Altum), se corrige. Nunca se toma la cuenta de GitHub
 // de quien está trabajando como líder: quien escribe el código no se aprueba a sí mismo.
-const LINEA_LIDER = /^- Líder técnico[^\n]*$/m;
-
-function lineaLider(l) {
-  if (l.leaders?.length > 1) return `- Líder técnico (cualquiera de los líderes valida con \`/sn-validate\`): ${l.leaders.map((x) => `${x.name} <${x.email}> · GitHub @${x.github || '?'}`).join('; ')} — según Altum`;
-  return `- Líder técnico (valida sellos a distancia con \`/sn-validate\`): ${l.name}${l.email ? ` <${l.email}>` : ''}`
-    + `${l.github ? ` · GitHub @${l.github}` : ''} — según Altum (se actualiza solo, no se edita a mano)`;
-}
-
 function cuentaGithubActual() {
   if (process.env.SN_SYNC_NO_GH === '1') return '';
   try {
@@ -319,17 +311,17 @@ async function lead(config) {
   }
   if (l?.name && existsSync('AGENTS.md')) {
     const texto = leerTexto('AGENTS.md');
-    const actual = texto.match(LINEA_LIDER)?.[0];
-    const correcta = lineaLider(l);
-    if (actual && actual !== correcta) {
+    const actualizado = agentsConLider(texto, l);
+    if (actualizado !== texto) {
       if (escribir) {
-        writeFileSync('AGENTS.md', texto.replace(LINEA_LIDER, correcta));
-        console.log(`AGENTS.md decía otro líder. Lo corregí con lo que dice Altum:\n  antes:  ${actual}\n  ahora:  ${correcta}`);
+        writeFileSync('AGENTS.md', actualizado);
+        console.log('AGENTS.md: Lo corregí con lo que dice Altum (párrafo completo de líderes).');
       } else {
-        pendientes.push(`AGENTS.md dice otro líder (${actual.replace(/^- Líder técnico[^:]*:\s*/, '').slice(0, 60)})`);
+        pendientes.push('AGENTS.md tiene un párrafo de líderes desactualizado');
       }
     }
   }
+
   if (pendientes.length) {
     console.log(`\nDesactualizado en el repositorio (no lo toco por mi cuenta): ${pendientes.join('; ')}.`);
     console.log('Para dejarlo igual que Altum, en una rama: lead --escribir, y entrégalo en un PR.');
