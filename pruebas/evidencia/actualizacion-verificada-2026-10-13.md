@@ -33,6 +33,9 @@ Los wrappers de bash y PowerShell ejecutan una descarga nueva y propagan los err
 - Tres regresiones del wrapper: descarga nueva, salida de fallo propagada y descarga fallida.
 - Comprobación real de solo lectura: GitHub publicó 0.63.0, mientras esta máquina tenía registro
   y archivos 0.62.0. El actualizador terminó con código 1 y ACTUALIZACIÓN NO CONFIRMADA, sin cambios.
+- Actualización real posterior en este computador: el CLI pasó user de 0.62.0 a 0.63.0;
+  el registro y el manifiesto coincidieron y el actualizador imprimió VERIFICADO: user 0.63.0.
+  En esta máquina solo había copia de usuario; los proyectos atrasados se prueban con fixtures.
 - Batería final completa: **554 OK · 0 fallas** (33 reglas, 15 actualización, 16 líderes, 24 auditoría, 3 wrapper, 92 motor, 195 Altum, 28 vigilante, 32 proceso y 116 guardas).
 - DOCX íntegro, copias web iguales al original y PDF de la página de comandos revisado visualmente. Ejecución de las pruebas en macOS;
   la ruta de Windows y el wrapper PowerShell están preparados, sin prueba nativa en Windows.
