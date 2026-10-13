@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync} from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import {actualizarTodo,comprobarVersiones,versionAlMenos} from '../herramientas/actualizar-plugin.mjs';
@@ -57,6 +58,12 @@ try {
  });
  await check('Proyecto desconectado impide anunciar migración completa',async()=>{
    reset();rows[1].projectPath=path.join(root,'no-existe');writeFileSync(registry,JSON.stringify({plugins:{'softnexus-sdd@softnexus':rows}}));await assert.rejects(actualizarTodo({...options((cmd,args)=>{if(args.includes('update')&&args.includes('user'))update('user')}),conservarProyectos:false,cwd:root}),/proyecto no disponible/);
+ });
+ await check('El comando ejecuta el descargable a través de un alias de carpeta (Mac /tmp)',()=>{
+   const real=path.join(root,'descarga-real'),alias=path.join(root,'descarga-alias');mkdirSync(real);
+   const source=readFileSync(new URL('../herramientas/actualizar-plugin.mjs',import.meta.url));writeFileSync(path.join(real,'actualizar.mjs'),source);symlinkSync(real,alias,'junction');
+   const result=spawnSync(process.execPath,[path.join(alias,'actualizar.mjs'),'--opcion-invalida'],{encoding:'utf8',windowsHide:true});
+   assert.equal(result.status,1,'El script no debe salir cero sin ejecutar su entrada');assert.match(result.stderr,/ACTUALIZACIÓN NO CONFIRMADA: Opciones:/);
  });
  await check('La descarga standalone y el motor usan exactamente el mismo actualizador',()=>{const dir=new URL('../',import.meta.url);assert.equal(readFileSync(new URL('herramientas/actualizar-plugin.mjs',dir),'utf8'),readFileSync(new URL('plugin/scripts/sync/update-general.mjs',dir),'utf8'))});
 } finally{rmSync(root,{recursive:true,force:true})}

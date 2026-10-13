@@ -29,3 +29,11 @@ La URL estable del equipo es https://sd.softnexus.io/actualizar.mjs. Requiere No
 y Claude Code. Descargar de nuevo en cada actualización, desde la terminal. Cerrar las
 sesiones de Claude y abrirlas después. Entregar mediante PR los cambios de ajustes versionados;
 no borrar .claude, .sn ni scripts/sn completos. Motores de CI se actualizan en cada repositorio.
+
+## Corrección del arranque 0.65.1
+
+La prueba exacta del comando público detectó que Node resuelve /tmp como /private/tmp en macOS.
+La comparación textual de argv con import.meta.url terminaba sin ejecutar nada. Se reemplazó por
+comparación de rutas reales. Nueva regresión con alias de carpeta: el archivo descargado debe
+ejecutar su entrada y propagar salida no cero; ya no basta con un exit 0 sin mensaje final.
+Los 21 casos del actualizador pasan localmente.
