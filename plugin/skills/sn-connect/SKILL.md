@@ -3,6 +3,9 @@ name: sn-connect
 description: Conecta el proyecto con sistemas de tareas y mensajería para que historias, bugs y estados se creen y actualicen solos en tiempo real mientras avanza el proceso Spec Driven - una API REST (Altum u otra), un webhook (n8n para traducir a cualquier sistema), GitHub Issues (lo que lee Orca) o una sala de Matrix/Element. Configura, prueba, activa la sincronización y muestra su estado. Úsala con /sn-connect, al instalar o actualizar el proyecto, o cuando alguien diga "conectar con Altum", "que las tareas se actualicen solas", "mandar avisos a Matrix", "ver las tareas en Orca", "estado de la sincronización".
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # /sn-connect — tareas al día sin tocarlas
 
 Contrato completo: `${CLAUDE_PLUGIN_ROOT}/references/integraciones.md`. Léelo antes de escribir la configuración.

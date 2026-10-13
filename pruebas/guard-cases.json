@@ -637,5 +637,45 @@
   },
   0,
   "M2: Write de una migración nueva (no existe aún) no se bloquea"
+ ],
+ [
+  {
+   "tool_name": "apply_patch",
+   "tool_input": {
+    "command": "*** Begin Patch\n*** Add File: .env\n+SECRET=xxx\n*** End Patch"
+   }
+  },
+  2,
+  "Codex patch no escribe secretos"
+ ],
+ [
+  {
+   "tool_name": "apply_patch",
+   "tool_input": {
+    "command": "*** Begin Patch\n*** Update File: src/a.js\n*** Move to: .github/workflows/a.yml\n@@\n-a\n+b\n*** End Patch"
+   }
+  },
+  2,
+  "Codex patch no mueve un archivo a CI"
+ ],
+ [
+  {
+   "tool_name": "apply_patch",
+   "tool_input": {
+    "command": "*** Begin Patch\n*** Update File: .sn/state/altum-lider.json\n@@\n-{}\n+{}\n*** End Patch"
+   }
+  },
+  2,
+  "Codex patch no falsifica al líder"
+ ],
+ [
+  {
+   "tool_name": "apply_patch",
+   "tool_input": {
+    "command": "*** Begin Patch\n*** Add File: src/a.js\n+export const a=1;\n*** End Patch"
+   }
+  },
+  0,
+  "Codex patch permite código normal"
  ]
 ]

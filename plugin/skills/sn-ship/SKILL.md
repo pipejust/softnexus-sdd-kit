@@ -3,6 +3,9 @@ name: sn-ship
 description: Hace los commits y el Pull Request con el formato de Softnexus. Modo commit - guarda avances pequeños con mensajes convencionales ligados al change. Modo PR - sube la rama y abre el PR con delta spec, evidencia y checklist. Úsala al terminar tareas de construcción, cuando alguien diga "guarda", "haz commit", "sube", "abre el PR", "entregar".
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # /sn-ship — commits y PR sin tener que saber git
 
 ## Reglas de git (siempre)

@@ -3,6 +3,9 @@ name: sn-request
 description: Pide la validación del líder técnico cuando el camino Spec Driven llega a un sello que la persona no puede aprobar sola (plano de riesgo R3-R4, entrega R2+, o cuando el líder lo exigió). Sube la rama, deja la solicitud registrada en git, marca el PR y prepara el mensaje para el mensajero institucional, para que el líder valide desde su propio computador sin compartir contexto. Úsala cuando /sn lo indique, o cuando alguien diga "necesito que el líder apruebe", "pedir validación", "mandar a revisar al líder".
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # /sn-request — pedir la firma del líder a distancia
 
 Formato y reglas: `${CLAUDE_PLUGIN_ROOT}/references/validacion.md`. Léelo antes de escribir.

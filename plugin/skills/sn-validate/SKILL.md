@@ -3,6 +3,9 @@ name: sn-validate
 description: Para el líder técnico - valida desde su propio computador un plano o una entrega que otra persona pidió con sn-request, sin haber estado en esa conversación y sin tocar su trabajo abierto. Trae la rama a una carpeta aparte, reconstruye todo el contexto desde los archivos del change, revisa según el riesgo y registra la decisión en git. Úsala cuando llegue un mensaje "[Validación Softnexus]", cuando alguien diga "valida la rama X", "qué tengo pendiente por validar", o con /sn-validate sin argumentos para ver la lista.
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # /sn-validate — validar a distancia, sin contexto previo
 
 Formato y reglas: `${CLAUDE_PLUGIN_ROOT}/references/validacion.md`. Léelo antes de escribir.

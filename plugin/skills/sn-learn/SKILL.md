@@ -3,6 +3,9 @@ name: sn-learn
 description: Convierte un error, corrección o retrabajo en una mejora permanente del sistema (regla en AGENTS.md, regla en openspec/config.yaml, test, hook o cambio de skill) para que no dependa otra vez de que alguien lo recuerde. Úsala cuando un PR fue rechazado, el agente repitió un error, hubo un bug en producción, o alguien dice "otra vez lo mismo".
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # sn-learn — cada error mejora el sistema
 
 ## 1. Diagnóstico (5 preguntas, respuestas cortas)

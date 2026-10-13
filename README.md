@@ -1,26 +1,25 @@
 # softnexus-sdd-kit
 
-Kit para trabajar **Spec Driven** en todos los proyectos de Softnexus con Claude Code.
+Kit para trabajar **Spec Driven** en todos los proyectos de Softnexus con Claude Code, Codex y ChatGPT de escritorio local.
 Motor de specs: **OpenSpec**. Disciplina: **Superpowers** (TDD, debugging, verificación).
 Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce todo el camino.
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
-## Versión 0.65.1
+## Versión 0.66.0
 
-Corrección 0.65.1: el arranque reconoce alias de carpetas, incluido `/tmp` en macOS.
+Un descargable detecta Claude Code y el runtime Codex/ChatGPT local, instala o actualiza
+cada plugin en el usuario y verifica registro, habilitación y archivos. No requiere Claude
+para usuarios de OpenAI. `--cliente claude|codex|chatgpt|todos` selecciona el adaptador;
+`--verificar` no instala y `--conservar-proyectos` conserva copias particulares.
 
-El actualizador independiente `herramientas/actualizar-plugin.mjs` instala o actualiza primero
-la copia de usuario y verifica sus archivos. Después desinstala las copias project/local con
-`--keep-data` y retira únicamente la declaración Softnexus en los ajustes de los proyectos
-conocidos por Claude y la carpeta actual, con respaldo previo. No borra carpetas ni credenciales.
-Los cambios de ajustes versionados deben entregarse mediante PR.
-Solo declara `GENERAL VERIFICADA` si queda una copia de usuario habilitada y actualizada.
+Respalda y migra copias/declaraciones conocidas de proyecto, incluidos skills OpenAI antiguos.
+Los ajustes versionados modificados deben ir en PR. Las API se conservan. Los hooks de
+Codex/ChatGPT requieren revisión de confianza por la aplicación; no se autorizan en silencio.
+Se añade soporte de `apply_patch` a las guardas y selección del motor general de Codex.
 
-Funciona desde cualquier carpeta con Claude Code y Node.js 18+. Descárgalo de nuevo en cada
-actualización para no depender de un motor antiguo. `--verificar` comprueba sin modificar;
-`--conservar-proyectos` conserva y actualiza las copias particulares como excepción voluntaria.
-Los motores versionados de CI se actualizan aparte mediante PR; la API personal no cambia.
+ChatGPT web/nube, Antigravity y Orca no se declaran compatibles sin un adaptador y pruebas.
+Guía del equipo: [ACTUALIZACION-GENERAL.md](ACTUALIZACION-GENERAL.md).
 
 ## Cambios de 0.63.0
 

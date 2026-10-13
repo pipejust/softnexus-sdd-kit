@@ -3,6 +3,9 @@ name: sn-status
 description: Dice en qué punto del camino Spec Driven va cada ítem y cuál es el siguiente paso exacto. Úsala cuando alguien pregunte "¿dónde voy?", "¿qué sigue?", "¿qué me falta?", "me perdí", al volver de una pausa, o al abrir una sesión nueva en un proyecto con trabajo a medias.
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # /sn-status — ¿dónde voy?
 
 No guardes el estado en ningún archivo: **dedúcelo** de lo que existe. Así nunca se desactualiza.

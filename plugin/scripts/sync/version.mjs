@@ -423,3 +423,15 @@ export function gitAtrasado(carpeta) {
     return 0;
   }
 }
+
+// Motores personales confirmados por el actualizador; ningún proyecto es fuente de la general.
+export function motoresGenerales() {
+  const rows=instalaciones().filter(i=>i.scope==='user'&&i.ruta);
+  try {
+    const home=process.env.CODEX_HOME||path.join(os.homedir(),'.codex');
+    const receipt=leerJson(path.join(home,'softnexus-install.json'));
+    if(receipt?.cliente==='codex'&&receipt.ruta&&versionInstalada(receipt.ruta)===receipt.version)
+      rows.push({scope:'user',version:receipt.version,ruta:receipt.ruta});
+  }catch{}
+  return rows.sort((a,b)=>esMasNueva(a.version,b.version)?-1:esMasNueva(b.version,a.version)?1:0);
+}

@@ -3,6 +3,9 @@ name: sn-explain
 description: Microlección de 5 minutos después de cada historia. Explica en lenguaje no técnico qué se cambió, qué archivos importan, cómo viaja la información y qué podría fallar, y hace 2 preguntas de comprobación. Úsala al cerrar un change, o cuando alguien pregunte "qué hiciste", "cómo funciona esto" o "no entiendo este código".
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # sn-explain — aprender sobre el código real
 
 Objetivo: que cada historia terminada deje a la persona entendiendo un poco más de desarrollo. Cien historias = cien lecciones sobre SU código.
