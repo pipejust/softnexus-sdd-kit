@@ -8,7 +8,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { leerTexto, normalizarTexto } from './sync/texto.mjs';
-import { comoSeIdentifica, esElLider, identidadFirmante } from './sync/lider.mjs';
+import { comoSeIdentifica, esElLider, identidadFirmante, lideresDe } from './sync/lider.mjs';
 
 const CHANGES_DIR = 'openspec/changes';
 const PLAN_PATHS = ['proposal.md', 'specs', 'design.md', 'tasks.md'];
@@ -97,7 +97,7 @@ function liderGuardado(root = '.') {
     const lider = JSON.parse(readFileSync(path.join(root, '.sn/state/altum-lider.json'), 'utf8'));
     const config = path.join(root, '.sn/connectors.json');
     const proyecto = existsSync(config) ? JSON.parse(leerTexto(config)).connectors?.find((c) => c.kind === 'altum' && c.enabled !== false)?.project_id : '';
-    return proyecto && lider.project_id !== proyecto ? null : lider;
+    return proyecto && (lider.project_id !== proyecto || lider.leaders_version !== 2) ? null : lider;
   } catch {
     return null;
   }
@@ -134,7 +134,7 @@ export function statusOf(entries, change, lider = liderGuardado()) {
   // cualquier otra persona no cuenta: el plano sigue esperando la firma.
   const firmante = identidadFirmante(last.fields.Valida);
   const hayFirmante = Boolean(firmante.correo || firmante.github);
-  if (pideLider(entries, last, change) && (!(lider?.email || lider?.github) || !hayFirmante || !esElLider(lider, firmante))) {
+  if (pideLider(entries, last, change) && (!lideresDe(lider).some((l) => l.email || l.github || l.emails?.length) || !hayFirmante || !esElLider(lider, firmante))) {
     return {
       ...base,
       status: 'firma inválida',

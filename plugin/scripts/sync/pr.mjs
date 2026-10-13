@@ -4,7 +4,7 @@
 import { execFileSync } from 'node:child_process';
 import { identificarRepo } from './altum-backlog.mjs';
 import { fromKeychain } from './altum.mjs';
-import { esElLider } from './lider.mjs';
+import { esElLider, lideresDe, comoSeIdentifica } from './lider.mjs';
 
 const TIMEOUT_MS = 8000;
 
@@ -109,9 +109,12 @@ export function aprobacionesPr(numero, origen = origenRepo()) {
 export function firmaDelLider(aprob, lider) {
   if (!aprob) return { valida: false, motivo: 'no pude leer las aprobaciones del PR (¿sesión de gh o token de Azure DevOps?).' };
   if (!lider?.name) return { valida: false, motivo: 'Altum no dice quién es el líder de este proyecto.' };
-  const esLider = (p) => esElLider(lider, { github: p.usuario.toLowerCase(), correo: (p.correo || '').toLowerCase() });
-  if (esLider(aprob.autor)) return { valida: true, motivo: `el PR lo abrió el propio líder (${lider.name}): su decisión es la que vale en este proyecto.` };
-  if (aprob.aprobaron.some(esLider)) return { valida: true, motivo: `aprobado por ${lider.name}, el líder según Altum.` };
+  const reconoce = (l, p) => esElLider(l, { github: String(p?.usuario || '').toLowerCase(), correo: String(p?.correo || '').toLowerCase() });
+  const propio = lideresDe(lider).find((l) => reconoce(l, aprob.autor));
+  if (propio) return { valida: true, motivo: `el PR lo abrió el propio líder (${propio.name}): su decisión es la que vale en este proyecto.` };
+  const firmante = lideresDe(lider).find((l) => aprob.aprobaron.some((p) => reconoce(l, p)));
+  if (firmante) return { valida: true, motivo: `aprobado por ${firmante.name}, el líder según Altum.` };
+  if (lideresDe(lider).length > 1) return { valida: false, motivo: `Falta la aprobación de cualquiera de los líderes de Altum: ${comoSeIdentifica(lider)}.` };
   const otros = aprob.aprobaron.map((p) => p.usuario).filter(Boolean);
   return {
     valida: false,

@@ -7,6 +7,7 @@ export function mensajeValidacion({
   proyecto = '', sello = 'plano', riesgo = '', pide = '', titulo = '', queValidar = '',
   rama = '', commit = '', pr = '', lider = null, clonar = '',
 } = {}) {
+  if (lider?.leaders?.length > 1) lider = { name: lider.leaders.map((l) => `${l.name}${l.email ? ` <${l.email}>` : ''}`).join(' o ') };
   const para = lider?.name ? `Para: ${lider.name}${lider.email ? ` <${lider.email}>` : ''}\n` : '';
   const traer = clonar ? `  1. Si todavía no tienes el proyecto: abre Claude Code en una carpeta vacía y escribe:\n       /sn clóname el proyecto ${clonar}\n  2. Ya dentro del proyecto, escribe:\n       /sn-validate ${rama}\n` : `  /sn-validate ${rama}\n`;
   return `[Validación Softnexus] ${proyecto || '(proyecto)'} · sello de ${sello}${riesgo ? ` · riesgo ${riesgo}` : ''}\n`

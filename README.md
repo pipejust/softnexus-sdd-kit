@@ -6,7 +6,19 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
-## Versión 0.62.0
+## Versión 0.63.0
+
+Altum puede registrar varios líderes en un proyecto. Cualquiera de ellos puede aprobar los sellos,
+aprobar PRs y unir su propio trabajo. La lista completa se guarda y se comprueba en el guard y en
+la verificación de CI; CODEOWNERS y el mensaje de validación incluyen todos los líderes.
+Se corrige la mezcla del nombre de la persona de `/me` con la cuenta de GitHub del primer líder.
+Las cachés anteriores se refrescan antes de autorizar un merge.
+
+La cuenta activa de GitHub debe corresponder a la ficha de uno de esos líderes en Altum.
+Actualizar el plugin cubre las sesiones locales después de reiniciar Claude Code; los motores
+`scripts/sn/` versionados en cada proyecto y su CODEOWNERS se actualizan mediante PR.
+
+## Correcciones de 0.62.0
 
 La auditoría corrige simulaciones que podían entregar la cola real, rechazos sucesivos 403/422 de
 Altum, reintentos de dependencias, guardas de comandos anidados y borrado de ramas protegidas,
