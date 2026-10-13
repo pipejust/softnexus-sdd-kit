@@ -1,5 +1,23 @@
-# Actualización general verificada
+# Actualización general de Spec Driven
 
-Enviar después de publicar 0.64.0 y los documentos de la web.
+Equipo: cierren Claude Code y ejecuten el comando de su sistema en la terminal, desde cualquier carpeta. Requiere Claude Code y Node.js 18+ instalados. Es una actualización por computador, no por chat.
 
-> Equipo: actualicen Softnexus usando el actualizador independiente del [manual](https://sd.softnexus.io/doc.html?f=MANUAL-NINOS.md), desde cualquier carpeta en Mac o Windows. No hace falta SN instalado en esa carpeta ni usar un chat de IA. El proceso debe mostrar VERIFICADO para la copia del usuario y cada proyecto. Si alguna queda atrasada, muestra un error: no den la actualización por terminada. Después cierren todas las sesiones de Claude Code y vuelvan a abrirlo. Las API actuales siguen sirviendo. Los motores de CI de cada repositorio se actualizan mediante PR y luego git pull.
+**Mac:**
+```bash
+curl -fsSL https://sd.softnexus.io/actualizar.mjs -o /tmp/sn-actualizar.mjs && node /tmp/sn-actualizar.mjs
+```
+
+**Windows (PowerShell):**
+```powershell
+& {
+  $ErrorActionPreference = 'Stop'
+  $sn = Join-Path $env:TEMP 'sn-actualizar.mjs'
+  Invoke-WebRequest -UseBasicParsing 'https://sd.softnexus.io/actualizar.mjs' -OutFile $sn
+  node $sn
+  if ($LASTEXITCODE -ne 0) { throw 'Actualización incompleta: revisa el error anterior.' }
+}
+```
+
+Debe terminar con **GENERAL VERIFICADA**. Después abran Claude Code y usen `/sn` dentro de su proyecto. El proceso deja una sola instalación general, retira las copias particulares de Softnexus de los proyectos conocidos y respalda los ajustes afectados. La API de Altum sigue sirviendo. Si indica cambios en ajustes versionados, entréguenlos mediante PR para que la declaración antigua no vuelva.
+
+No borren carpetas del proyecto. Si falla, compartan el error; no den la actualización por terminada. Para conservar copias particulares voluntariamente, añadan `--conservar-proyectos` al comando de Node. Carpetas nunca registradas en Claude: ejecuten el mismo comando dentro de ellas.
