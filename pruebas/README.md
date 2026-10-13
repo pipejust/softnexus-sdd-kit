@@ -9,6 +9,7 @@ bash pruebas/todas.sh
 
 | Prueba | Qué cubre |
 |---|---|
+| `actualizacion-test.mjs` | CLI exitoso con archivos viejos, usuario nuevo con proyecto viejo, registro y manifiesto incongruentes, falta de red, catálogo local, instalación inicial y modo de solo comprobación. |
 | `lideres-test.mjs` | Lista completa de líderes, identidades separadas, aprobaciones y merge por cada líder; rechazo de personas ajenas y CODEOWNERS con varios usuarios. |
 | `reglas-test.mjs` | Reglas de sincronización y detección del mensaje 422 observado en el sandbox real. |
 | `auditoria-test.mjs` | Regresiones de simulación sin envíos, rechazos sucesivos, comandos anidados, caché del líder, firma y validez del commit, y fallos del ejecutor de pruebas. |
