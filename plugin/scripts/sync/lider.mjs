@@ -57,3 +57,16 @@ export function codeownersConLider(texto, github) {
   const cabecera = '# Revisor general: el líder del proyecto según Altum (lo mantiene el plugin Softnexus).';
   return `${cabecera}\n${linea}\n${texto ? `\n${texto.replace(/^\n+/, '')}` : ''}`;
 }
+
+export function lineaLider(l) {
+  if (l.leaders?.length > 1) return `- Líder técnico (cualquiera de los líderes valida con \`/sn-validate\`): ${l.leaders.map((x) => `${x.name} <${x.email}> · GitHub @${x.github || '?'}`).join('; ')} — según Altum`;
+  return `- Líder técnico (valida sellos a distancia con \`/sn-validate\`): ${l.name}${l.email ? ` <${l.email}>` : ''}`
+    + `${l.github ? ` · GitHub @${l.github}` : ''} — según Altum (se actualiza solo, no se edita a mano)`;
+}
+
+// Sustituye el párrafo completo, incluidas continuaciones y listas indentadas.
+// Se detiene en otra entrada de primer nivel, sección o párrafo; conserva CRLF.
+export function agentsConLider(texto, lider) {
+  const bloque = /^- (?:Líder técnico|Líderes técnicos)[^\r\n]*(?:\r?\n(?![ \t]*\r?$|[-*+] |#{1,6} |```)[^\r\n]+)*/m;
+  return texto.replace(bloque, lineaLider(lider));
+}
