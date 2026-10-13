@@ -5,6 +5,7 @@
 // Las reglas (límites, excepciones, .sn-size-ignore) vienen del mismo script que usa el CI.
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { archivosPatch } from './patch.mjs';
 import {
   MAX_LINES, WARN_LINES, countLines, isChecked, loadBaseline, loadIgnores,
 } from '../plantillas/scripts/check-file-size.mjs';
@@ -42,6 +43,23 @@ const tool = payload.tool_name ?? '';
 const input = payload.tool_input ?? {};
 const filePath = String(input.file_path ?? '');
 const root = payload.cwd || process.cwd();
+if(tool==='apply_patch') {
+  const projected=new Map();
+  for(const f of archivosPatch(input.command)) {
+    const absolute=path.resolve(root,f.file_path), destination=path.resolve(root,f.move||f.file_path);
+    if(payload.hook_event_name!=='PostToolUse'&&['.sn-size-baseline','.sn-size-ignore'].some(n=>path.basename(absolute)===n||path.basename(destination)===n)) {
+      process.stderr.write('[softnexus-size] BLOQUEADO: cambios de controles de tamaño por patch requieren revisión del líder.\n');process.exit(2);
+    }
+    if(f.kind==='Delete')continue;
+    const relative=path.relative(root,destination).replace(/\\/g,'/');
+    if(!isChecked(relative,loadIgnores(root)))continue;
+    const before=projected.has(absolute)?projected.get(absolute):(existsSync(absolute)?countLines(readFileSync(absolute,'utf8')):0);
+    const after=f.kind==='Add'?f.added:before+f.added-f.removed;
+    projected.set(destination,after);
+    if(payload.hook_event_name!=='PostToolUse'&&after>MAX_LINES&&after>before){process.stderr.write(`[softnexus-size] BLOQUEADO: ${relative} quedaría con ${after} líneas. Divide el archivo.\n`);process.exit(2);}
+  }
+  process.exit(0);
+}
 if (!filePath || !['Write', 'Edit', 'MultiEdit'].includes(tool)) process.exit(0);
 
 const absolute = path.resolve(root, filePath);

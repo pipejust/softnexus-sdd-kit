@@ -1,5 +1,5 @@
 // Mantenimiento de la instalación general y las copias de proyecto.
-import { actualizarTodo, comprobarVersiones, leerInstalaciones } from './update-general.mjs';
+import { actualizarClientes, comprobarVersiones, leerInstalaciones } from './update-general.mjs';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,7 +19,7 @@ export async function actualizar() {
   // --general: dejar el plugin UNA sola vez en este computador. Quita las copias que viven dentro de
   // proyectos (y la línea que las pedía) y deja al día la general, la que sirve para todos.
   if (flag('--general') || flag('--arreglar')) {
-    try { await actualizarTodo({conservarProyectos:flag('--conservar-proyectos')}); }
+    try { await actualizarClientes({conservarProyectos:flag('--conservar-proyectos')}); }
     catch(error) { process.exitCode = 1; console.error(`✗ NO SE PUDO: ${error.message}\nATENCIÓN: actualización incompleta; no se confirmó la migración general.`); }
     return;
   }
@@ -111,6 +111,6 @@ export function limpiarCopias() {
 // instalar-general: deja la copia del computador (ámbito de usuario), la que sirve en TODOS los
 // proyectos. Si ya está, la deja al día.
 export async function instalarGeneral() {
-  try { await actualizarTodo({conservarProyectos:flag('--conservar-proyectos')}); }
+  try { await actualizarClientes({conservarProyectos:flag('--conservar-proyectos')}); }
   catch(error) { process.exitCode = 1; console.error(`✗ NO SE PUDO: ${error.message}\nATENCIÓN: instalación incompleta.`); }
 }

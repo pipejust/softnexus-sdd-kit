@@ -3,7 +3,8 @@ import {spawnSync} from 'node:child_process';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync} from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import {actualizarTodo,comprobarVersiones,versionAlMenos} from '../herramientas/actualizar-plugin.mjs';
+import {fileURLToPath} from 'node:url';
+import {actualizarTodo,actualizarClientes,actualizarCodex,migrarCopiasOpenAI,comprobarVersiones,versionAlMenos} from '../herramientas/actualizar-plugin.mjs';
 let ok=0,fallas=0;
 async function check(name,fn){try{await fn();ok++;console.log('OK    '+name)}catch(e){fallas++;console.log('FALLA '+name+': '+e.message)}}
 const root=mkdtempSync(path.join(os.tmpdir(),'sn-update-test-'));
@@ -16,7 +17,7 @@ function copy(scope,version){const dir=path.join(root,scope);mkdirSync(path.join
 let rows;let calls;let logs;
 function reset(){rows=[copy('user','0.62.0'),copy('project','0.62.0')];calls=[];logs=[];writeFileSync(registry,JSON.stringify({plugins:{'softnexus-sdd@softnexus':rows}}))}
 function update(scope){for(const i of rows.filter(i=>i.scope===scope)){i.version='0.63.0';writeFileSync(path.join(i.installPath,'.claude-plugin/plugin.json'),'{"version":"0.63.0"}')}writeFileSync(registry,JSON.stringify({plugins:{'softnexus-sdd@softnexus':rows}}))}
-const options=(correr)=>({casa,consultar:async()=> '0.63.0',correr,log:l=>logs.push(l),conservarProyectos:true});
+const options=(correr)=>({casa,cwd:project,consultar:async()=> '0.63.0',correr,log:l=>logs.push(l),conservarProyectos:true});
 try {
  await check('El CLI dice éxito pero usuario sigue 0.62: falla antes de tocar proyectos',async()=>{reset();await assert.rejects(actualizarTodo(options((cmd,args,cwd)=>calls.push({cmd,args,cwd}))),/0.62.0.*0.63.0/);assert.equal(calls.some(c=>c.args.includes('project')),false);assert.equal(logs.some(l=>l.includes('Todas las copias')),false)});
  await check('Usuario 0.63 pero proyecto 0.62: no declara éxito',async()=>{reset();await assert.rejects(actualizarTodo(options((cmd,args,cwd)=>{calls.push({cmd,args,cwd});if(args.includes('user')&&args.includes('update'))update('user')})),/project.*0.62.0.*0.63.0/);assert.equal(logs.some(l=>l.includes('Todas las copias')),false)});
@@ -64,6 +65,55 @@ try {
    const source=readFileSync(new URL('../herramientas/actualizar-plugin.mjs',import.meta.url));writeFileSync(path.join(real,'actualizar.mjs'),source);symlinkSync(real,alias,'junction');
    const result=spawnSync(process.execPath,[path.join(alias,'actualizar.mjs'),'--opcion-invalida'],{encoding:'utf8',windowsHide:true});
    assert.equal(result.status,1,'El script no debe salir cero sin ejecutar su entrada');assert.match(result.stderr,/ACTUALIZACIÓN NO CONFIRMADA: Opciones:/);
+ });
+ // El CLI Codex se simula con el mismo JSON observado en una instalación nativa aislada.
+ const codexHome=path.join(root,'codex');
+ function openaiRunner({old=false,disabled=false,marketError=false}={}) {
+   const installed=copy('openai',old?'0.62.0':'0.63.0');
+   return (cmd,args,cwd)=>{
+     calls.push({cmd,args,cwd});
+     if(cmd!=='codex')throw new Error('CLI ausente');
+     if(args[0]==='--version')return 'codex-cli test';
+     assert.equal(cwd,casa,'El CLI se ejecuta en el usuario, no en el proyecto');
+     if(args.includes('marketplace'))return JSON.stringify(args.includes('list')?{marketplaces:[{name:'softnexus'}]}:{errors:marketError?['no red']:[]});
+     if(args.includes('add'))return JSON.stringify({pluginId:'softnexus-sdd@softnexus',version:installed.version,installedPath:installed.installPath});
+     if(args.includes('list'))return JSON.stringify({installed:[{pluginId:'softnexus-sdd@softnexus',version:installed.version,installed:true,enabled:!disabled}]});
+     throw new Error('Comando no esperado');
+   };
+ }
+ await check('Codex se instala y verifica sin Claude; guarda ruta para el motor común',async()=>{
+   reset();const result=await actualizarClientes({...options(openaiRunner()),cliente:'codex',codexHome,conservarProyectos:false});assert.equal(result[0].cliente,'codex');assert.ok(!calls.some(c=>c.cmd==='claude'));assert.equal(JSON.parse(readFileSync(path.join(codexHome,'softnexus-install.json'))).version,'0.63.0');assert.ok(logs.at(-1).startsWith('GENERAL VERIFICADA'));
+ });
+ await check('ChatGPT local usa el mismo adaptador Codex',async()=>{reset();await actualizarClientes({...options(openaiRunner()),cliente:'chatgpt',codexHome});assert.ok(calls.some(c=>c.cmd==='codex'&&c.args.includes('add')))});
+ await check('Auto detecta Codex aunque Claude no exista',async()=>{reset();await actualizarClientes({...options(openaiRunner()),codexHome});assert.ok(calls.some(c=>c.cmd==='codex'&&c.args.includes('add')))});
+ await check('Codex CLI exitoso con versión vieja no declara éxito',async()=>{reset();await assert.rejects(actualizarClientes({...options(openaiRunner({old:true})),cliente:'codex',codexHome}),/0.62.0.*0.63.0/);assert.ok(!logs.some(l=>l.startsWith('GENERAL VERIFICADA')))});
+ await check('Codex deshabilitado y catálogo sin refrescar no se dan por buenos',async()=>{reset();await assert.rejects(actualizarCodex({...options(openaiRunner({disabled:true})),codexHome}),/habilitada/);await assert.rejects(actualizarCodex({...options(openaiRunner({marketError:true})),codexHome}),/refrescar/)});
+ await check('Cliente desconocido o sin CLI produce error explícito',async()=>{reset();await assert.rejects(actualizarClientes({...options(()=>{throw new Error('ausente')}),cliente:'codex'}),/no se encontró/);await assert.rejects(actualizarClientes({...options(()=>{}),cliente:'antigravity'}),/no compatible/)});
+ await check('Hooks Codex detectan .env y tamaño excesivo en apply_patch',()=>{
+   const run=(hook,command)=>spawnSync(process.execPath,[fileURLToPath(new URL(`../plugin/hooks/${hook}.mjs`,import.meta.url))],{input:JSON.stringify({tool_name:'apply_patch',hook_event_name:'PreToolUse',cwd:project,tool_input:{command}}),encoding:'utf8',windowsHide:true});
+   assert.equal(run('guard','*** Begin Patch\n*** Add File: .env\n+SECRET=x\n*** End Patch').status,2);
+   assert.equal(run('file-size','*** Begin Patch\n*** Add File: a.js\n'+Array(1001).fill('+x').join('\n')+'\n*** End Patch').status,2);
+   assert.equal(run('guard','*** Begin Patch\n*** Add File: a.js\n+x\n*** End Patch').status,0);
+   writeFileSync(path.join(project,'acumulado.js'),Array(999).fill('x').join('\n')+'\n');
+   assert.equal(run('file-size','*** Begin Patch\n*** Update File: acumulado.js\n@@\n+x\n*** Update File: acumulado.js\n@@\n+x\n*** End Patch').status,2);
+ });
+ await check('Migra skills y declaraciones OpenAI sin alterar otros plugins ni ajustes',()=>{
+   const skills=path.join(project,'.agents/skills/sn');mkdirSync(skills,{recursive:true});writeFileSync(path.join(skills,'SKILL.md'),'---\nname: sn\n---\nSoftnexus');
+   const plugins=path.join(project,'.agents/plugins');mkdirSync(plugins,{recursive:true});writeFileSync(path.join(plugins,'marketplace.json'),JSON.stringify({name:'repo',plugins:[{name:'softnexus-sdd'},{name:'otro'}]}));
+   const config=path.join(project,'.codex/config.toml');mkdirSync(path.dirname(config),{recursive:true});writeFileSync(config,'model="x"\r\n[plugins."softnexus-sdd@softnexus"]\r\nenabled=false\r\n[plugins."otro@repo"]\r\nenabled=true\r\n');
+   assert.throws(()=>migrarCopiasOpenAI({casa,codexHome,cwd:project,verificarSolo:true,log:()=>{}}),/quedan copias/);
+   migrarCopiasOpenAI({casa,codexHome,cwd:project,log:()=>{}});
+   assert.equal(JSON.parse(readFileSync(path.join(plugins,'marketplace.json'))).plugins[0].name,'otro');
+   assert.equal(readFileSync(config,'utf8'),'model="x"\r\n[plugins."otro@repo"]\r\nenabled=true\r\n');
+   assert.throws(()=>readFileSync(path.join(skills,'SKILL.md')));
+   migrarCopiasOpenAI({casa,codexHome,cwd:project,verificarSolo:true,log:()=>{}});
+ });
+ await check('El catálogo local Codex se actualiza con git, no con marketplace upgrade',async()=>{
+   reset();const base=openaiRunner();await actualizarCodex({...options((cmd,args,cwd)=>{
+     if(cmd==='git'){calls.push({cmd,args,cwd});return '';}
+     if(args.includes('marketplace')&&args.includes('list'))return JSON.stringify({marketplaces:[{name:'softnexus',root:project,marketplaceSource:{sourceType:'local'}}]});
+     return base(cmd,args,cwd);
+   }),codexHome});assert.ok(calls.some(c=>c.cmd==='git'&&c.args.includes('--ff-only')));assert.ok(!calls.some(c=>c.args.includes('upgrade')));
  });
  await check('La descarga standalone y el motor usan exactamente el mismo actualizador',()=>{const dir=new URL('../',import.meta.url);assert.equal(readFileSync(new URL('herramientas/actualizar-plugin.mjs',dir),'utf8'),readFileSync(new URL('plugin/scripts/sync/update-general.mjs',dir),'utf8'))});
 } finally{rmSync(root,{recursive:true,force:true})}

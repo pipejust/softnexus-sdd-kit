@@ -3,6 +3,9 @@ name: sn-items
 description: Muestra dónde están las historias de usuario, bugs e incidentes del proyecto y las pone en pantalla listas para copiar y pegar en cualquier sistema de tareas, con toda su trazabilidad (commits, archivos tocados, firmas del líder, evidencia, PR). También exporta a CSV o JSON. No necesita conexión a ningún sistema externo. Úsala con /sn-items, o cuando alguien diga "dónde están las historias", "muéstrame la historia X", "qué se hizo en el bug Y", "exporta las historias", "pásame las tareas para Excel/Jira/Altum".
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # /sn-items — ver, copiar y exportar las historias
 
 Las historias viven como texto en el propio proyecto: `docs/items/<ID>.md` (un archivo por ítem). Esta skill las muestra; **no cambia nada**.

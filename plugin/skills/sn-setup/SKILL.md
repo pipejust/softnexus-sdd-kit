@@ -3,9 +3,12 @@ name: sn-setup
 description: Prepara un proyecto (nuevo o existente) para trabajar Spec Driven - instala OpenSpec, crea AGENTS.md, CLAUDE.md, DESIGN.md, openspec/config.yaml, plantilla de PR y settings, llenándolos a partir de lo que dice el propio código. Úsala cuando un repo no tiene AGENTS.md u openspec/, o cuando alguien diga "prepara este proyecto", "configura el repo", "adopta la metodología aquí".
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # /sn-setup — dejar un proyecto listo en ~30 minutos
 
-Las plantillas están en `${CLAUDE_PLUGIN_ROOT}/plantillas/` (dentro del plugin instalado). Para encontrar la ruta real: `ls ~/.claude/plugins/cache/*/softnexus-sdd/*/plantillas`.
+Las plantillas están en `${CLAUDE_PLUGIN_ROOT}/plantillas/` (dentro del plugin instalado). Resuelve la raíz desde la ubicación de este SKILL.md, también en Codex/ChatGPT.
 
 ## 0. La clave de Altum de la persona (una sola vez en su computador)
 Antes de nada, comprueba si ya la tiene: `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" whoami`. Si falta, ofrécele guardarla siguiendo `${CLAUDE_PLUGIN_ROOT}/references/clave-altum.md` (la genera en su perfil de Altum y la pega en la terminal, nunca en el chat). Con la clave lista, el agente ya sabe quién es y qué proyectos tiene asignados. Si dice que no, sigue sin Altum.

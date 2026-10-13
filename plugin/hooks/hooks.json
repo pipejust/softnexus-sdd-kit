@@ -2,7 +2,7 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|Read|Edit|Write|MultiEdit|Grep|NotebookEdit",
+        "matcher": "Bash|Read|Edit|Write|MultiEdit|Grep|NotebookEdit|apply_patch",
         "hooks": [
           {
             "type": "command",
@@ -11,7 +11,7 @@
         ]
       },
       {
-        "matcher": "Write|Edit|MultiEdit",
+        "matcher": "Write|Edit|MultiEdit|apply_patch",
         "hooks": [
           {
             "type": "command",
@@ -22,7 +22,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit|MultiEdit",
+        "matcher": "Write|Edit|MultiEdit|apply_patch",
         "hooks": [
           {
             "type": "command",
@@ -31,7 +31,7 @@
         ]
       },
       {
-        "matcher": "Write|Edit|MultiEdit|Bash",
+        "matcher": "Write|Edit|MultiEdit|Bash|apply_patch",
         "hooks": [
           {
             "type": "command",

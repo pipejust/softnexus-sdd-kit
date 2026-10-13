@@ -3,6 +3,9 @@ name: sn-split
 description: Reduce la deuda heredada de tamaño en proyectos que YA existían antes de adoptar Spec Driven - divide un archivo de más de 1000 líneas registrado en .sn-size-baseline en módulos por responsabilidad, sin cambiar su comportamiento. Úsala cuando el hook o el CI digan "deuda heredada", cuando se planifique pagar esa deuda, o cuando alguien pida "divide este archivo viejo". NO es para código nuevo - en proyectos nuevos los archivos se mantienen pequeños desde el diseño.
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # /sn-split — pagar la deuda de archivos grandes heredados
 
 Regla de Softnexus: **ningún archivo supera 1000 líneas**; lo sano es 200–400.

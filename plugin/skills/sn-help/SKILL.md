@@ -3,6 +3,9 @@ name: sn-help
 description: Para cuando alguien no sabe qué hacer, no recuerda los comandos o es nuevo en Spec Driven. Mira el proyecto, el trabajo abierto y las validaciones pendientes, y responde en lenguaje simple qué puede hacer AHORA MISMO (1 a 3 opciones concretas con el comando exacto), más la chuleta corta de comandos. Úsala con /sn-help o cuando alguien diga "ayuda", "no sé qué hacer", "qué puedo hacer", "qué comandos hay", "soy nuevo", "cómo funciona esto".
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # /sn-help — ¿qué puedo hacer ahora?
 
 La persona puede no saber nada del proceso. No expliques la metodología: **dile qué hacer ahora**. Frases cortas, sin jerga.
@@ -22,11 +25,11 @@ La persona puede no saber nada del proceso. No expliques la metodología: **dile
 6. Estoy esperando validación → "espera; mientras, puedes tomar algo pequeño (texto, color) con `/sn`".
 6b. **Tres frases sobre el plugin mismo** (el motor del plugin se llama con `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" <comando>`):
    - **"deja el plugin general"**, **"instálame el plugin general"**, **"actualízame el plugin"**: descarga de GitHub oficial `herramientas/actualizar-plugin.mjs` a una carpeta temporal y ejecútalo con Node. Es independiente de la versión cargada y funciona desde cualquier carpeta. No te limites a dos comandos del CLI ni ejecutes el motor viejo para migrar una instalación.
-   - El actualizador verifica primero la instalación de usuario y migra las copias project/local a general. Respalda los ajustes y retira solo la entrada Softnexus; si quedan cambios versionados, entrégalos mediante PR. Nunca borres carpetas completas. Solo declara éxito con `GENERAL VERIFICADA` y salida cero. No regenera claves de Altum. `--conservar-proyectos` es una excepción explícita para quien quiera mantener copias particulares.
+   - El actualizador detecta Claude Code y Codex/ChatGPT local, o acepta --cliente claude|codex|chatgpt. No requiere Claude para OpenAI. Verifica primero la instalación de usuario y migra las copias project/local a general. Respalda los ajustes y retira solo la entrada Softnexus; si quedan cambios versionados, entrégalos mediante PR. Nunca borres carpetas completas. Solo declara éxito con `GENERAL VERIFICADA` y salida cero. No regenera claves de Altum. `--conservar-proyectos` es una excepción explícita para quien quiera mantener copias particulares.
    - **"¿estoy al día?"**: el mismo descargable con `--verificar` solo consulta y comprueba; no actualiza ni edita.
    - En Mac/Linux: descarga con `curl -fsSL` y encadena la ejecución con `&& node`. En PowerShell: bloque con `$ErrorActionPreference = 'Stop'`, `Invoke-WebRequest`, `node` y comprobación de `$LASTEXITCODE`. No ejecutes el archivo si falló la descarga.
-   - Desde 0.65.0 el motor instalado también soporta `actualizar --general` con las mismas comprobaciones. Para versiones anteriores usa siempre el descargable recién obtenido.
-   La actualización es **una vez por computador**, no por chat. Recuerda **cerrar todas las sesiones de Claude Code y volver a abrirlo**. Los motores de CI (`scripts/sn/`) y CODEOWNERS se actualizan por proyecto mediante PR, no regenerando su API.
+   - Desde 0.66.0 el motor instalado también soporta `actualizar --general` con las mismas comprobaciones. Para versiones anteriores usa siempre el descargable recién obtenido.
+   La actualización es **una vez por computador**, no por chat. Recuerda **reiniciar el cliente utilizado y revisar los hooks que pida Codex/ChatGPT**. Los motores de CI (`scripts/sn/`) y CODEOWNERS se actualizan por proyecto mediante PR, no regenerando su API.
 7. No tengo nada abierto → si hay conector `altum`, muestra las 3 tareas pendientes de mayor prioridad **suyas o sin asignar** (`… backlog altum --json`, columna Responsable) como opciones ("`/sn ALT-77`"); las de otras personas no se proponen. Si es el líder y hay tareas sin responsable, ofrécele repartirlas (`… sin-asignar`, `… asignar <número> <nombre>`); si no, "`/sn` y cuéntame lo que tengas: una idea, un bug, un correo del cliente".
 
 ## 3. Responder con este formato

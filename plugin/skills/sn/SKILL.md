@@ -3,6 +3,9 @@ name: sn
 description: La puerta única de Softnexus. Úsala también cuando alguien diga "clóname el proyecto X", "bájame el repositorio", "no tengo el proyecto" o "tráeme ese proyecto" - antes de clonar hay que preguntarle DÓNDE quiere la carpeta. Y para CUALQUIER cosa que alguien traiga para un proyecto - una idea, una mejora, un bug, un error con captura, un correo o acta del cliente, un ticket, "hazme", "agrega", "arregla", "no funciona", "el cliente pide". Clasifica el ítem, decide tamaño y riesgo, y conduce paso a paso todo el camino Spec Driven (historia → spec → construcción → evidencia → commit → PR → archivo) deteniéndose en cada checkpoint humano.
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # /sn — la puerta única
 
 La persona que te habla puede no saber programar. No le pidas que elija comandos ni que sepa el proceso: **el proceso lo sabes tú**. Ella solo trae el ítem y responde preguntas. Habla simple, frases cortas, una decisión a la vez.

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // PostToolUse: si el proyecto está conectado (/sn-connect), dispara la sincronización en segundo plano
 // cuando el agente toca ítems, planos o ejecuta git/gh/openspec. Nunca bloquea ni falla la sesión.
+import { archivosPatch } from './patch.mjs';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
@@ -27,6 +28,7 @@ try {
   const relevant = payload.tool_name === 'Bash'
     ? RELEVANT_COMMAND.test(String(input.command ?? ''))
     // En Windows path.relative devuelve "docs\\items\\x": se normaliza o nunca coincidía.
+    : payload.tool_name==='apply_patch'?archivosPatch(input.command).some(f=>[f.file_path,f.move].filter(Boolean).some(p=>RELEVANT_PATH.test(path.relative(root,path.resolve(root,p)).replace(/\\/g,'/'))))
     : RELEVANT_PATH.test(path.relative(root, path.resolve(root, String(input.file_path ?? ''))).replace(/\\/g, '/'));
   if (relevant && existsSync(path.join(root, '.sn/connectors.json')) && existsSync(preparado)) {
     spawn(process.execPath, [script, 'sync', '--background'], { windowsHide: true, cwd: root, detached: process.platform !== 'win32', stdio: 'ignore' }).unref();

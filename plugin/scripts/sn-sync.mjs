@@ -36,7 +36,7 @@ import { takeSnapshot } from './sync/snapshot.mjs';
 import { mensaje } from './sync/mensaje.mjs';
 import { aprobacionesPr, firmaDelLider, origenRepo, prDeRama } from './sync/pr.mjs';
 import { siguientePaso } from './sync/siguiente.mjs';
-import { instalaciones, versionInstalada, esMasNueva } from './sync/version.mjs';
+import { instalaciones, motoresGenerales, versionInstalada, esMasNueva } from './sync/version.mjs';
 import { actualizar, dejarDeDeclararAqui, limpiarCopias, instalarGeneral } from './sync/maintenance.mjs';
 import { leerTexto } from './sync/texto.mjs';
 import { codeownersConLider, lideresDe, esElLider } from './sync/lider.mjs';
@@ -563,7 +563,7 @@ function archivosDelMotor(dir) {
 }
 
 function motorDelPlugin() {
-  const raiz = process.env.CLAUDE_PLUGIN_ROOT;
+  const raiz = process.env.PLUGIN_ROOT || process.env.CLAUDE_PLUGIN_ROOT;
   return raiz ? path.join(raiz, 'scripts') : path.dirname(SELF);
 }
 
@@ -920,7 +920,7 @@ function cederAlPlugin() {
   if (process.env.SN_MOTOR_PROPIO) return;
   const aqui = path.dirname(SELF);
   if (existsSync(path.join(aqui, '..', '.claude-plugin', 'plugin.json'))) return;   // este YA es el del plugin
-  const general = instalaciones().find((i) => i.scope === 'user' && i.ruta);
+  const general = motoresGenerales()[0];
   const suyo = general && path.join(general.ruta, 'scripts', 'sn-sync.mjs');
   if (!suyo || !existsSync(suyo) || path.resolve(suyo) === path.resolve(SELF)) return;
   const mia = existsSync(path.join(aqui, VERSION_DE_LA_COPIA)) ? readFileSync(path.join(aqui, VERSION_DE_LA_COPIA), 'utf8').trim() : '';

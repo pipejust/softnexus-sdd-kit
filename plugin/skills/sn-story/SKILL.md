@@ -3,6 +3,9 @@ name: sn-story
 description: Convierte un requerimiento vago ("crear pantalla de clientes", un correo del cliente, un acta) en una historia AI-ready con criterios Given/When/Then, estados de UI, casos borde, fuera de alcance y plan de prueba. Úsala cuando una historia no está Ready o cuando sn-arranque lo indique. Entrevista a la persona; no asume.
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # sn-story — refinamiento de historias
 
 La persona no tiene que saber qué preguntar. **Tú sí.**

@@ -8,6 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { abreUnPr, comandos, esSumidero, motivoParaBloquear, uneUnPr } from './comando.mjs';
 
+import { archivosPatch } from './patch.mjs';
 import { esElLider, lideresDe, comoSeIdentifica } from '../scripts/sync/lider.mjs';
 
 const MOTOR = fileURLToPath(new URL('../scripts/sn-sync.mjs', import.meta.url));
@@ -140,7 +141,10 @@ if (tool === 'Bash') {
 }
 
 // Rutas de Windows (C:\proyecto\.env) se comparan igual que las de macOS/Linux.
-const filePath = String(args.file_path ?? args.notebook_path ?? args.path ?? '').replace(/\\/g, '/');
+const paths=tool==='apply_patch'?archivosPatch(args.command).flatMap(f=>[{...f,tool:f.kind==='Add'?'Write':'Edit'},...(f.move?[{file_path:f.move,tool:'Write'}]:[])]):[{file_path:args.file_path??args.notebook_path??args.path??'',tool}];
+for(const target of paths){
+const tool=target.tool;
+const filePath = String(target.file_path).replace(/\\/g, '/');
 if (filePath) {
   const hit = PROTECTED_PATHS.find(({ prueba, tools }) => tools.includes(tool) && prueba(filePath));
   if (hit) block(hit.reason);
@@ -164,4 +168,5 @@ if (filePath) {
   }
 }
 
+}
 process.exit(0);

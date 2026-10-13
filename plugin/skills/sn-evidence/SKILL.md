@@ -3,6 +3,9 @@ name: sn-evidence
 description: Genera el paquete de evidencia obligatorio antes de abrir un PR o declarar algo terminado. Corre los gates del proyecto (lint, typecheck, test, e2e, build), mapea cada escenario de la spec a su prueba, toma screenshots si cambió UI y redacta el resumen del PR. Úsala al terminar /opsx:apply, antes de decir "listo", "terminé" o "ya funciona".
 ---
 
+**Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
+
+
 # sn-evidence — Definition of Done con pruebas, no con frases
 
 "Ya funciona" no cuenta. Solo cuenta lo que se puede mostrar.
