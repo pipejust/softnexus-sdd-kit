@@ -78,7 +78,7 @@ function migrar(casa,rows,dirs,correr,log) {
   for(const i of copias) {
     if(!['project','local'].includes(i.scope))throw new Error(`Ámbito ${i.scope} administrado: requiere intervención del administrador.`);
     if(!i.projectPath||!existsSync(i.projectPath))throw new Error(`No se puede retirar la copia ${i.scope}: proyecto no disponible ${i.projectPath||''}. Conecta el disco o restaura esa ruta y repite.`);
-    if(path.resolve(i.projectPath)===path.resolve(casa))throw new Error('Hay una instalación de proyecto en la carpeta de usuario; requiere revisión manual para proteger los ajustes generales.');
+    if(realpathSync(i.projectPath)===realpathSync(casa))throw new Error('Hay una instalación de proyecto en la carpeta de usuario; requiere revisión manual para proteger los ajustes generales.');
   }
   const ajustes=ajustesProyecto(dirs); // Validar TODOS los JSON antes de retirar la primera copia.
   const generales=['settings.json','settings.local.json'].map(n=>path.join(casa,'.claude',n)).filter(existsSync).map(f=>realpathSync(f));
