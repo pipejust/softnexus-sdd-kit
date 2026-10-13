@@ -39,7 +39,7 @@ import { siguientePaso } from './sync/siguiente.mjs';
 import { instalaciones, versionInstalada, esMasNueva } from './sync/version.mjs';
 import { actualizar, dejarDeDeclararAqui, limpiarCopias, instalarGeneral } from './sync/maintenance.mjs';
 import { leerTexto } from './sync/texto.mjs';
-import { codeownersConLider } from './sync/lider.mjs';
+import { codeownersConLider, lideresDe, esElLider } from './sync/lider.mjs';
 import {
   acquireLock, anotarDescartado, appendOutbox, CONFIG_FILE, DESCARTADOS_FILE, loadConfig, loadSnapshot, readOutbox, refreshLock, releaseLock, saveSnapshot, writeOutbox,
 } from './sync/store.mjs';
@@ -268,6 +268,7 @@ function anyAltum(config) {
 const LINEA_LIDER = /^- Líder técnico[^\n]*$/m;
 
 function lineaLider(l) {
+  if (l.leaders?.length > 1) return `- Líder técnico (cualquiera de los líderes valida con \`/sn-validate\`): ${l.leaders.map((x) => `${x.name} <${x.email}> · GitHub @${x.github || '?'}`).join('; ')} — según Altum`;
   return `- Líder técnico (valida sellos a distancia con \`/sn-validate\`): ${l.name}${l.email ? ` <${l.email}>` : ''}`
     + `${l.github ? ` · GitHub @${l.github}` : ''} — según Altum (se actualiza solo, no se edita a mano)`;
 }
@@ -282,18 +283,18 @@ function cuentaGithubActual() {
 }
 
 // lead [--github]: el líder según Altum. Con --github imprime solo su usuario de GitHub (para pedirle
-// la revisión del PR) o falla diciendo por qué no se puede pedir.
 async function lead(config) {
   const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
   if (!connector) throw new Error('uso: lead [--github] — este repositorio todavía no está unido a un proyecto de Altum (/sn-connect)');
   const l = await projectLead(connector);
   if (flag('--github')) {
     if (!l?.name) throw new Error('Altum no dice quién es el líder de este proyecto: no se pide revisión en GitHub (el mensaje sigue sirviendo).');
-    if (!l.github) throw new Error(`${l.name} no tiene usuario de GitHub registrado en Altum (ficha del empleado → pestaña Git): no se pide revisión en GitHub; manda el mensaje.`);
+    const usuarios = lideresDe(l).map((x) => x.github).filter(Boolean);
+    if (!usuarios.length) throw new Error(`${l.name} no tiene usuario de GitHub registrado en Altum (ficha del empleado → pestaña Git): no se pide revisión en GitHub; manda el mensaje.`);
     // El líder trabajando en su propio PR: GitHub no deja pedirse revisión a uno mismo, y tampoco hace
     // falta: él firma y une su propio trabajo desde /sn-validate.
-    if (l.github.toLowerCase() === cuentaGithubActual().toLowerCase()) throw new Error(`eres el líder de este proyecto (@${l.github}): tu propio PR no necesita la firma de nadie más, lo apruebas y lo unes tú con /sn-validate.`);
-    return console.log(l.github);
+    if (esElLider(l, { github: cuentaGithubActual().toLowerCase() })) throw new Error(`eres el líder de este proyecto (@${cuentaGithubActual()}): tu propio PR no necesita la firma de nadie más, lo apruebas y lo unes tú con /sn-validate.`);
+    return console.log(usuarios.join(','));
   }
   process.stdout.write(leadText(l));
   // AGENTS.md y CODEOWNERS son archivos VERSIONADOS del proyecto: el plugin no los cambia por su
@@ -302,10 +303,10 @@ async function lead(config) {
   // ese cambio va en un commit, como cualquier otro.
   const escribir = flag('--escribir');
   const pendientes = [];
-  if (l?.github && existsSync('.git') && origenRepo().provider !== 'azure_devops') {
+  if (lideresDe(l).some((x) => x.github) && existsSync('.git') && origenRepo().provider !== 'azure_devops') {
     const archivo = '.github/CODEOWNERS';
     const actual = existsSync(archivo) ? leerTexto(archivo) : '';
-    const conLider = codeownersConLider(actual, l.github);
+    const conLider = codeownersConLider(actual, lideresDe(l).map((x) => x.github));
     if (conLider !== actual) {
       if (escribir) {
         mkdirSync('.github', { recursive: true });
@@ -337,7 +338,6 @@ async function lead(config) {
 
 // verificar-firma [<número de PR>]: ¿lo aprobó el líder que dice Altum? Es lo que corre el CI
 // (GitHub Actions o Azure Pipelines) como verificación obligatoria: si no, el PR no se puede unir,
-// aunque otra persona lo haya aprobado.
 async function verificarFirma(config) {
   const connector = config?.connectors.find((c) => c.kind === 'altum' && c.project_id);
   if (!connector) throw new Error('este repositorio no está unido a un proyecto de Altum: sin líder no hay firma que verificar (/sn-connect).');

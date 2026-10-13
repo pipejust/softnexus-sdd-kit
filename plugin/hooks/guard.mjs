@@ -8,6 +8,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { abreUnPr, comandos, esSumidero, motivoParaBloquear, uneUnPr } from './comando.mjs';
 
+import { esElLider, lideresDe, comoSeIdentifica } from '../scripts/sync/lider.mjs';
+
 const MOTOR = fileURLToPath(new URL('../scripts/sn-sync.mjs', import.meta.url));
 const LIDER_VIEJO_MS = 12 * 60 * 60 * 1000;
 
@@ -46,7 +48,7 @@ function motivoParaNoUnir(cwd) {
   if (!proyecto) return '';
   const archivo = path.join(cwd, '.sn/state/altum-lider.json');
   let lider = leerJson(archivo);
-  const vigente = (l) => l?.name && l.project_id === proyecto && Number.isFinite(l.at) && l.at <= Date.now() && Date.now() - l.at <= LIDER_VIEJO_MS;
+  const vigente = (l) => l?.name && l.leaders_version === 2 && l.project_id === proyecto && Number.isFinite(l.at) && l.at <= Date.now() && Date.now() - l.at <= LIDER_VIEJO_MS;
   if (!vigente(lider)) {
     // Se pregunta a Altum con el motor del plugin (el que la persona mantiene al día).
     try { execFileSync(process.execPath, [MOTOR, 'lead', '--github'], { cwd, stdio: 'ignore', timeout: 15000, windowsHide: true }); } catch { /* sin clave o sin red */ }
@@ -55,7 +57,7 @@ function motivoParaNoUnir(cwd) {
   if (!vigente(lider)) {
     return 'No pude confirmar con Altum quién es el líder del proyecto (sin conexión o sin tu clave). Solo el líder une el PR: inténtalo cuando haya conexión.';
   }
-  if (!lider.github) {
+  if (!lideresDe(lider).some((l) => l.github)) {
     return `El líder (${lider.name}) no tiene su usuario de GitHub registrado en Altum, así que no puedo confirmar quién une el PR. Que lo registre en Altum (Mi perfil) y vuelve a intentarlo.`;
   }
   let yo = '';
@@ -63,7 +65,8 @@ function motivoParaNoUnir(cwd) {
     yo = execFileSync('gh', ['api', 'user', '--jq', '.login'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim();
   } catch { /* sin gh, sin sesión o sin red */ }
   if (!yo) return 'No pude confirmar tu usuario de GitHub (gh sin sesión o sin red: "gh auth status"). Solo el líder une el PR.';
-  if (yo.toLowerCase() !== lider.github.toLowerCase()) {
+  if (!esElLider(lider, { github: yo.toLowerCase() })) {
+    if (lideresDe(lider).length > 1) return `Solo los líderes del proyecto pueden unir el PR: ${comoSeIdentifica(lider)}. Tu sesión de GitHub es @${yo}; comprueba que esa cuenta esté registrada para tu propia ficha en Altum.`;
     return `Solo el líder del proyecto (${lider.name}, @${lider.github}) une el PR: es quien cierra el proceso. Él lo hace desde su Claude con /sn-validate. Tú ya terminaste tu parte: el PR queda esperando su aprobación.`;
   }
   return '';

@@ -235,7 +235,7 @@ export function whoAmIText(me, projectId) {
 export async function projectLead(connector, projectId = connector.project_id) {
   const lider = await leerLider(connector, projectId);
   // Copia local: validation-state la usa para no aceptar firmas de quien no es el líder (sin red).
-  writeState('altum-lider.json', { at: Date.now(), project_id: projectId, name: lider?.name || '', email: lider?.email || '', emails: lider?.emails || [], github: lider?.github || '' });
+  writeState('altum-lider.json', { at: Date.now(), project_id: projectId, name: lider?.name || '', email: lider?.email || '', emails: lider?.emails || [], github: lider?.github || '', leaders: lider?.leaders || [], leaders_version: 2 });
   return lider;
 }
 
@@ -254,18 +254,29 @@ async function leerLider(connector, projectId) {
   const items = Array.isArray(raw) ? raw : raw?.items || [];
   const proyecto = items.find((p) => p.id === projectId);
   if (!proyecto) return null;
-  const lead = (proyecto.members || []).find((m) => m.is_lead) || null;
+  return lideresDelProyecto(proyecto, me, projectId);
+}
+
+// No mezclar nunca el nombre de /me con la cuenta de GitHub de otro integrante.
+export function lideresDelProyecto(proyecto, me, projectId = proyecto.id) {
   const yo = (me?.projects || []).find((p) => p.id === projectId);
-  if (yo?.is_lead && me?.user) {
-    // La persona tiene dos correos en Altum: el de su ficha de empleado y el de su cuenta (con el que entra).
-    // Los dos valen para reconocerla, porque nadie commitea siempre con el mismo.
-    return { project: proyecto.name, role: yo.role || lead?.role || 'Líder técnico', soyYo: true, name: me.user.name || lead?.name || '', email: lead?.email || me.user.email || '', emails: otrosCorreos(lead, me.user, { emails: [me.user.email] }), github: lead?.github_username || me.user.github_username || '', employee_id: lead?.employee_id || '' };
-  }
-  if (!lead) return { project: proyecto.name, falta: 'sin-lider' };
-  return { project: proyecto.name, role: lead.role || 'Líder técnico', soyYo: false, name: lead.name || '', email: lead.email || '', emails: otrosCorreos(lead), github: lead.github_username || '', employee_id: lead.employee_id || '' };
+  const usuario = me?.user;
+  const mismo = (m) => Boolean(usuario) && ((m.employee_id && m.employee_id === usuario.employee_id)
+    || [m.email, ...otrosCorreos(m)].some((c) => c && [usuario.email, ...otrosCorreos(usuario)].some((u) => String(c).toLowerCase() === String(u).toLowerCase()))
+    || (m.github_username && usuario.github_username && m.github_username.toLowerCase() === usuario.github_username.toLowerCase()));
+  const members = proyecto.members || [];
+  const fichas = members.filter((m) => m.is_lead === true);
+  const propia = members.find(mismo);
+  if (yo?.is_lead === true && usuario && !fichas.some(mismo)) fichas.push({ ...(propia || {}), ...usuario, employee_id: propia?.employee_id || usuario.employee_id, role: yo.role || propia?.role });
+  const leaders = fichas.map((m) => ({ name: m.name || '', email: m.email || '', emails: otrosCorreos(m, mismo(m) ? usuario : null),
+    github: m.github_username || '', employee_id: m.employee_id || '', role: m.role || 'Líder técnico', soyYo: yo?.is_lead === true && mismo(m) }));
+  if (!leaders.length) return { project: proyecto.name, falta: 'sin-lider', leaders: [] };
+  const principal = leaders.find((l) => l.soyYo) || leaders[0];
+  return { ...principal, project: proyecto.name, leaders };
 }
 
 export function leadText(lead) {
+  if (lead?.leaders?.length > 1) return lead.leaders.map((l) => leadText({ ...l, project: lead.project })).join('');
   if (!lead) return 'No encuentro el proyecto en Altum: revisa el project_id del conector.\n';
   if (lead.falta === 'sin-lider') return `"${lead.project}" no tiene líder marcado en Altum. Pídele a quien administra Altum que marque al líder del proyecto; mientras tanto, pregúntale a la persona quién firma.\n`;
   if (lead.name || lead.email) {

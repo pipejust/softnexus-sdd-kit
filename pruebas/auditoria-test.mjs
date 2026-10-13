@@ -74,7 +74,7 @@ try {
   writeFileSync(path.join(temp, 'bin/gh'), '#!/bin/sh\necho lider\n', { mode: 0o755 });
   writeFileSync(path.join(temp, '.sn/connectors.json'), JSON.stringify({ connectors: [{ kind: 'altum', name: 'altum', project_id: 'p1', key_env: 'SN_AUDIT_UNUSED_KEY', base_url: 'http://127.0.0.1:9' }] }));
   await check('Líder vencido no autoriza merge si falla la consulta', async () => {
-    writeFileSync(path.join(temp, '.sn/state/altum-lider.json'), JSON.stringify({ project_id: 'p1', name: 'Líder', github: 'lider', at: Date.now() - 13 * 60 * 60 * 1000 }));
+    writeFileSync(path.join(temp, '.sn/state/altum-lider.json'), JSON.stringify({ leaders_version: 2, project_id: 'p1', name: 'Líder', github: 'lider', at: Date.now() - 13 * 60 * 60 * 1000 }));
     const result = await run([path.join(dir, '../plugin/hooks/guard.mjs')], JSON.stringify({ cwd: temp, tool_name: 'Bash', tool_input: { command: 'gh pr merge 1' } }), { PATH: `${temp}/bin:${process.env.PATH}`, SN_AUDIT_UNUSED_KEY: '' });
     assert.equal(result.code, 2, result.out); assert.match(result.out, /No pude confirmar/);
   });
@@ -88,7 +88,7 @@ try {
     const signature = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
     assert.equal(verifyAltumSignature({ secret, timestamp, signature, rawBody }), false);
   });
-  const suites = ['reglas-test.mjs', 'auditoria-test.mjs', 'instalador-test.sh', 'run.sh', 'altum-test.sh', 'watch-test.sh', 'proceso-test.sh', 'guard-test.sh'];
+  const suites = ['reglas-test.mjs', 'lideres-test.mjs', 'auditoria-test.mjs', 'instalador-test.sh', 'run.sh', 'altum-test.sh', 'watch-test.sh', 'proceso-test.sh', 'guard-test.sh'];
   const runnerDir = path.join(temp, 'runner'); mkdirSync(runnerDir);
   writeFileSync(path.join(runnerDir, 'todas.sh'), readFileSync(path.join(dir, 'todas.sh')));
   for (const f of suites) writeFileSync(path.join(runnerDir, f), f.endsWith('.mjs') ? 'console.log("RESULTADO: 0 OK · 0 fallas");' : 'echo "RESULTADO: 0 OK · 0 fallas"');

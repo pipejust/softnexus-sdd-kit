@@ -21,7 +21,15 @@ export function identidadFirmante(texto) {
   };
 }
 
+export function lideresDe(lider) {
+  return Array.isArray(lider?.leaders) ? lider.leaders : lider ? [lider] : [];
+}
+
 export function esElLider(lider, identidad) {
+  return lideresDe(lider).some((l) => coincide(l, identidad));
+}
+
+function coincide(lider, identidad) {
   if (!lider) return false;
   const github = minus(lider.github);
   if (github && identidad.github && identidad.github === github) return true;
@@ -30,6 +38,7 @@ export function esElLider(lider, identidad) {
 
 // Cómo se identifica el líder, para explicarlo cuando una firma no coincide.
 export function comoSeIdentifica(lider) {
+  if (Array.isArray(lider?.leaders)) return lider.leaders.map((l) => `${l.name || '(sin nombre)'} (${comoSeIdentifica(l)})`).join('; ');
   const correos = correosDelLider(lider);
   return [correos.length ? correos.join(' o ') : null, lider?.github ? `GitHub @${lider.github}` : null]
     .filter(Boolean).join(' · ');
@@ -39,7 +48,8 @@ export function comoSeIdentifica(lider) {
 // solo esa; si no, se agrega al principio. Las demás reglas del archivo (carpetas con dueños propios)
 // NO se tocan: antes se reemplazaba el archivo entero y se perdían.
 export function codeownersConLider(texto, github) {
-  const linea = `* @${github}`;
+  const usuarios = [...new Set((Array.isArray(github) ? github : [github]).filter(Boolean))];
+  const linea = `* ${usuarios.map((g) => `@${g}`).join(' ')}`;
   const lineas = String(texto || '').split('\n');
   if (lineas.some((x) => x.trim() === linea)) return texto;
   const general = lineas.findIndex((x) => /^\*\s+@/.test(x.trim()));
