@@ -88,7 +88,7 @@ try {
     const signature = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');
     assert.equal(verifyAltumSignature({ secret, timestamp, signature, rawBody }), false);
   });
-  const suites = ['reglas-test.mjs', 'lideres-test.mjs', 'auditoria-test.mjs', 'instalador-test.sh', 'run.sh', 'altum-test.sh', 'watch-test.sh', 'proceso-test.sh', 'guard-test.sh'];
+  const suites = ['reglas-test.mjs', 'actualizacion-test.mjs', 'lideres-test.mjs', 'auditoria-test.mjs', 'instalador-test.sh', 'run.sh', 'altum-test.sh', 'watch-test.sh', 'proceso-test.sh', 'guard-test.sh'];
   const runnerDir = path.join(temp, 'runner'); mkdirSync(runnerDir);
   writeFileSync(path.join(runnerDir, 'todas.sh'), readFileSync(path.join(dir, 'todas.sh')));
   for (const f of suites) writeFileSync(path.join(runnerDir, f), f.endsWith('.mjs') ? 'console.log("RESULTADO: 0 OK · 0 fallas");' : 'echo "RESULTADO: 0 OK · 0 fallas"');

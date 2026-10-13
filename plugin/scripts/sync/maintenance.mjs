@@ -1,4 +1,5 @@
 // Mantenimiento de la instalación general y las copias de proyecto.
+import { actualizarTodo, comprobarVersiones, leerInstalaciones } from './update-general.mjs';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,22 +18,9 @@ export async function actualizar() {
   const installs = instalaciones();
   // --general: dejar el plugin UNA sola vez en este computador. Quita las copias que viven dentro de
   // proyectos (y la línea que las pedía) y deja al día la general, la que sirve para todos.
-  if (flag('--general')) {
-    // Primero la general, sola: si no queda bien (sin red, catálogo movido), no se tocan las copias
-    // de los proyectos — dejarlas ahí es mejor que quitarlas y quedarse sin ningún plugin.
-    console.log('\nPrimero dejo al día la copia general (la de tu usuario):');
-    const resultadoGeneral = ejecutarPasos(pasosInstalacionGeneral({ cat, installs }));
-    if (resultadoGeneral.some((r) => !r.ok)) {
-      resumen(resultadoGeneral, '');
-      console.log('\nNo quito las copias de los proyectos: si la general no quedó instalada, eso te dejaría sin plugin. Corrige esto y vuelve a intentar "actualizar --general".');
-      return;
-    }
-    const copias = proyectosConCopia(installs);
-    console.log(copias.length
-      ? `\nListo. Ahora quito las ${copias.length} copia(s) que viven dentro de proyectos, para que quede una sola:`
-      : '\nListo. No hay copias dentro de proyectos: nada más que hacer.');
-    resumen([...resultadoGeneral, ...ejecutarPasos(pasosLimpieza({ installs }))], 'Listo: una sola instalación, para todos los proyectos.');
-    if (!process.exitCode) console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir.');
+  if (flag('--general') || flag('--arreglar')) {
+    try { await actualizarTodo(); }
+    catch(error) { process.exitCode = 1; console.error(`✗ NO SE PUDO: ${error.message}\nATENCIÓN: actualización incompleta; no se confirmó la versión de todas las copias.`); }
     return;
   }
 
@@ -50,19 +38,15 @@ export async function actualizar() {
     console.log(`Está instalado ${installs.length} veces: ${installs.map((i) => `${i.scope} ${i.version}`).join(', ')}.`
       + ' Dentro de un proyecto, la copia del proyecto manda sobre la del usuario.');
   }
-  if (ultima && !esMasNueva(ultima, actual) && !viejas.length) {
+  let fisicamenteCorrectas = false;
+  if (ultima && red) {
+    try { comprobarVersiones(ultima, leerInstalaciones()); fisicamenteCorrectas = true; }
+    catch(error) { console.log(`Instalación sin confirmar: ${error.message}`); }
+  }
+  if (ultima && fisicamenteCorrectas && !esMasNueva(ultima, actual) && !viejas.length) {
     return console.log(red ? 'Todo al día. No hay nada que hacer.' : 'Parece al día según la última vez que hubo conexión, pero no pude confirmarlo ahora mismo (sin red). Vuelve a intentarlo cuando tengas conexión.');
   }
   const pasos = pasosParaActualizar({ cat, installs });
-  if (flag('--arreglar')) {
-    console.log(`\nActualizando todo en esta máquina (${pasos.length} pasos):`);
-    resumen(ejecutarPasos(pasos), 'Listo: todo quedó al día.');
-    if (!process.exitCode) console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir. Hasta que no reinicies sigue corriendo la versión vieja.');
-    else if (installs.some((i) => i.scope !== 'user')) {
-      console.log('\nSi sigue sin quedar, prueba con una sola instalación para todos los proyectos:  node "' + SELF + '" actualizar --general');
-    }
-    return;
-  }
   console.log('\nPara ponerlo al día en esta máquina, en este orden:');
   comoActualizar({ cat, installs }).forEach((paso) => console.log(`  ${paso}`));
   console.log('\nO deja que lo haga solo:  node "' + SELF + '" actualizar --arreglar');
@@ -127,12 +111,6 @@ export function limpiarCopias() {
 // instalar-general: deja la copia del computador (ámbito de usuario), la que sirve en TODOS los
 // proyectos. Si ya está, la deja al día.
 export async function instalarGeneral() {
-  const cat = catalogo();
-  const installs = instalaciones();
-  const hechos = ejecutarPasos(pasosInstalacionGeneral({ cat, installs }));
-  const copias = proyectosConCopia(installs);
-  resumen(hechos, 'Listo: el plugin queda instalado para todos tus proyectos.');
-  if (copias.length) console.log(`OJO: ${copias.length} proyecto(s) todavía tienen copia propia y esa manda dentro de ellos. Quítalas con: limpiar-copias.`);
-  if (!process.exitCode) console.log('AHORA SÍ: cierra Claude Code y vuélvelo a abrir.');
+  try { await actualizarTodo(); }
+  catch(error) { process.exitCode = 1; console.error(`✗ NO SE PUDO: ${error.message}\nATENCIÓN: instalación incompleta.`); }
 }
-

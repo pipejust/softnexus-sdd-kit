@@ -6,7 +6,18 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
-## Versión 0.63.0
+## Versión 0.64.0
+
+Actualizador independiente en `herramientas/actualizar-plugin.mjs`, descargable y ejecutable desde
+cualquier carpeta en Mac, Linux y Windows, sin SN instalado. Consulta la versión publicada sin
+caché, actualiza todos los ámbitos registrados y exige coincidencia entre registro, manifiesto
+real y motor existente. Una copia atrasada impide declarar éxito. `actualizar --general` y
+`actualizar --arreglar` usan el mismo código; se conservan las configuraciones compartidas.
+
+Comprobar sin modificar: `node actualizar-plugin.mjs --verificar`.
+Los motores versionados de CI se actualizan aparte mediante PR; la API personal no cambia.
+
+## Cambios de 0.63.0
 
 Altum puede registrar varios líderes en un proyecto. Cualquiera de ellos puede aprobar los sellos,
 aprobar PRs y unir su propio trabajo. La lista completa se guarda y se comprueba en el guard y en

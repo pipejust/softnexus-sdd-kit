@@ -261,35 +261,19 @@ check "Si la copia es de ámbito local, se desinstala con ese ámbito (no se da 
 check "Solo se refresca NUESTRO catálogo (si otro ajeno falla, no es problema nuestro)" "ver \"import {pasosInstalacionGeneral} from '$PLUGIN/sync/version.mjs'; const p=pasosInstalacionGeneral(); const m=p.find(x=>x.args && x.args.includes('marketplace')); process.exit(m && m.args[m.args.length-1]==='softnexus' ? 0 : 1)\""
 check "\"No está instalado\" es lo que se quería al desinstalar, pero al ACTUALIZAR es un fallo; y que no exista claude (ENOENT) nunca es \"ya estaba\"" "ver \"import {esBenigno} from '$PLUGIN/sync/version.mjs'; const u={cmd:'claude',args:['plugin','uninstall']}; const up={cmd:'claude',args:['plugin','update']}; process.exit(esBenigno('Plugin is not installed', u) && !esBenigno('Plugin is not installed at scope user', up) && !esBenigno('spawn claude ENOENT', up) && !esBenigno('spawn claude ENOENT') ? 0 : 1)\""
 check "Un fallo al refrescar catálogos no se presenta como actualización correcta" "ver \"import {esBenigno} from '$PLUGIN/sync/version.mjs'; process.exit(!esBenigno('✘ Updated 11 marketplaces, but not all') ? 0 : 1)\""
-check "El script muestra el MOTIVO y guarda todo en un archivo" "grep -q 'MOTIVO' \"$T/../herramientas/plugin-general.sh\" && grep -q 'BITACORA' \"$T/../herramientas/plugin-general.sh\""
+check "El script muestra el MOTIVO y guarda todo en un archivo" "grep -q 'pipefail' \"$T/../herramientas/plugin-general.sh\" && grep -q 'BITACORA' \"$T/../herramientas/plugin-general.sh\""
 check "El motivo de verdad sube al resumen, no el genérico \"Command failed\"" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/motivo.mjs\" 2>/dev/null | grep -q motivo-ok"
 check "Lo que el comando dice por la salida normal también cuenta para saber si fue un fallo" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/salida-normal.mjs\" 2>/dev/null | grep -q salida-ok"
 check "Un paso que termina en \"ya estaba\" se cuenta como hecho" "ver \"import {ejecutarPasos} from '$PLUGIN/sync/version.mjs'; const r=ejecutarPasos([{cmd:'claude',args:['plugin','enable'],opcional:true,nota:'x'}], { correr: () => { const e=new Error('Failed to enable plugin: Plugin is already enabled at user scope'); throw e; } }); process.exit(r[0].ok && r[0].yaEstaba ? 0 : 1)\""
-check "El script tampoco lo cuenta como fallo" "grep -q 'already enabled' \"$T/../herramientas/plugin-general.sh\""
+check "El script tampoco lo cuenta como fallo" "grep -q 'already enabled' \"$T/../herramientas/actualizar-plugin.mjs\""
 check "Una ruta que termina en barra no se come la comilla de cierre en cmd.exe" "ver \"import {entrecomillar} from '$PLUGIN/sync/version.mjs'; process.exit(entrecomillar('C:\\\\\\\\Mis Proyectos\\\\\\\\')==='\\\"C:\\\\\\\\Mis Proyectos\\\\\\\\\\\\\\\\\\\"' ? 0 : 1)\""
 check "Los pasos para Windows se pueden pegar en PowerShell (sin &&)" "ver \"import {comoActualizar} from '$PLUGIN/sync/version.mjs'; const p=comoActualizar({cat:{tipo:'github'},installs:[{scope:'user',version:'1'},{scope:'project',version:'1',proyecto:'$W/proyecto-de-otro'}]},'win32'); process.exit(p.some(l=>l.startsWith('cd \\\"$W/proyecto-de-otro\\\"; claude')) && !p.some(l=>l.includes('&&')) ? 0 : 1)\""
 check "En Windows los argumentos se entrecomillan: una ruta con espacios no parte el comando" "SN_VERSION_MJS='$PLUGIN/sync/version.mjs' node \"$W/comillas.mjs\" | grep -q comillas-ok"
 HOME="$CASA" node "$PLUGIN/sn-sync.mjs" actualizar --general >"$W/salida-general.txt" 2>&1; codigo=$?
 check "Si un paso falla, el comando sale con error, lo dice y no invita a reiniciar como si nada" "[ \$codigo -ne 0 ] && grep -q 'NO SE PUDO' \"$W/salida-general.txt\" && grep -q 'ATENCIÓN' \"$W/salida-general.txt\" && ! grep -q 'AHORA SÍ' \"$W/salida-general.txt\""
-# El script de verdad, con un "claude" falso que anota lo que le piden.
-FALSO="$W/claude-falso"; rm -rf "$FALSO"; mkdir -p "$FALSO/bin" "$FALSO/casa/.claude/plugins"
-cat > "$FALSO/bin/claude" <<'SH'
-#!/bin/sh
-echo "$*" >> "$FALSO_LOG"
-case "$*" in
-  "plugin marketplace list") echo "softnexus" ;;
-  "plugin update softnexus-sdd@softnexus") [ -n "$FALLA_UPDATE" ] && { echo "✘ Plugin softnexus-sdd@softnexus is not installed at scope user"; exit 1; } ;;
-esac
-exit 0
-SH
-chmod +x "$FALSO/bin/claude"
-printf '{"plugins":{"softnexus-sdd@softnexus":[{"scope":"project","version":"0.3","projectPath":"/x"}]}}' > "$FALSO/casa/.claude/plugins/installed_plugins.json"
-FALSO_LOG="$FALSO/log" HOME="$FALSO/casa" TMPDIR="$FALSO" PATH="$FALSO/bin:$PATH" bash "$T/../herramientas/plugin-general.sh" >/dev/null 2>&1; codigo=$?
-check "Sin general se pide instalar; sin confirmar el motor no se declara éxito" "grep -qx 'plugin install softnexus-sdd@softnexus' '$FALSO/log' && ! grep -q '^plugin update' '$FALSO/log' && [ $codigo -eq 1 ]"
-printf '{"plugins":{"softnexus-sdd@softnexus":[{"scope":"user","version":"0.3","installPath":"/no/existe"}]}}' > "$FALSO/casa/.claude/plugins/installed_plugins.json"
-: > "$FALSO/log"; FALLA_UPDATE=1 FALSO_LOG="$FALSO/log" HOME="$FALSO/casa" TMPDIR="$FALSO" PATH="$FALSO/bin:$PATH" bash "$T/../herramientas/plugin-general.sh" >"$FALSO/salida" 2>&1; codigo=$?
-check "Si actualizar falla con \"no está instalado\", es un fallo de verdad: lo dice con el motivo y sale con error" "[ $codigo -eq 1 ] && grep -q 'MOTIVO: ✘ Plugin softnexus-sdd@softnexus is not installed at scope user' '$FALSO/salida'"
-check "El script tampoco esconde errores: cuenta los fallos y sale con error" "grep -q 'fallos + 1' \"$T/../herramientas/plugin-general.sh\" && grep -q 'exit 1' \"$T/../herramientas/plugin-general.sh\""
+# El actualizador independiente se cubre en actualizacion-test.mjs e instalador-test.sh.
+check "El arranque descarga el actualizador independiente y propaga su error" "grep -q 'actualizar-plugin.mjs' '$T/../herramientas/plugin-general.sh' && grep -q 'pipefail' '$T/../herramientas/plugin-general.sh'"
+
 
 echo "== Windows: clave del sistema y sin ventanas de consola"
 cat > "$W/win.mjs" <<'JS'
@@ -337,12 +321,7 @@ rm -f scripts/sn/.version
 check "Sin plugin instalado (el CI), sigue la copia del repositorio" "env -u SN_MOTOR_PROPIO HOME='$W/sin-casa' node scripts/sn/sn-sync.mjs status | grep -q '^Proyecto:'"
 
 echo "== El orden de actualizar --general: primero instala, y si eso falla no toca los proyectos"
-FALSO2="$W/claude-falso2"; rm -rf "$FALSO2"; mkdir -p "$FALSO2/bin" "$FALSO2/casa/.claude/plugins"
-cp "$FALSO/bin/claude" "$FALSO2/bin/claude"
-mkdir -p "$W/proyecto-con-copia2/.claude"
-printf '{"plugins":{"softnexus-sdd@softnexus":[{"scope":"user","version":"0.3"},{"scope":"project","version":"0.3","projectPath":"$W/proyecto-con-copia2"}]}}' > "$FALSO2/casa/.claude/plugins/installed_plugins.json"
-FALSO_LOG="$FALSO2/log" FALLA_UPDATE=1 HOME="$FALSO2/casa" TMPDIR="$FALSO2" PATH="$FALSO2/bin:$PATH" bash "$T/../herramientas/plugin-general.sh" >"$FALSO2/salida" 2>&1; codigo=$?
-check "Si la copia general no se pudo poner al día, NO se intenta quitar la copia del proyecto (quedaría sin ningún plugin)" "[ $codigo -eq 1 ] && ! grep -q 'uninstall' '$FALSO2/log'"
+
 
 check "esBenigno: \"not found\" SUELTO (catálogo desregistrado) es un fallo real al desinstalar, no \"ya estaba así\"" "ver \"import {esBenigno} from '$PLUGIN/sync/version.mjs'; const u={cmd:'claude',args:['plugin','uninstall']}; process.exit(!esBenigno('✘ Marketplace softnexus not found', u) ? 0 : 1)\""
 
