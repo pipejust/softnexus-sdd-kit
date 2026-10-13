@@ -108,6 +108,13 @@ try {
    assert.throws(()=>readFileSync(path.join(skills,'SKILL.md')));
    migrarCopiasOpenAI({casa,codexHome,cwd:project,verificarSolo:true,log:()=>{}});
  });
+ await check('El catálogo local Codex se actualiza con git, no con marketplace upgrade',async()=>{
+   reset();const base=openaiRunner();await actualizarCodex({...options((cmd,args,cwd)=>{
+     if(cmd==='git'){calls.push({cmd,args,cwd});return '';}
+     if(args.includes('marketplace')&&args.includes('list'))return JSON.stringify({marketplaces:[{name:'softnexus',root:project,marketplaceSource:{sourceType:'local'}}]});
+     return base(cmd,args,cwd);
+   }),codexHome});assert.ok(calls.some(c=>c.cmd==='git'&&c.args.includes('--ff-only')));assert.ok(!calls.some(c=>c.args.includes('upgrade')));
+ });
  await check('La descarga standalone y el motor usan exactamente el mismo actualizador',()=>{const dir=new URL('../',import.meta.url);assert.equal(readFileSync(new URL('herramientas/actualizar-plugin.mjs',dir),'utf8'),readFileSync(new URL('plugin/scripts/sync/update-general.mjs',dir),'utf8'))});
 } finally{rmSync(root,{recursive:true,force:true})}
 console.log(`\nRESULTADO: ${ok} OK · ${fallas} fallas`);process.exitCode=fallas?1:0;

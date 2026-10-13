@@ -203,8 +203,14 @@ export async function actualizarCodex({casa=os.homedir(),codexHome=process.env.C
   if(!verificarSolo) {
     const markets=run(['marketplace','list']);
     if(!markets.marketplaces?.some(m=>m.name==='softnexus'))run(['marketplace','add','pipejust/softnexus-sdd-kit']);
-    const upgraded=run(['marketplace','upgrade','softnexus']);
-    if(upgraded.errors?.length)throw new Error('Codex no pudo refrescar el catálogo Softnexus.');
+    const catalog=markets.marketplaces?.find(m=>m.name==='softnexus');
+    if(catalog?.marketplaceSource?.sourceType==='local'){
+      if(!catalog.root||!existsSync(catalog.root))throw new Error('No existe el catálogo local de Codex.');
+      correr('git',['-C',catalog.root,'pull','--ff-only'],casa);
+    }else{
+      const upgraded=run(['marketplace','upgrade','softnexus']);
+      if(upgraded.errors?.length)throw new Error('Codex no pudo refrescar el catálogo Softnexus.');
+    }
     install=run(['add',PLUGIN]); // add también refresca una instalación existente; no remove/reinstall.
   }
   const list=run(['list','--marketplace','softnexus']);

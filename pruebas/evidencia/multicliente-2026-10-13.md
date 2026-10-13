@@ -7,9 +7,13 @@ no determina el formato de instalación: Antigravity y Orca aún necesitan integ
 ## Validación
 
 - Suite completa local: **572 OK, cero fallas** (29 actualización, 120 guardas).
+- Prueba adicional de catálogo Codex local: actualizador **30 OK, cero fallas**; se usa
+  git pull --ff-only porque el CLI no permite upgrade sobre catálogos locales.
 - Perfil temporal Codex separado: marketplace add, plugin add, marketplace upgrade y plugin add
   repetido; instalación general habilitada 0.65.1 (versión publicada durante la prueba).
   El adaptador comprobó el manifiesto físico y el registro, y guardó el recibo para el motor.
+- Prueba adicional nativa de 0.66.0: catálogo Git de la rama del PR, instalación en perfil
+  aislado, registro habilitado y manifiesto físico 0.66.0 verificados.
 - El CLI nativo instalado en esta máquina reconoce el marketplace compatible .claude-plugin;
   no se necesita instalar Claude. Las operaciones se ejecutan en el directorio del usuario.
 - Regresión: CLI exitoso con archivos viejos, cliente ausente, catálogo fallido, plugin deshabilitado,
