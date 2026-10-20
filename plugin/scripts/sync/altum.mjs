@@ -644,8 +644,13 @@ export async function deliverAltum(connector, evt) {
     if (otra?.id && otra.project_id && otra.project_id !== connector.project_id) {
       throw new NotRetryable(`${item.id} apunta a ${taskId}, que es de otro proyecto de Altum. No la toco: corrige "ext.altum" en la ficha.`);
     }
-    if (otra?.id) current.set(otra.id, otra);
-    else taskId = ''; // se borró en Altum: se vuelve a crear abajo
+    // 404: o se borró o la clave de esta persona no la ve (p. ej. una tarea de otro proyecto del que no es
+    // miembro). No se distingue, y crear otra aquí duplicaba tareas (#142, #146). Recrear lo pide una persona.
+    if (!otra?.id) {
+      throw new NotRetryable(`está enlazado a la tarea ${taskId}, que no aparece en este proyecto de Altum: no existe o tu clave no la ve`
+        + ` (puede ser de otro proyecto). No creo otra para no duplicarla. Si se borró de verdad: "asegurar ${item.id} --recrear".`);
+    }
+    current.set(otra.id, otra);
   }
   if (taskId) {
     const veredicto = esLaTareaDeLaFicha(item, current.get(taskId));
@@ -659,6 +664,13 @@ export async function deliverAltum(connector, evt) {
   // después de conectar sí se registra. Si de verdad hace falta, "asegurar <ID>" la crea.
   const modificado = instante(item.modificado);
   if (!taskId && YA_TERMINO.has(item.stage) && !evt.forzado && modificado && modificado < desdeCuandoConectado()) return;
+
+  // En segundo plano no se crean tareas (regla 4): una carpeta sin historia o una ficha que llegó con un
+  // pull de otra persona duplicaba tareas. Se actualizan las que ya existen; crear lo pide una persona.
+  if (!taskId && evt.sinCrear) {
+    avisar(`no tiene tarea en Altum y en segundo plano no se crean. Para crearla: asegurar ${item.id}`);
+    return;
+  }
 
   // ---- Crear (una sola vez, con todo) ----
   const padre = item.parent ? tareaIdDe({ id: item.parent, external: {} }, connector, byRef, current) : '';
