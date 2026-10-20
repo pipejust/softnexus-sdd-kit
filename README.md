@@ -11,7 +11,6 @@ Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equip
 Corrige un riesgo de tareas duplicadas en Altum. La sincronización corre sola en segundo plano cada
 vez que el agente usa git, gh u openspec, y en una carpeta sin sincronización anterior tomaba todas
 las fichas como nuevas. Con el `dev` de First Class del 20 de octubre habría creado 15 tareas.
-Así salieron los duplicados #142 y #146.
 
 - **Primera vez en una carpeta:** `sync` guarda el estado de las fichas y no envía nada.
 - **Segundo plano:** nunca crea tareas, solo actualiza las que ya existen. Crearlas lo pide una
