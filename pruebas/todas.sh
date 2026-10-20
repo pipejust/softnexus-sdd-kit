@@ -4,7 +4,7 @@
 set -uo pipefail
 T="$(cd "$(dirname "$0")" && pwd)"
 total_ok=0; total_fallas=0
-for prueba in reglas-test.mjs actualizacion-test.mjs lideres-test.mjs auditoria-test.mjs instalador-test.sh run.sh altum-test.sh watch-test.sh proceso-test.sh guard-test.sh; do
+for prueba in skills-test.mjs reglas-test.mjs actualizacion-test.mjs lideres-test.mjs auditoria-test.mjs instalador-test.sh run.sh altum-test.sh watch-test.sh proceso-test.sh guard-test.sh; do
   code=0
   if [ "${prueba##*.}" = mjs ]; then salida="$(node "$T/$prueba" 2>&1)" || code=$?; else salida="$(bash "$T/$prueba" 2>&1)" || code=$?; fi
   linea="$(echo "$salida" | tail -1)"

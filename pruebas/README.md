@@ -9,6 +9,7 @@ bash pruebas/todas.sh
 
 | Prueba | Qué cubre |
 |---|---|
+| `skills-test.mjs` | Cada skill del plugin carga bien (nombre igual a su carpeta, descripción, sin pasar de 1000 líneas); las de terceros traen licencia, origen con commit fijo y están en el script de refresco; `sn-ui` está conectada a `/sn` y a la evidencia. |
 | `actualizacion-test.mjs` | CLI exitoso con archivos viejos, usuario nuevo con proyecto viejo, registro y manifiesto incongruentes, falta de red, catálogo local, instalación inicial, migración project/local a user, preservación de ajustes y API, idempotencia, proyectos desconectados, modo de solo comprobación, selección de Claude/Codex/ChatGPT, CLI OpenAI sin Claude, migración de skills/TOML y guardas apply_patch. |
 | `lideres-test.mjs` | Lista completa de líderes, identidades separadas, aprobaciones y merge por cada líder; rechazo de personas ajenas y CODEOWNERS con varios usuarios. |
 | `reglas-test.mjs` | Reglas de sincronización y detección del mensaje 422 observado en el sandbox real. |
