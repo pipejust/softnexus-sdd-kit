@@ -123,6 +123,7 @@ check "después de registrarlo, projects ya no lo marca como sin repositorio" "S
 check "Todos los proyectos se leen aunque vengan paginados" "sn projects | grep -c '  ' | grep -qE '^[4-9]|^[0-9]{2}'"
 
 echo "== Crear tarea al crear el ítem"
+sn sync >/dev/null 2>&1   # foto inicial de la carpeta, antes de la primera ficha
 cat > docs/items/CLI-0001.md <<'MD'
 ---
 id: CLI-0001
@@ -344,7 +345,9 @@ check "El ítem queda enlazado con la tarea (ext.altum)" "grep -q '^ext.altum: '
 before=$(posts)
 check "asegurar otra vez no duplica: confirma la que ya existe" "sn asegurar CLI-0009 | grep -q 'Ya se puede construir' && [ \$(posts) -eq $before ]"
 curl -s "localhost:$PORT/_delete?ref=CLI-0009" >/dev/null
-check "Si la tarea se borró en Altum, asegurar la vuelve a crear" "sn asegurar CLI-0009 | grep -qE 'Tarea en Altum #[0-9]+'"
+before=$(posts)
+check "Si la tarea enlazada ya no aparece en Altum, asegurar no crea otra sin pedirlo y explica --recrear" "(sn asegurar CLI-0009 2>&1 || true) | grep -q -- '--recrear' && [ \$(posts) -eq \$before ]"
+check "Con --recrear, asegurar la vuelve a crear" "sn asegurar CLI-0009 --recrear | grep -qE 'Tarea en Altum #[0-9]+' && [ \$(posts) -eq \$((before + 1)) ]"
 mv .sn/connectors.json .sn/apagado.json
 check "Sin proyecto de Altum conectado, asegurar lo dice en vez de callarse" "(sn asegurar CLI-0009 2>&1 || true) | grep -q 'no está unido a un proyecto de Altum'"
 mv .sn/apagado.json .sn/connectors.json
@@ -556,6 +559,28 @@ check "Volver a una rama vieja NO revierte el contenido en Altum" "campo CLI-011
 cp .sn/connectors.json "$W/conectores.bak" && printf '\xef\xbb\xbf' | cat - "$W/conectores.bak" > .sn/connectors.json
 check "connectors.json guardado con BOM (Bloc de notas de Windows) se sigue leyendo" "sn test | grep -q '^OK'"
 cp "$W/conectores.bak" .sn/connectors.json
+
+echo "== Sin duplicados: primera vez, segundo plano y tareas que la clave no ve"
+rm -f .sn/state/last-snapshot.json
+printf -- '---\nid: CLI-0901\ntype: feature\ntitle: Ficha sin tarea\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0901.md
+before=$(posts); out=$(sn sync 2>&1)
+check "Primera sincronización de una carpeta: guarda la foto y no crea tareas" "[ \$(posts) -eq \$before ] && [ -f .sn/state/last-snapshot.json ] && echo \"\$out\" | grep -q 'primera vez'"
+printf -- '---\nid: CLI-0902\ntype: feature\ntitle: Nueva en segundo plano\nrisk: R1\n---\n## Historia\nx\n' > docs/items/CLI-0902.md
+before=$(posts); out=$(node scripts/sn/sn-sync.mjs sync --delay 2>&1)
+check "En segundo plano una ficha nueva no crea tarea y dice cómo crearla" "[ \$(posts) -eq \$before ] && echo \"\$out\" | grep -q 'asegurar CLI-0902'"
+check "Una persona la crea a propósito con asegurar" "sn asegurar CLI-0902 | grep -qE 'Tarea en Altum #[0-9]+' && [ \$(posts) -eq \$((before + 1)) ]"
+sed -i '' 's/^title: Nueva en segundo plano$/title: Nueva en segundo plano (editada)/' docs/items/CLI-0902.md
+node scripts/sn/sn-sync.mjs sync --delay >/dev/null 2>&1
+check "En segundo plano sí se actualiza una tarea que ya existe" "campo CLI-0902 title | grep -q 'editada'"
+printf -- '---\nid: CLI-0903\ntype: feature\ntitle: Tarea de otro proyecto\nrisk: R1\next.altum: 99999999-9999-9999-9999-999999999999\n---\n## Historia\nx\n' > docs/items/CLI-0903.md
+before=$(posts); out=$(sn sync 2>&1)
+check "Ficha enlazada a una tarea que Altum no muestra (404): no crea otra y lo explica" "[ \$(posts) -eq \$before ] && echo \"\$out\" | grep -q 'tu clave no la ve'"
+out=$(sn asegurar CLI-0903 2>&1 || true)
+check "asegurar tampoco la crea sin pedirlo" "[ \$(posts) -eq \$before ] && echo \"\$out\" | grep -q -- '--recrear'"
+mkdir -p openspec/changes/add-dividir && printf -- '- [x] 1 hecha\n- [ ] 2 pendiente\n' > openspec/changes/add-dividir/tasks.md
+printf -- '---\nid: CLI-0904\ntype: feature\ntitle: Para dividir\nrisk: R1\nchange: add-dividir\n---\n## Historia\nx\n' > docs/items/CLI-0904.md
+before=$(posts); out=$(sn dividir CLI-0904 2>&1)
+check "dividir crea en primer plano la tarea del ítem nuevo (lo pidió una persona)" "echo \"\$out\" | grep -qE 'Tarea en Altum #[0-9]+: \\[CLI-' && [ \$(posts) -eq \$((before + 1)) ]"
 
 echo "== Firma de webhooks de Altum"
 cat > /tmp/sn-verify-$$.mjs <<'JS'

@@ -36,6 +36,7 @@ JSON
 start_mock
 
 echo "== 1. Nuevo bug (tarjeta)"
+sync >/dev/null 2>&1   # foto inicial de la carpeta, antes de la primera ficha
 cat > docs/items/CLI-0001.md <<'MD'
 ---
 id: CLI-0001

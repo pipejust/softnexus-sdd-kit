@@ -20,6 +20,7 @@ cat > .sn/connectors.json <<JSON
   "project_id": "$PROJECT", "key_env": "SN_ALTUM_KEY_PRUEBA", "notify": false, "events": ["sn.item.*"] } ] }
 JSON
 node "$T/altum-mock.mjs" $PORT "$LOG" >/dev/null 2>&1 & MOCK=$!; sleep 0.6
+node scripts/sn/sn-sync.mjs sync >/dev/null 2>&1   # foto inicial de la carpeta, antes de las fichas
 for n in 1 2 3; do printf -- "---\nid: CLI-000$n\ntype: bug\ntitle: Ítem $n\nrisk: R2\n---\n## Historia\nx\n" > docs/items/CLI-000$n.md; done
 node scripts/sn/sn-sync.mjs sync >/dev/null
 

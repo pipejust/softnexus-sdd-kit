@@ -94,7 +94,7 @@ async function attempt(connector, evt, attempts = 0) {
   }
 }
 
-async function retryOutbox(config) {
+async function retryOutbox(config, { sinCrear = false } = {}) {
   const pending = readOutbox();
   if (!pending.length) return { retried: 0, dropped: 0 };
   // La foto se toma ANTES de tocar la cola: si leerla falla (git, red, gh), la cola sigue intacta.
@@ -117,7 +117,8 @@ async function retryOutbox(config) {
       anotarDescartado({ conector: entry.connector, item: id || '', error: 'ese conector ya no está en .sn/connectors.json (o quedó apagado)' });
       continue;
     }
-    const evento = id ? { ...entry.event, item: fresca.get(id) } : entry.event;
+    const base = id ? { ...entry.event, item: fresca.get(id) } : entry.event;
+    const evento = sinCrear ? { ...base, sinCrear } : base;
     if (await attempt(connector, evento, entry.attempts)) retried += 1;
   }
   const dropped = writeOutbox(readOutbox());
@@ -136,7 +137,9 @@ async function sync(config) {
   if (flag('--dry-run')) {
     const snapshot = takeSnapshot(config.project);
     const upsertOnly = flag('--upsert-only');
-    const events = upsertOnly ? upsertEvents(snapshot) : diffSnapshots(loadSnapshot(), snapshot);
+    const previa = upsertOnly ? null : loadSnapshot();
+    if (!upsertOnly && !previa) return console.log('[dry-run] sn-sync: primera vez en esta carpeta: la sincronización guardaría el estado de las fichas sin enviar nada.');
+    const events = upsertOnly ? upsertEvents(snapshot) : diffSnapshots(previa, snapshot);
     const targets = upsertOnly ? config.connectors.filter((c) => ['rest', 'github', 'altum'].includes(c.kind)) : config.connectors;
     const me = localActor();
     for (const evt of events) for (const connector of targets.filter((c) => wanted(c, evt, me))) {
@@ -151,10 +154,21 @@ async function sync(config) {
   if (flag('--delay')) await new Promise((resolve) => setTimeout(resolve, DEBOUNCE_MS));
   if (!acquireLock()) return; // otra sincronización en curso; el siguiente disparo recoge lo que falte
   try {
-    const outbox = await retryOutbox(config);
+    // En segundo plano (hooks de la sesión y de git) nunca se crean tareas: solo se actualizan las que
+    // ya existen. Crear lo pide una persona ("asegurar", "dividir", "sync" a mano) o el CI (--upsert-only).
+    const sinCrear = flag('--delay');
+    const outbox = await retryOutbox(config, { sinCrear });
     const snapshot = takeSnapshot(config.project);
     const upsertOnly = flag('--upsert-only');
-    const events = upsertOnly ? upsertEvents(snapshot) : diffSnapshots(loadSnapshot(), snapshot);
+    const previa = upsertOnly ? null : loadSnapshot();
+    if (!upsertOnly && !previa) {
+      // Carpeta sin foto anterior (recién clonada, otra persona, otro computador): todas las fichas
+      // parecerían nuevas. Se guarda la foto y no se manda nada; desde aquí solo viajan los cambios.
+      saveSnapshot(snapshot);
+      if (!flag('--quiet')) console.log('sn-sync: primera vez en esta carpeta: guardé el estado de las fichas sin enviar nada. Las tareas nuevas se crean con "asegurar <ID>".');
+      return;
+    }
+    const events = (upsertOnly ? upsertEvents(snapshot) : diffSnapshots(previa, snapshot)).map((e) => (sinCrear ? { ...e, sinCrear } : e));
     const targets = upsertOnly ? config.connectors.filter((c) => ['rest', 'github', 'altum'].includes(c.kind)) : config.connectors;
     const me = localActor();
     let sent = 0;
@@ -432,8 +446,21 @@ function dividir(config) {
   const resto = lineas.filter((l) => !/^\s*- \[ \]/.test(l));
   writeFileSync(archivo, `${resto.join('\n').replace(/\n+$/, '')}\n\n> ${pendientes.length} tarea(s) pasaron a ${nuevo} el ${hoy.toISOString().slice(0, 10)}: el plano se cerró con las ${hechas.length} ya hechas.\n`);
   console.log(`Listo: el plano de ${item.id} queda con sus ${hechas.length} tareas hechas (completo).`);
-  console.log(`Las ${pendientes.length} pendientes pasaron a ${nuevo} (docs/items/${nuevo}.md), que nace en Altum con su propia tarea.`);
+  console.log(`Las ${pendientes.length} pendientes pasaron a ${nuevo} (docs/items/${nuevo}.md).`);
   console.log(`➡️ Siguiente para ${item.id}: evidencia (sn-evidence) y PR. ${nuevo} empieza su camino cuando lo tomen con /sn.`);
+  return nuevo;
+}
+
+// El ítem nuevo de "dividir" tiene su propia tarea: la crea aquí, porque lo pidió una persona (en
+// segundo plano ya no se crean tareas). Sin Altum o sin clave, se dice cómo crearla después.
+async function tareaDelDividido(config, nuevo) {
+  const altum = config?.connectors.find((c) => c.kind === 'altum' && c.enabled !== false);
+  if (!nuevo || !altum?.project_id) return;
+  try {
+    await asegurar(config, nuevo);
+  } catch (error) {
+    console.log(`No pude crear la tarea de ${nuevo} en Altum (${error.message}). Créala con: asegurar ${nuevo}`);
+  }
 }
 
 // Poner secretos y proteger la rama exige ser ADMINISTRADOR del repositorio (no basta con ser el líder
@@ -677,8 +704,7 @@ async function setRepo(config) {
 // asegurar <ITEM>: garantiza que el ítem YA tiene su tarea en Altum antes de empezar a construir.
 // La sincronización normal corre sola y en segundo plano; esto la hace en primer plano, comprueba
 // que la tarea exista de verdad en Altum y, si algo falla, dice por qué en vez de callarse.
-async function asegurar(config) {
-  const id = args[1];
+async function asegurar(config, id = args[1]) {
   if (!id) throw new Error('uso: asegurar <ID del ítem>');
   const connector = config?.connectors.find((c) => c.kind === 'altum' && c.enabled !== false);
   if (!connector?.project_id) throw new Error('este repositorio no está unido a un proyecto de Altum: conéctalo con /sn-connect antes de construir (o sigue sin Altum si la persona así lo decidió).');
@@ -712,6 +738,10 @@ async function asegurar(config) {
       + ' No la toco. Quita la línea "ext.altum:" de la ficha y vuelve a correr "asegurar": se creará su propia tarea.');
   }
   let tarea = await existente(enlazada);
+  if (!tarea && enlazada && !flag('--recrear')) {
+    throw new Error(`${item.id} está enlazado a la tarea ${enlazada}, que no aparece en Altum: no existe o tu clave no la ve (puede ser de otro proyecto).`
+      + ` No creo otra para no duplicarla. Si estás seguro de que se borró, corre "asegurar ${item.id} --recrear".`);
+  }
   if (tarea) {
     // Ya existe: se le lleva la etapa actual del ítem (al cerrar, esto la deja terminada en Altum).
     // forzado: "asegurar" lo corre una persona a propósito (antes de construir, o al unir el PR),
@@ -938,7 +968,7 @@ else if (command === 'lead') await lead(config);
 else if (command === 'repos') await repos(config);
 else if (command === 'pedir-config') await pedirConfig();
 else if (command === 'siguiente') siguiente(config);
-else if (command === 'dividir') dividir(config);
+else if (command === 'dividir') await tareaDelDividido(config, dividir(config));
 else if (command === 'verificar-firma') await verificarFirma(config);
 else if (command === 'proteger-rama') proteger();
 else if (command === 'asegurar') await asegurar(config);

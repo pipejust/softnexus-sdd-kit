@@ -6,7 +6,25 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
-## Versión 0.67.0
+## Versión 0.67.1
+
+Corrige un riesgo de tareas duplicadas en Altum. La sincronización corre sola en segundo plano cada
+vez que el agente usa git, gh u openspec, y en una carpeta sin sincronización anterior tomaba todas
+las fichas como nuevas. Con el `dev` de First Class del 20 de octubre habría creado 15 tareas.
+Así salieron los duplicados #142 y #146.
+
+- **Primera vez en una carpeta:** `sync` guarda el estado de las fichas y no envía nada.
+- **Segundo plano:** nunca crea tareas, solo actualiza las que ya existen. Crearlas lo pide una
+  persona: `/sn` corre `asegurar <ID>` al guardar el ítem y antes de construir, y `dividir` crea la
+  del ítem nuevo. El CI (`sync --upsert-only`) no cambia.
+- **Tarea que la clave no ve:** si una ficha apunta a una tarea que Altum no muestra, porque se borró
+  o porque es de otro proyecto del que la persona no es miembro (las fichas de Arena USC dentro de
+  First Class), no se crea otra. Solo `asegurar <ID> --recrear` la vuelve a crear, a propósito.
+
+La copia del motor en cada repositorio (`scripts/sn`) delega en el plugin instalado, así que basta
+con actualizar el plugin. Pruebas nuevas en `altum-test.sh` reproducen los tres casos.
+
+## Cambios de 0.67.0
 
 Llega el camino de interfaz. Cuando un ítem cambia algo que se ve, `/sn` usa la skill `sn-ui`:
 la dirección visual se fija en el plano antes del sello 1, se construye con los tokens de `DESIGN.md`
