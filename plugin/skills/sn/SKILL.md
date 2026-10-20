@@ -45,6 +45,7 @@ Clasifica el **tipo**:
 
 ## Paso 2 — Investigar el código ANTES de preguntar
 Lee `AGENTS.md`, `DESIGN.md`, `openspec/specs/` del área y el código relacionado. Nunca preguntes algo que el código responde.
+- **Si el ítem cambia algo que se ve** (pantalla, componente, estilos, animación, móvil): sigue también la skill `sn-ui` en la historia, el plano, la construcción y la evidencia.
 - **Bug**: intenta reproducirlo (correr la app, el test, leer logs). Anota: pasos, qué pasa, qué debería pasar, archivo/línea sospechoso. Si no se puede reproducir, dilo y pide exactamente el dato que falta.
 
 ## Paso 3 — Clasificar tamaño y riesgo

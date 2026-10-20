@@ -34,6 +34,7 @@ Resume para el líder en lenguaje claro, máximo 10 líneas: qué problema resue
 - ¿Cada escenario es observable y medible? ¿Hay fallo y borde, no solo happy path?
 - R3: permisos, autenticación, datos personales, pagos, migraciones: ¿hay escenarios negativos (quien NO debe poder, no puede)? ¿rollback descrito?
 - ¿El diseño reutiliza patrones del repo y respeta el stack aprobado y el límite de tamaño de archivos?
+- Si cambia interfaz: ¿la dirección visual respeta `DESIGN.md` y la evidencia trae capturas 1440/375 y el peor caso de datos (`sn-ui` §5)?
 
 **Sello entrega:**
 - Corre los gates de `AGENTS.md` §3 en la carpeta aparte (instalar dependencias si hace falta). No confíes solo en `evidencia.md`: verifica.

@@ -24,7 +24,7 @@ La persona no tiene que saber qué preguntar. **Tú sí.**
 - Observable: "la contraseña guardada empieza por `$2b$`", no "la contraseña es segura".
 - Medible: "responde en < 2 s con 1.000 registros", no "carga rápido".
 - Por requisito: al menos un happy path, un fallo, un borde.
-- Estados de UI si hay pantalla: vacío, cargando, error, sin permiso, móvil.
+- Estados de UI si hay pantalla: vacío, cargando, error, sin permiso, móvil, y la tabla de datos con sus límites (skill `sn-ui` §2).
 
 ## Plantilla de salida
 ```markdown

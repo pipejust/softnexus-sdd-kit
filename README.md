@@ -6,7 +6,34 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
-## Versión 0.66.1
+## Versión 0.67.0
+
+Llega el camino de interfaz. Cuando un ítem cambia algo que se ve, `/sn` usa la skill `sn-ui`:
+la dirección visual se fija en el plano antes del sello 1, se construye con los tokens de `DESIGN.md`
+y la evidencia trae capturas 1440/375, el peor caso de datos y la revisión del movimiento.
+`/sn-story` agrega la tabla de datos con sus límites y `/sn-validate` revisa esa evidencia.
+
+El plugin incluye ocho skills de diseño de terceros, sin cambios y con su licencia y commit de origen
+en `ORIGEN.md`. Llegan a todos con la actualización general; no hay que instalar nada aparte.
+
+| Skill | Origen · licencia | Para qué en el camino |
+|---|---|---|
+| `frontend-design` | anthropics/skills · Apache-2.0 | Dirección visual de superficies nuevas sin caer en diseño genérico |
+| `prototype` | emilkowalski/skills · MIT | 2 a 3 versiones con selector cuando el cliente no sabe qué quiere |
+| `break-ui` | emilkowalski/skills · MIT | Peor caso de datos realistas antes de entregar |
+| `mobile-native` | emilkowalski/skills · MIT | Que la web se sienta como app en el celular |
+| `emil-design-eng` | emilkowalski/skills · MIT | Criterios de pulido de componentes |
+| `animate` · `animation-performance` · `review-animations` | emilkowalski/skills · MIT | Movimiento bien hecho, fluido y revisado |
+
+Para traer versiones nuevas: `bash herramientas/skills-terceros.sh`, revisar el diff, correr las pruebas y subir la versión.
+
+**Evaluadas y no incluidas:**
+- **Refero** (`referodesign/refero_skill`): buena investigación con referencias reales, pero la investigación en vivo exige cuenta paga y la skill se declara autoridad por encima de `DESIGN.md`. Quien tenga cuenta puede instalarla aparte.
+- **huashu-design** y **HyperFrames**: sirven para presentaciones, demos y video, no para construir el producto. huashu-design pesa 78 MB y ambos requieren ffmpeg o Chrome sin interfaz. Se instalan aparte si alguien los necesita.
+- **Engram**: memoria persistente con un binario propio. Repite lo que ya cubren `docs/aprendizajes.md` y `/sn-learn` dentro del repositorio.
+- **Skiper UI**, **Godly** y **Manus**: no son skills. Skiper UI es una librería de componentes, en parte paga y sin licencia publicada. Godly es una galería de inspiración y Manus es un producto.
+
+## Cambios de 0.66.1
 
 `lead --escribir` reemplaza el párrafo completo de líderes en AGENTS.md, incluidas las
 continuaciones antiguas y los saltos CRLF de Windows. Conserva los apartados siguientes.
@@ -76,6 +103,8 @@ softnexus-sdd-kit/
     ├── skills/sn-learn         ← error repetido → regla/test/hook
     ├── skills/sn-setup    ← deja un repo listo leyendo su código
     ├── skills/sn-split            ← solo proyectos existentes: reduce archivos heredados de más de 1000 líneas
+    ├── skills/sn-ui               ← interfaz: dirección visual en el plano, peor caso de datos, móvil y movimiento
+    ├── skills/<terceros>          ← frontend-design y skills de Emil Kowalski (licencia y origen en cada carpeta)
     ├── hooks/guard.mjs            ← bloquea .env, force-push, DDL, migraciones, deploy manual, CI
     ├── hooks/file-size.mjs        ← bloquea archivos de más de 1000 líneas (aviso desde 800)
     └── plantillas/                ← AGENTS.md, CLAUDE.md, openspec/config.yaml, settings, PR template, historia
@@ -118,6 +147,7 @@ En Claude Code, dentro del repo: `/sn-setup`. Lee el código, instala OpenSpec y
 | Traer cualquier cosa (idea, bug, error, mejora, correo del cliente) | `/sn <lo que sea>` |
 | Saber en qué voy y qué sigue | `/sn-status` |
 | No sé qué hacer / no recuerdo los comandos | `/sn-help` |
+| Diseñar o pulir una pantalla | `/sn` (usa `/sn-ui` solo) |
 | Pedir la firma del líder (desde mi computador) | `/sn-request` |
 | (Líder) Validar lo que me pidieron, desde el mío | `/sn-validate` |
 | Ver o copiar historias y bugs (con sus commits) | `/sn-items` |

@@ -25,8 +25,7 @@ Lee `openspec/changes/<change>/specs/`. Para cada escenario Given/When/Then, ind
 Escenario sin cobertura = no está terminado.
 
 ## 3. UI (si cambió algo visible)
-- Levanta la app, abre la página, toma screenshot en escritorio (1440) y móvil (375).
-- Compara contra la referencia (Figma/`DESIGN.md`/screenshot previo). Lista diferencias conocidas; no digas "quedó igual".
+Sigue la skill `sn-ui` §5: levanta la app y toma capturas en escritorio (1440) y móvil (375) de cada estado, prueba el peor caso de datos con `break-ui`, revisa el movimiento con `review-animations` si cambió y compara contra la referencia (Figma/`DESIGN.md`/screenshot previo). Lista diferencias conocidas; no digas "quedó igual".
 
 ## 4. Autochequeo del diff
 Revisa `git diff` buscando: secretos, `console.log`/`debugger`, paquetes nuevos (¿existen?, ¿están en el stack?), endpoints sin validación o sin autorización, archivos tocados fuera del alcance del change, código muerto.

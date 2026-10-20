@@ -50,6 +50,7 @@ COMANDOS DE SOFTNEXUS
                  "clóname el proyecto X" → lo trae a tu computador desde Altum
                  "¿quién soy en Altum?" → tu nombre y tus proyectos asignados
                  "guarda mi clave de Altum" → una vez; sin ella no ves proyectos
+  /sn-ui         Diseñar o pulir una pantalla (dentro de /sn)
   /sn-explain    Explícame lo que se hizo
   /sn-learn      Otra vez el mismo error: que no se repita
   /sn-setup      Preparar un proyecto
