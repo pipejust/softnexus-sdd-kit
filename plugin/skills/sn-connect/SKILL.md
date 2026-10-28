@@ -20,7 +20,7 @@ Contrato completo: `${CLAUDE_PLUGIN_ROOT}/references/integraciones.md`. Léelo a
 - "Probar" → `node scripts/sn/sn-sync.mjs test [nombre]`.
 - "Traer tareas nuevas de Altum" → `node scripts/sn/sn-sync.mjs pull altum` (muestra); con el "sí" de la persona, `… pull altum --apply` (crea los ítems) y commit con `sn-ship`.
 - "Desconectar X" → pon `"enabled": false` en ese conector (no lo borres) y confirma.
-Conectar es **R3** (envía datos del proyecto fuera del repositorio): confírmalo con la persona y, si no es el líder técnico, que lo apruebe el líder (`AGENTS.md` §1).
+Conectar es **R3** (envía datos del proyecto fuera del repositorio): confírmalo con la persona y, si no es el líder técnico, que lo apruebe el líder (lo dice Altum: `sn-sync.mjs lead`).
 
 ## 1. Elegir el tipo de conexión
 | Si quiere… | Tipo | Datos que pides |

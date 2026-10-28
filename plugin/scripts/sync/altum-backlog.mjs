@@ -275,16 +275,20 @@ export function lideresDelProyecto(proyecto, me, projectId = proyecto.id) {
   return { ...principal, project: proyecto.name, leaders };
 }
 
+// Altum marca al líder con is_lead; su "role" es el cargo (puede decir "Desarrollador"). Se muestra
+// siempre "Líder" y el cargo aparte, para que nadie lea que no es líder.
+const etiquetaLider = (lead) => `Líder de "${lead.project}"${lead.role && !/^l[ií]der/i.test(lead.role) ? ` (cargo en Altum: ${lead.role})` : ''}`;
+
 export function leadText(lead) {
   if (lead?.leaders?.length > 1) return lead.leaders.map((l) => leadText({ ...l, project: lead.project })).join('');
   if (!lead) return 'No encuentro el proyecto en Altum: revisa el project_id del conector.\n';
   if (lead.falta === 'sin-lider') return `"${lead.project}" no tiene líder marcado en Altum. Pídele a quien administra Altum que marque al líder del proyecto; mientras tanto, pregúntale a la persona quién firma.\n`;
   if (lead.name || lead.email) {
     // El usuario de GitHub sirve para pedirle la revisión del PR; Altum lo devuelve cuando está registrado.
-    return `${lead.role} de "${lead.project}": ${lead.name || '(sin nombre en Altum)'} <${lead.email || '?'}>`
+    return `${etiquetaLider(lead)}: ${lead.name || '(sin nombre en Altum)'} <${lead.email || '?'}>`
       + `${lead.github ? ` · GitHub @${lead.github}` : ''}${lead.soyYo ? ' — eres tú' : ''}\n`;
   }
-  return `${lead.role} de "${lead.project}": está registrado en Altum (employee_id ${lead.employee_id}), pero Altum todavía no devuelve su nombre ni su correo (pedido H).\n`
+  return `${etiquetaLider(lead)}: está registrado en Altum (employee_id ${lead.employee_id}), pero Altum todavía no devuelve su nombre ni su correo (pedido H).\n`
     + 'Escribe eso mismo en AGENTS.md y sigue: no le preguntes a la persona quién es el líder.\n';
 }
 

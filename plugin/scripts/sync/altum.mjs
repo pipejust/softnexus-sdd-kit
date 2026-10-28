@@ -645,7 +645,7 @@ export async function deliverAltum(connector, evt) {
       throw new NotRetryable(`${item.id} apunta a ${taskId}, que es de otro proyecto de Altum. No la toco: corrige "ext.altum" en la ficha.`);
     }
     // 404: o se borró o la clave de esta persona no la ve (p. ej. una tarea de otro proyecto del que no es
-    // miembro). No se distingue, y crear otra aquí duplicaba tareas (#142, #146). Recrear lo pide una persona.
+    // miembro). No se distingue, y crear otra aquí podía duplicar tareas. Recrear lo pide una persona.
     if (!otra?.id) {
       throw new NotRetryable(`está enlazado a la tarea ${taskId}, que no aparece en este proyecto de Altum: no existe o tu clave no la ve`
         + ` (puede ser de otro proyecto). No creo otra para no duplicarla. Si se borró de verdad: "asegurar ${item.id} --recrear".`);
