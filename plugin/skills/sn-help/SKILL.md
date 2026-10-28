@@ -14,7 +14,7 @@ La persona puede no saber nada del proceso. No expliques la metodología: **dile
 - ¿El proyecto está preparado? (`AGENTS.md` y `openspec/` existen)
 - `git fetch --quiet` (si hay remoto) y `git status --short`, rama actual.
 - Trabajo abierto: `openspec list --json` y la etapa de cada change (reglas de `sn-status`).
-- Validaciones: `node "${CLAUDE_PLUGIN_ROOT}/scripts/validation-state.mjs"` (mis solicitudes y su estado) y, si soy líder técnico (mi nombre o correo de `git config` aparece como líder en `AGENTS.md`), `... --pending` (lo que me toca validar). Si la rama remota tiene commits nuevos, puede haber una respuesta: sugiere `git pull`.
+- Validaciones: `node "${CLAUDE_PLUGIN_ROOT}/scripts/validation-state.mjs"` (mis solicitudes y su estado) y, si soy líder técnico según Altum (`node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" lead` marca mi línea con "— eres tú"; `AGENTS.md` no decide quién es líder), `... --pending` (lo que me toca validar). Si la rama remota tiene commits nuevos, puede haber una respuesta: sugiere `git pull`.
 
 ## 2. Elegir 1 a 3 opciones, en este orden de prioridad
 1. Proyecto sin preparar → `/sn-setup`.

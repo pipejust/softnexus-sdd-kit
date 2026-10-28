@@ -103,6 +103,22 @@ function liderGuardado(root = '.') {
   }
 }
 
+// Antes de rechazar una firma se le pregunta a Altum una vez por proceso: la copia local puede faltar
+// (la consulta falló sin avisar), ser vieja o no traer a un líder recién marcado. Sin red ni clave,
+// el resultado es el mismo de antes: la firma no se puede verificar.
+const MOTOR = fileURLToPath(new URL('./sn-sync.mjs', import.meta.url));
+const LIDER_VIEJO_MS = 12 * 60 * 60 * 1000;
+let yaPregunte = false;
+function liderDeAltum(root = '.') {
+  if (yaPregunte) return null;
+  yaPregunte = true;
+  try {
+    execFileSync(process.execPath, [MOTOR, 'lead'], { cwd: root, stdio: 'ignore', timeout: 15000, windowsHide: true });
+  } catch { /* sin clave, sin red o sin conector */ }
+  return liderGuardado(root);
+}
+const liderViejo = (l) => !Number.isFinite(l?.at) || Date.now() - l.at > LIDER_VIEJO_MS;
+
 
 // Riesgo del ítem que usa este change (docs/items/*.md con "change: <nombre>").
 function riesgoDelChange(change, root = '.') {
@@ -125,7 +141,17 @@ function pideLider(entries, last, change) {
   return last.seal === 'plano' ? nivel >= 3 : nivel >= 2;
 }
 
-export function statusOf(entries, change, lider = liderGuardado()) {
+// Sin líder explícito usa la copia de Altum y, si con ella la firma no pasa o es vieja, pregunta a Altum.
+export function statusOf(entries, change, liderDado) {
+  if (liderDado !== undefined) return estadoCon(entries, change, liderDado);
+  const guardado = liderGuardado();
+  const estado = estadoCon(entries, change, guardado);
+  if (estado.status !== 'firma inválida' && !(estado.porLider && liderViejo(guardado))) return estado;
+  const nuevo = liderDeAltum();
+  return nuevo ? estadoCon(entries, change, nuevo) : estado;
+}
+
+function estadoCon(entries, change, lider) {
   if (!entries.length) return { status: 'sin validación' };
   const last = entries[entries.length - 1];
   const base = { seal: last.seal, by: last.fields.Pide || last.fields.Valida || '', date: last.date, notes: last.fields.Notas || '' };
@@ -134,20 +160,26 @@ export function statusOf(entries, change, lider = liderGuardado()) {
   // cualquier otra persona no cuenta: el plano sigue esperando la firma.
   const firmante = identidadFirmante(last.fields.Valida);
   const hayFirmante = Boolean(firmante.correo || firmante.github);
-  if (pideLider(entries, last, change) && (!lideresDe(lider).some((l) => l.email || l.github || l.emails?.length) || !hayFirmante || !esElLider(lider, firmante))) {
+  const porLider = pideLider(entries, last, change);
+  const conocido = lideresDe(lider).some((l) => l.email || l.github || l.emails?.length);
+  if (porLider && (!conocido || !hayFirmante || !esElLider(lider, firmante))) {
+    const quien = last.fields.Valida || 'un firmante sin identidad';
     return {
       ...base,
       status: 'firma inválida',
-      detail: `No se pudo verificar la firma de ${last.fields.Valida || 'un firmante sin identidad'} con el líder de Altum${lider?.name ? `: ${lider.name} (${comoSeIdentifica(lider)})` : '.'}.`
-        + ' Si ese es su correo personal, que lo registre en Altum o que firme agregando su usuario de GitHub: "Nombre <correo> · GitHub @usuario".',
+      detail: conocido
+        ? `La firma de ${quien} no coincide con los líderes de Altum: ${comoSeIdentifica(lider)}.`
+          + ' Si ese es su correo personal, que lo registre en Altum o que firme agregando su usuario de GitHub: "Nombre <correo> · GitHub @usuario".'
+        : `No pude leer de Altum quiénes son los líderes, así que no puedo verificar la firma de ${quien}.`
+          + ' Revisa la clave y la conexión con "sn-sync whoami" y vuelve a intentarlo con "sn-sync lead".',
     };
   }
-  if (last.type === 'CAMBIOS PEDIDOS') return { ...base, status: 'con correcciones' };
-  if (last.type === 'RECHAZADO') return { ...base, status: 'detenido' };
+  if (last.type === 'CAMBIOS PEDIDOS') return { ...base, status: 'con correcciones', porLider };
+  if (last.type === 'RECHAZADO') return { ...base, status: 'detenido', porLider };
   const commit = commitOf(last);
   const cambio = changedSince(commit, change, last.seal);
   return {
-    ...base, commit,
+    ...base, commit, porLider,
     status: cambio === SIN_VERIFICAR ? 'sin commit verificable' : cambio ? 'validación vencida' : 'validado',
   };
 }

@@ -48,7 +48,8 @@ export function readItems(root = '.') {
       const criteria = section(body, 'Criterios');
       return {
         id: data.id || path.basename(file, '.md'),
-        file: path.join(ITEMS_DIR, file),
+        // Siempre con "/": viaja a Altum y se compara con lo que dice git, también en Windows.
+        file: `${ITEMS_DIR}/${file}`,
         type: ITEM_TYPES.includes(data.type) ? data.type : 'feature',
         title: data.title || '',
         risk: data.risk || '',

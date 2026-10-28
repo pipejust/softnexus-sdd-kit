@@ -50,11 +50,14 @@ function motivoParaNoUnir(cwd) {
   const archivo = path.join(cwd, '.sn/state/altum-lider.json');
   let lider = leerJson(archivo);
   const vigente = (l) => l?.name && l.leaders_version === 2 && l.project_id === proyecto && Number.isFinite(l.at) && l.at <= Date.now() && Date.now() - l.at <= LIDER_VIEJO_MS;
-  if (!vigente(lider)) {
+  let pregunte = false;
+  const preguntarAAltum = () => {
     // Se pregunta a Altum con el motor del plugin (el que la persona mantiene al día).
+    pregunte = true;
     try { execFileSync(process.execPath, [MOTOR, 'lead', '--github'], { cwd, stdio: 'ignore', timeout: 15000, windowsHide: true }); } catch { /* sin clave o sin red */ }
     lider = leerJson(archivo) || lider;
-  }
+  };
+  if (!vigente(lider)) preguntarAAltum();
   if (!vigente(lider)) {
     return 'No pude confirmar con Altum quién es el líder del proyecto (sin conexión o sin tu clave). Solo el líder une el PR: inténtalo cuando haya conexión.';
   }
@@ -66,6 +69,8 @@ function motivoParaNoUnir(cwd) {
     yo = execFileSync('gh', ['api', 'user', '--jq', '.login'], { windowsHide: true, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 8000 }).trim();
   } catch { /* sin gh, sin sesión o sin red */ }
   if (!yo) return 'No pude confirmar tu usuario de GitHub (gh sin sesión o sin red: "gh auth status"). Solo el líder une el PR.';
+  // Un líder recién marcado en Altum no está en una copia de hace unas horas: se pregunta antes de bloquear.
+  if (!esElLider(lider, { github: yo.toLowerCase() }) && !pregunte) preguntarAAltum();
   if (!esElLider(lider, { github: yo.toLowerCase() })) {
     if (lideresDe(lider).length > 1) return `Solo los líderes del proyecto pueden unir el PR: ${comoSeIdentifica(lider)}. Tu sesión de GitHub es @${yo}; comprueba que esa cuenta esté registrada para tu propia ficha en Altum.`;
     return `Solo el líder del proyecto (${lider.name}, @${lider.github}) une el PR: es quien cierra el proceso. Él lo hace desde su Claude con /sn-validate. Tú ya terminaste tu parte: el PR queda esperando su aprobación.`;

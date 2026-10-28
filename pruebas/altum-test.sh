@@ -113,6 +113,10 @@ rm -f .sn/state/altum-lider.json
 mkdir -p "$W/gh-quien2" && printf '#!/bin/sh\n[ "$1 $2" = "api user" ] && echo laura\n' > "$W/gh-quien2/gh" && chmod +x "$W/gh-quien2/gh"
 printf '{"tool_name":"Bash","cwd":"%s","tool_input":{"command":"gh pr merge 3 --merge"}}' "$PWD" | PATH="$W/gh-quien2:$PATH" SN_ALTUM_BASE_URL="http://localhost:$PORT/api/v1/api" node "$PLUGIN/../hooks/guard.mjs" >/dev/null 2>"$W/guard2.err"; code=$?
 check "Sesión nueva sin el líder guardado: el candado pregunta a Altum y bloquea igual a quien no es el líder" "[ $code -eq 2 ] && grep -q 'Marta Ríos' '$W/guard2.err'"
+python3 -c 'import json,time; d=json.load(open(".sn/state/altum-lider.json")); d["leaders"]=[{"name":"Pedro","email":"pedro@x","github":"pedrox"}]; d["name"]="Pedro"; d["github"]="pedrox"; d["at"]=int(time.time()*1000); json.dump(d,open(".sn/state/altum-lider.json","w"))'
+mkdir -p "$W/gh-marta" && printf '#!/bin/sh\n[ "$1 $2" = "api user" ] && echo martarios\n' > "$W/gh-marta/gh" && chmod +x "$W/gh-marta/gh"
+printf '{"tool_name":"Bash","cwd":"%s","tool_input":{"command":"gh pr merge 3 --merge"}}' "$PWD" | PATH="$W/gh-marta:$PATH" SN_ALTUM_BASE_URL="http://localhost:$PORT/api/v1/api" node "$PLUGIN/../hooks/guard.mjs" >/dev/null 2>"$W/guard3.err"; code=$?
+check "Copia reciente sin el líder recién marcado: el candado vuelve a preguntar a Altum y deja unir al líder" "[ $code -eq 0 ]"
 
 echo "== Registrar el repositorio del proyecto en Altum (projects:write)"
 check "whoami avisa cuando la clave es anterior a projects:write" "sn whoami | grep -q 'anterior al permiso'"
@@ -239,6 +243,14 @@ mkdir -p openspec/changes/add-firma && printf -- "## 2026-09-21 10:00 · SOLICIT
 check "validacion.md aprobado por quien no es el líder: NO cuenta como validado (firma inválida)" "node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x[\"change\"]==\"add-firma\"][0]; assert e[\"status\"]==\"firma inválida\", e'"
 sed -i '' 's/Valida: Pedro <pedro@softnexus.co>/Valida: Marta Ríos <marta@softnexus.co>/' openspec/changes/add-firma/validacion.md
 check "Firmado por el líder de Altum: sí cuenta" "node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x[\"change\"]==\"add-firma\"][0]; assert e[\"status\"]!=\"firma inválida\", e'"
+# 0.67.2: la copia de líderes puede faltar o no traer a un líder recién marcado; antes de rechazar se pregunta a Altum.
+rm -f .sn/state/altum-lider.json
+check "Sin copia de líderes guardada: el validador pregunta a Altum y la firma del líder vale" "node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x[\"change\"]==\"add-firma\"][0]; assert e[\"status\"]!=\"firma inválida\", e' && [ -f .sn/state/altum-lider.json ]"
+python3 -c 'import json,time; d=json.load(open(".sn/state/altum-lider.json")); d["leaders"]=[{"name":"Pedro","email":"pedro@softnexus.co","github":"pedrox"}]; d["name"]="Pedro"; d["at"]=int(time.time()*1000); json.dump(d,open(".sn/state/altum-lider.json","w"))'
+check "Copia reciente sin el líder recién marcado: el validador vuelve a preguntar y la firma vale" "node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x[\"change\"]==\"add-firma\"][0]; assert e[\"status\"]!=\"firma inválida\", e'"
+rm -f .sn/state/altum-lider.json
+check "Sin copia y sin poder leer Altum (clave mala): firma inválida que explica que no pudo leer a los líderes" "SN_ALTUM_KEY_PRUEBA=mala node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x[\"change\"]==\"add-firma\"][0]; assert e[\"status\"]==\"firma inválida\" and \"No pude leer de Altum\" in e[\"detail\"], e'"
+sn lead >/dev/null 2>&1
 estado() { node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x["change"]=="add-firma"][0]; print(e["status"])'; }
 detalle() { node scripts/sn/validation-state.mjs | python3 -c 'import json,sys; e=[x for x in json.load(sys.stdin) if x["change"]=="add-firma"][0]; print(e.get("detail",""))'; }
 # El caso real: el líder firma desde su computador con su correo PERSONAL (nadie commitea con el de la empresa)

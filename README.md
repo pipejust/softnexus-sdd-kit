@@ -6,6 +6,29 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
+## Versión 0.67.2
+
+Corrige dos fallas que bloqueaban a líderes que sí lo son en Altum, y una ruta mal escrita en Windows.
+
+- **Firma de un líder rechazada:** el validador solo miraba la copia local de líderes
+  (`.sn/state/altum-lider.json`). Si faltaba, porque la consulta a Altum había fallado sin avisar, o
+  si no traía a un líder recién marcado, la firma salía como "firma inválida". Ahora, antes de
+  rechazar, le pregunta a Altum una vez. También pregunta si la copia tiene más de 12 horas, para no
+  aceptar a alguien que ya no es líder. Sin red ni clave, el mensaje dice que no pudo leer a los
+  líderes, en vez de culpar a la firma.
+- **Merge bloqueado a un líder nuevo:** el candado del merge confiaba en una copia de hasta 12 horas.
+  Ahora, si la copia no reconoce a quien une el PR, vuelve a preguntar a Altum antes de bloquear.
+- **Cargo de Altum mostrado como si fuera el rol:** `lead` mostraba "Desarrollador de «Proyecto»" para
+  un líder cuyo cargo en Altum es Desarrollador. Ahora dice "Líder de «Proyecto» (cargo en Altum:
+  Desarrollador)".
+- **`/sn-help` ya no decide quién es líder por `AGENTS.md`:** lo pregunta a Altum con `lead`.
+- **Windows:** la línea "Archivo:" de la descripción en Altum salía con barras invertidas
+  (`docs\items\…`), y cambiaba cada vez que sincronizaba alguien en Mac. Además, en Windows no se
+  reconocían las fichas con cambios sin guardar. Ahora la ruta usa siempre "/". Lo reportó Danny (A256).
+
+Basta con actualizar el plugin: las skills usan su validador y la copia del motor en cada repositorio
+delega en él.
+
 ## Versión 0.67.1
 
 Corrige un riesgo de tareas duplicadas en Altum. La sincronización corre sola en segundo plano cada

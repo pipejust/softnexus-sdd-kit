@@ -4,7 +4,8 @@ import {spawnSync} from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {lideresDelProyecto} from '../plugin/scripts/sync/altum-backlog.mjs';
+import {lideresDelProyecto,leadText} from '../plugin/scripts/sync/altum-backlog.mjs';
+import {readItems} from '../plugin/scripts/sync/items.mjs';
 import {esElLider,codeownersConLider,agentsConLider,lineaLider} from '../plugin/scripts/sync/lider.mjs';
 import {firmaDelLider} from '../plugin/scripts/sync/pr.mjs';
 import {statusOf} from '../plugin/scripts/validation-state.mjs';
@@ -36,6 +37,15 @@ for (const eol of ['\n','\r\n']) {
 check('Sin párrafo de líderes no cambia el documento',()=>assert.equal(agentsConLider('# Otro\n',data),'# Otro\n'));
 const request={type:'SOLICITUD',seal:'plano',fields:{},raw:''};
 for(const name of ['Ana <ana@x>','Juan <juan@x>']) check('Firma de plano reconocida: '+name,()=>assert.notEqual(statusOf([request,{type:'APROBADO',seal:'plano',fields:{Valida:name},raw:''}],'a',data).status,'firma inválida'));
+check('Líder con cargo distinto en Altum se muestra como Líder',()=>{const t=leadText({name:'Christian',email:'c@x',role:'Desarrollador',project:'Salud'});assert.ok(t.startsWith('Líder de "Salud" (cargo en Altum: Desarrollador): Christian'),t)});
+check('Líder técnico no repite el cargo',()=>assert.ok(leadText({name:'Ana',email:'a@x',role:'Líder técnico',project:'P'}).startsWith('Líder de "P": Ana')));
+check('Ruta de la ficha con "/" aunque el sistema use "\\" (Windows)',()=>{
+ const raiz=mkdtempSync(path.join(os.tmpdir(),'sn-items-'));const join=path.join;
+ try{mkdirSync(join(raiz,'docs/items'),{recursive:true});writeFileSync(join(raiz,'docs/items/X-1.md'),'---\nid: X-1\n---\n');
+  path.join=(...p)=>p[0]==='docs/items'?path.win32.join(...p):join(...p);
+  assert.equal(readItems(raiz)[0].file,'docs/items/X-1.md');
+ }finally{path.join=join;rmSync(raiz,{recursive:true,force:true})}
+});
 check('Sin líderes no se concede acceso',()=>assert.equal(esElLider({leaders:[]},{github:'ana'}),false));
 const dir=mkdtempSync(path.join(os.tmpdir(),'sn-leaders-'));const guard=fileURLToPath(new URL('../plugin/hooks/guard.mjs',import.meta.url));
 try {
