@@ -13,7 +13,7 @@ Formato y reglas: `${CLAUDE_PLUGIN_ROOT}/references/validacion.md`. Léelo antes
 ## 1. ¿Qué sello se pide?
 Deduce con `sn-status`:
 - Plano escrito y no construido → sello **plano**.
-- Evidencia completa (`evidencia.md` en verde) → sello **entrega**.
+- Construido: todas las tareas de `tasks.md` marcadas (la evidencia del proceso está pausada) → sello **entrega**.
 Si no se cumple ninguno, di qué falta y no pidas nada todavía. Pedir validación de algo incompleto le hace perder tiempo al líder.
 
 ## 2. Dejarlo todo en git (el líder no verá tu sesión)

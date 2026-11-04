@@ -18,9 +18,9 @@ Si llegaste aquí sin pasar por `/sn` y el pedido es trabajo nuevo, vuelve a `/s
 | 5 · Historia | §2 datos reales con límites |
 | 6 · Plano | §3 dirección visual |
 | 7 · Construir | §4 reglas de construcción |
-| 8 · Evidencia | §5 evidencia de interfaz |
+| 8 · Evidencia | §5 evidencia de interfaz (pausada) |
 
-Un cambio XS + R0 (texto, color, typo) solo usa §5.1 (capturas).
+Un cambio XS + R0 (texto, color, typo) solo usaría §5.1 (capturas), que está pausada.
 
 ## 1. Fuente de verdad: `DESIGN.md`
 - Si existe, manda. No inventes colores, tipografías, espaciados, radios ni sombras. Si el ítem necesita uno nuevo, se propone en el plano como cambio a `DESIGN.md` y lo aprueba el sello 1.
@@ -52,6 +52,8 @@ Escríbela en `openspec/changes/<change>/design.md` según el caso:
 - Si la app se usa en celular, aplica `mobile-native` (100vh, zoom en inputs, áreas seguras, hover pegado, toques lentos).
 
 ## 5. Evidencia de interfaz (la pide `sn-evidence` §3)
+> **Pausada** junto con `sn-evidence`: las pruebas se hacen aparte. Hazla solo si la persona la pide.
+
 1. **Capturas** en 1440 y 375 de cada estado del plano, incluidos vacío y error, en `openspec/changes/<change>/evidencia/`.
 2. **Peor caso** con la skill `break-ui`: datos realistas al límite, por la misma entrada que los datos de prueba (fixture, mock o props), detrás de un interruptor que solo existe en desarrollo. Toma captura del peor caso. Lo que se rompe y está dentro del alcance se arregla. Lo que es decisión de diseño (cortar o partir un texto) se le pregunta a la persona. Lo que queda fuera del alcance se registra como ítem nuevo.
 3. **Movimiento**: si el change agregó o cambió animaciones, pasa la skill `review-animations` sobre el diff y corrige lo que marque como bloqueante.

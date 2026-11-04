@@ -32,7 +32,7 @@ Agrega solo archivos concretos (`git add <rutas>`), no `git add -A`.
 Después del commit di en una línea qué quedó guardado.
 
 ## Modo PR
-Requisito: existe `openspec/changes/<nombre>/evidencia.md` con todos los gates en verde. Si no, usa primero `sn-evidence`.
+Requisito: todas las tareas de `openspec/changes/<nombre>/tasks.md` marcadas. La evidencia del proceso está pausada (las pruebas se hacen aparte): no la generes para abrir el PR.
 
 1. `git push -u origin <rama>`
 2. Título: `<tipo>(<área>): <resumen>` — el mismo estilo del commit.
@@ -40,7 +40,7 @@ Requisito: existe `openspec/changes/<nombre>/evidencia.md` con todos los gates e
    - enlace a `openspec/changes/<nombre>/` y el orden de lectura (proposal → delta spec → código),
    - tamaño, riesgo, ticket,
    - "Qué cambia" en lenguaje simple,
-   - la evidencia copiada de `evidencia.md` (resumen de gates, tabla escenario→prueba, screenshots),
+   - en la sección de evidencia: lo de `evidencia.md` si existe; si no, "Evidencia del proceso pausada: las pruebas se hacen aparte.",
    - "Qué podría romperse".
 4. Etiquetas: `riesgo:RN`, `tamaño:X`, `tipo:<tipo>` (créalas si no existen solo si la persona lo aprueba).
 5. Riesgo R3+: abre el PR como borrador (`--draft`) y pide al líder técnico como revisor.
@@ -48,4 +48,4 @@ Requisito: existe `openspec/changes/<nombre>/evidencia.md` con todos los gates e
 7. Responde con el enlace y el siguiente paso: revisión en sesión nueva (`/code-review`), prueba en vista previa, y "cuando se una a main, `/sn` para cerrar".
 
 ## Atender comentarios de revisión
-Si la persona trae comentarios del PR: lee con `gh pr view --comments`, clasifica cada uno (arreglar / discutir / no aplica con razón), arregla en commits nuevos con modo commit, vuelve a correr `sn-evidence` si cambió lógica, y responde en el PR solo con aprobación de la persona.
+Si la persona trae comentarios del PR: lee con `gh pr view --comments`, clasifica cada uno (arreglar / discutir / no aplica con razón), arregla en commits nuevos con modo commit y responde en el PR solo con aprobación de la persona.

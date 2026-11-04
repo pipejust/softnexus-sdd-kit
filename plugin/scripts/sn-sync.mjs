@@ -35,7 +35,7 @@ import { itemMarkdown, listMarkdown } from './sync/report.mjs';
 import { takeSnapshot } from './sync/snapshot.mjs';
 import { mensaje } from './sync/mensaje.mjs';
 import { aprobacionesPr, firmaDelLider, origenRepo, prDeRama } from './sync/pr.mjs';
-import { siguientePaso } from './sync/siguiente.mjs';
+import { EVIDENCIA_PAUSADA, siguientePaso } from './sync/siguiente.mjs';
 import { instalaciones, motoresGenerales, versionInstalada, esMasNueva } from './sync/version.mjs';
 import { actualizar, dejarDeDeclararAqui, limpiarCopias, instalarGeneral } from './sync/maintenance.mjs';
 import { leerTexto } from './sync/texto.mjs';
@@ -447,7 +447,7 @@ function dividir(config) {
   writeFileSync(archivo, `${resto.join('\n').replace(/\n+$/, '')}\n\n> ${pendientes.length} tarea(s) pasaron a ${nuevo} el ${hoy.toISOString().slice(0, 10)}: el plano se cerró con las ${hechas.length} ya hechas.\n`);
   console.log(`Listo: el plano de ${item.id} queda con sus ${hechas.length} tareas hechas (completo).`);
   console.log(`Las ${pendientes.length} pendientes pasaron a ${nuevo} (docs/items/${nuevo}.md).`);
-  console.log(`➡️ Siguiente para ${item.id}: evidencia (sn-evidence) y PR. ${nuevo} empieza su camino cuando lo tomen con /sn.`);
+  console.log(`➡️ Siguiente para ${item.id}: ${EVIDENCIA_PAUSADA ? 'PR' : 'evidencia (sn-evidence) y PR'}. ${nuevo} empieza su camino cuando lo tomen con /sn.`);
   return nuevo;
 }
 
