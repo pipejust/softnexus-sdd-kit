@@ -94,7 +94,7 @@ async function motivoParaNoAbrirPr(cwd) {
     }
     return '';
   } catch {
-    return 'No pude verificar los sellos y la evidencia del repositorio. Corrige el estado antes de abrir el PR.';
+    return 'No pude verificar los sellos y el avance del plano en el repositorio. Corrige el estado antes de abrir el PR.';
   }
 }
 
@@ -137,7 +137,7 @@ if (tool === 'Bash') {
     const motivo = motivoParaNoUnir(cwd);
     if (motivo) block(motivo);
   }
-  // Sellos: no se abre un PR si el plano del ítem de esta rama no tiene su sello 1 o falta la evidencia.
+  // Sellos: no se abre un PR si el plano del ítem de esta rama no tiene su sello 1 o le faltan tareas (o la evidencia, si está activa).
   // Es determinista a propósito: el agente no puede "saltarse el sello y seguir adelante".
   if (lista.some(({ palabras }) => abreUnPr(palabras))) {
     const motivo = await motivoParaNoAbrirPr(cwd);

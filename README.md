@@ -6,6 +6,22 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
+## Versión 0.68.0
+
+La evidencia del proceso (`sn-evidence`) queda **pausada**. Por decisión de Softnexus, las pruebas se
+hacen aparte del camino de la historia, porque ese paso tomaba mucho tiempo.
+
+- **`/sn`:** al marcar todas las tareas del plano pasa directo a la entrega. No corre los gates ni
+  escribe `evidencia.md`, aunque el `AGENTS.md` del proyecto todavía lo diga.
+- **El guard** deja abrir el PR con el sello 1 y todas las tareas del plano marcadas. Sigue
+  bloqueándolo si el plano no tiene sello o le faltan tareas.
+- **Los sellos no cambian:** el plano R3+ y la entrega R2+ los firma el líder, y solo el líder une el PR.
+  En el sello de entrega, el líder revisa el diff contra el plano; correr las pruebas queda a su criterio.
+- **`/sn-evidence` sigue disponible** si alguien la pide expresamente. Si existe `evidencia.md`, el
+  PR la incluye como antes.
+- **Para reactivarla:** `SN_EVIDENCIA=1` en el entorno la vuelve a exigir en ese computador. Para todo
+  el equipo, se revierte esta versión.
+
 ## Versión 0.67.2
 
 Corrige dos fallas que bloqueaban a líderes que sí lo son en Altum, y una ruta mal escrita en Windows.

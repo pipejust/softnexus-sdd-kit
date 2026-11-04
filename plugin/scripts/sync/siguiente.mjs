@@ -3,6 +3,14 @@
 // Si hay un sello pendiente, ese es el siguiente paso: no se ofrece nada que lo salte.
 const nivel = (riesgo) => Number(String(riesgo || 'R0').replace(/\D/g, '') || 0);
 
+// Evidencia del proceso (sn-evidence) PAUSADA por decisión de Softnexus: las pruebas se hacen aparte del
+// camino de la historia. Con todas las tareas del plano marcadas ya se puede abrir el PR. Los sellos no
+// cambian. Para reactivarla: SN_EVIDENCIA=1 en el entorno o cambiar este valor por defecto.
+export const EVIDENCIA_PAUSADA = process.env.SN_EVIDENCIA !== '1';
+const entregar = (r, paso) => (r >= 2
+  ? { paso, siguiente: 'abrir el PR (sn-ship) y pedir el SELLO de entrega al líder (/sn-request). El PR no se une sin su aprobación.', sello: true }
+  : { paso, siguiente: 'abrir el PR (sn-ship).' });
+
 export function siguientePaso(item) {
   const r = nivel(item.risk);
   const id = item.id;
@@ -26,11 +34,8 @@ export function siguientePaso(item) {
         : { paso: 'Plano escrito', siguiente: 'SELLO 1: mostrar el plano a la persona y registrar su aprobación en validacion.md. No se construye antes.', sello: true };
     case 'plan_approved': return { paso: 'Plano aprobado', siguiente: `confirmar la tarea en Altum (asegurar ${id}) y empezar a construir.` };
     case 'building': return { paso: `Construyendo (${item.tasks_done}/${item.tasks_total})`, siguiente: 'seguir con la siguiente tarea del plano. Si apareció trabajo fuera del plano: dividir.' };
-    case 'built': return { paso: 'Construido', siguiente: 'evidencia completa (sn-evidence). Sin evidencia no hay PR.' };
-    case 'verified':
-      return r >= 2
-        ? { paso: 'Con evidencia', siguiente: 'abrir el PR (sn-ship) y pedir el SELLO de entrega al líder (/sn-request). El PR no se une sin su aprobación.', sello: true }
-        : { paso: 'Con evidencia', siguiente: 'abrir el PR (sn-ship).' };
+    case 'built': return EVIDENCIA_PAUSADA ? entregar(r, 'Construido') : { paso: 'Construido', siguiente: 'evidencia completa (sn-evidence). Sin evidencia no hay PR.' };
+    case 'verified': return entregar(r, 'Con evidencia');
     case 'in_review': return { paso: 'En revisión', siguiente: 'revisión en una sesión NUEVA (/code-review) y prueba humana; el líder aprueba y une el PR.', sello: true };
     case 'merged': return { paso: 'Unido', siguiente: 'cerrar: /sn archiva el plano y confirma la tarea cerrada en Altum.' };
     case 'done': return { paso: 'Terminado', siguiente: 'nada.' };
@@ -38,7 +43,8 @@ export function siguientePaso(item) {
   }
 }
 
-// ¿Se puede abrir el PR de este ítem? Solo con el plano aprobado (sello 1) y la evidencia hecha.
+// ¿Se puede abrir el PR de este ítem? Solo con el plano aprobado (sello 1) y la evidencia hecha
+// (con la evidencia pausada, basta con todas las tareas del plano marcadas).
 export function puedeAbrirPr(item) {
   if (!item.change) return { puede: true };
   if (['plan_written', 'planning', 'ready', 'triaged'].includes(item.stage) || ['awaiting_validation', 'invalid_signature', 'validation_expired', 'changes_requested', 'blocked'].includes(item.flag)) {
@@ -49,7 +55,10 @@ export function puedeAbrirPr(item) {
     const quien = nivel(item.risk) >= 3 ? 'por ser R3+, lo firma el líder: /sn-request (sello plano)' : 'la persona lo aprueba y queda en validacion.md';
     return { puede: false, motivo: `el plano de ${item.id} nunca tuvo su sello 1 (${quien}). Se construyó sin él: pide el sello antes de abrir el PR.` };
   }
-  if (['plan_approved', 'building', 'built'].includes(item.stage)) {
+  if (EVIDENCIA_PAUSADA && ['plan_approved', 'building'].includes(item.stage)) {
+    return { puede: false, motivo: `${item.id} todavía no termina las tareas del plano (${siguientePaso(item).paso}). Siguiente: ${siguientePaso(item).siguiente}` };
+  }
+  if (!EVIDENCIA_PAUSADA && ['plan_approved', 'building', 'built'].includes(item.stage)) {
     return { puede: false, motivo: `${item.id} todavía no tiene evidencia completa (${siguientePaso(item).paso}). Siguiente: ${siguientePaso(item).siguiente}` };
   }
   return { puede: true };

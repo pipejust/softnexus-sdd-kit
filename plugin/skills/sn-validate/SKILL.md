@@ -25,7 +25,7 @@ git worktree add ../.sn-validar/<rama> origin/<rama>
 Trabaja dentro de esa carpeta hasta el paso 5. Si el worktree ya existe, actualízalo (`git -C ../.sn-validar/<rama> pull`).
 
 ## 2. Reconstruir el contexto desde los archivos
-Lee, en este orden: `AGENTS.md` (reglas y riesgo del proyecto), `openspec/changes/<change>/validacion.md` (qué piden y por qué), `proposal.md`, `specs/` (delta), `design.md`, `tasks.md`, y si el sello es **entrega**: `evidencia.md` y el diff contra la rama principal (`git diff origin/<main o master>...HEAD`).
+Lee, en este orden: `AGENTS.md` (reglas y riesgo del proyecto), `openspec/changes/<change>/validacion.md` (qué piden y por qué), `proposal.md`, `specs/` (delta), `design.md`, `tasks.md`, y si el sello es **entrega**: `evidencia.md` si existe (la evidencia del proceso está pausada) y el diff contra la rama principal (`git diff origin/<main o master>...HEAD`).
 Resume para el líder en lenguaje claro, máximo 10 líneas: qué problema resuelve, qué cambia, riesgo, qué NO se hace, cuántas tareas / archivos.
 
 ## 3. Revisar según el sello y el riesgo
@@ -34,11 +34,11 @@ Resume para el líder en lenguaje claro, máximo 10 líneas: qué problema resue
 - ¿Cada escenario es observable y medible? ¿Hay fallo y borde, no solo happy path?
 - R3: permisos, autenticación, datos personales, pagos, migraciones: ¿hay escenarios negativos (quien NO debe poder, no puede)? ¿rollback descrito?
 - ¿El diseño reutiliza patrones del repo y respeta el stack aprobado y el límite de tamaño de archivos?
-- Si cambia interfaz: ¿la dirección visual respeta `DESIGN.md` y la evidencia trae capturas 1440/375 y el peor caso de datos (`sn-ui` §5)?
+- Si cambia interfaz: ¿la dirección visual respeta `DESIGN.md` (`sn-ui` §3)?
 
 **Sello entrega:**
-- Corre los gates de `AGENTS.md` §3 en la carpeta aparte (instalar dependencias si hace falta). No confíes solo en `evidencia.md`: verifica.
-- Trazabilidad escenario → prueba completa.
+- Con la evidencia del proceso pausada, las pruebas las hace el equipo aparte: revisa que el diff cumpla el plano y sus escenarios. Corre los gates de `AGENTS.md` §3 en la carpeta aparte solo si el líder lo pide.
+- Si hay `evidencia.md`: trazabilidad escenario → prueba completa.
 - Revisión independiente del diff (skill `/code-review`; R3+: también `security-review`).
 - ¿El código hace lo que dice el plano, y nada más?
 

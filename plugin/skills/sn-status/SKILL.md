@@ -27,7 +27,7 @@ Para cada change en `openspec/changes/` (excepto `archive/`), la etapa es la **p
 | 8 | 🔀 Unido | PR `MERGED` y change aún no archivado | `/sn` → archivar + microlección |
 | 7 | 👀 En revisión | PR abierto | sesión nueva `/code-review`; probar vista previa; atender comentarios |
 | 6 | 📦 Con evidencia | existe `evidencia.md` y no hay PR | `/sn-ship` (PR) |
-| 5 | 🔨 Construido | todas las casillas de `tasks.md` marcadas `[x]` | `/sn-evidence` |
+| 5 | 🔨 Construido | todas las casillas de `tasks.md` marcadas `[x]` | `/sn-ship` (PR); la evidencia está pausada |
 | 4 | 🧱 Construyendo | alguna casilla `[x]` y alguna `[ ]` | continuar con `openspec-apply-change` |
 | 3 | ✅ Plan aprobado | `tasks.md` existe, ninguna `[x]`, y: R0–R2 la persona aprobó (pregúntale si no sabes); R3–R4 `validacion.md` dice **Validado** para el sello plano | `openspec-apply-change` |
 | 2 | 📝 Plan escrito | existen `proposal.md` y `tasks.md` | leer y aprobar el plan (checkpoint humano) |

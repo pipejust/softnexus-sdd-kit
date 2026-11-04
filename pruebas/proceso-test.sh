@@ -41,12 +41,16 @@ echo "== Dividir un plano a mitad de camino"
 printf -- '- [x] 1.1 test\n- [x] 1.2 código\n- [ ] 1.3 estilos\n- [ ] 1.4 textos\n' > openspec/changes/add-saldo/tasks.md
 check "Construyendo: el siguiente paso dice cuántas van y que se puede dividir" "sn siguiente | grep -q 'Construyendo (2/4)' && sn siguiente | grep -q 'dividir'"
 guard "gh pr create --fill"; code=$?
-check "El guard NO deja abrir el PR sin evidencia" "[ $code -eq 2 ] && grep -q 'evidencia' '$W/guard.err'"
+check "El guard NO deja abrir el PR con tareas del plano sin terminar" "[ $code -eq 2 ] && grep -q 'no termina las tareas' '$W/guard.err'"
 out=$(sn dividir SAL-1)
 NUEVO=$(ls docs/items | grep -v SAL-1.md | sed 's/.md$//')
 check "dividir deja el plano con las 2 hechas y pasa las 2 pendientes a un ítem nuevo" "echo \"\$out\" | grep -q '2 tareas hechas' && ! grep -q '\\[ \\]' openspec/changes/add-saldo/tasks.md && grep -q 'estilos' docs/items/\$NUEVO.md && grep -q 'textos' docs/items/\$NUEVO.md"
 check "El ítem nuevo queda enlazado al original (parent) y con el mismo riesgo" "grep -q '^parent: SAL-1' docs/items/\$NUEVO.md && grep -q '^risk: R1' docs/items/\$NUEVO.md"
-check "El plano original queda completo: el siguiente paso es la evidencia" "sn siguiente SAL-1 | grep -q 'Construido'"
+check "El plano original queda completo: con la evidencia pausada, el siguiente paso es el PR" "sn siguiente SAL-1 | grep -q 'Construido' && sn siguiente SAL-1 | grep -q 'abrir el PR' && ! sn siguiente SAL-1 | grep -q 'sn-evidence'"
+guard "gh pr create --fill"; code=$?
+check "Evidencia pausada: con sello 1 y todas las tareas marcadas, el PR se abre sin evidencia.md" "[ $code -eq 0 ]"
+printf '{"tool_name":"Bash","cwd":"%s","tool_input":{"command":"gh pr create --fill"}}' "$PWD" | SN_EVIDENCIA=1 node "$PLUGIN/hooks/guard.mjs" >/dev/null 2>"$W/guard.err"; code=$?
+check "Con SN_EVIDENCIA=1 vuelve a exigirse la evidencia antes del PR" "[ $code -eq 2 ] && grep -q 'evidencia completa' '$W/guard.err' && SN_EVIDENCIA=1 node scripts/sn/sn-sync.mjs siguiente SAL-1 | grep -q 'sn-evidence'"
 echo ok > openspec/changes/add-saldo/evidencia.md
 guard "gh pr create --fill"; code=$?
 check "Con sello 1 y evidencia, el PR sí se puede abrir" "[ $code -eq 0 ]"

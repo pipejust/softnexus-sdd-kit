@@ -1,6 +1,6 @@
 ---
 name: sn
-description: La puerta única de Softnexus. Úsala también cuando alguien diga "clóname el proyecto X", "bájame el repositorio", "no tengo el proyecto" o "tráeme ese proyecto" - antes de clonar hay que preguntarle DÓNDE quiere la carpeta. Y para CUALQUIER cosa que alguien traiga para un proyecto - una idea, una mejora, un bug, un error con captura, un correo o acta del cliente, un ticket, "hazme", "agrega", "arregla", "no funciona", "el cliente pide". Clasifica el ítem, decide tamaño y riesgo, y conduce paso a paso todo el camino Spec Driven (historia → spec → construcción → evidencia → commit → PR → archivo) deteniéndose en cada checkpoint humano.
+description: La puerta única de Softnexus. Úsala también cuando alguien diga "clóname el proyecto X", "bájame el repositorio", "no tengo el proyecto" o "tráeme ese proyecto" - antes de clonar hay que preguntarle DÓNDE quiere la carpeta. Y para CUALQUIER cosa que alguien traiga para un proyecto - una idea, una mejora, un bug, un error con captura, un correo o acta del cliente, un ticket, "hazme", "agrega", "arregla", "no funciona", "el cliente pide". Clasifica el ítem, decide tamaño y riesgo, y conduce paso a paso todo el camino Spec Driven (historia → spec → construcción → commit → PR → archivo) deteniéndose en cada checkpoint humano.
 ---
 
 **Entorno local:** compatible con Claude Code, Codex y ChatGPT Work local. La raíz del plugin se obtiene desde la carpeta que contiene este `SKILL.md`, subiendo `../..`. Sustituye `${CLAUDE_PLUGIN_ROOT}` en los comandos por esa ruta absoluta; no presupongas que existe la variable de entorno. En Codex/ChatGPT invoca esta skill desde el selector de skills. Los hooks requieren revisión y autorización de la aplicación.
@@ -11,7 +11,7 @@ description: La puerta única de Softnexus. Úsala también cuando alguien diga 
 La persona que te habla puede no saber programar. No le pidas que elija comandos ni que sepa el proceso: **el proceso lo sabes tú**. Ella solo trae el ítem y responde preguntas. Habla simple, frases cortas, una decisión a la vez.
 
 **Respuestas cortas (obligatorio).** Máximo 6 líneas salvo que pida detalle: `✅ qué quedó hecho` · `❓ lo único que necesitas de ella` · `➡️ Siguiente: …`. No narres cada comando ni listes todo lo que revisaste. La tarjeta, el plano y el mensaje al líder son las excepciones (tienen su propio formato).
-**El siguiente paso no lo decides tú.** Córrelo: `node scripts/sn/sn-sync.mjs siguiente` (en cada mensaje también te llega como "[Softnexus · proceso]"). Si dice que hay un **sello pendiente**, ese es el siguiente paso: nunca propongas abrir el PR, unir, ni pasar a otra cosa antes. El guard bloquea abrir un PR sin sello 1 o sin evidencia.
+**El siguiente paso no lo decides tú.** Córrelo: `node scripts/sn/sn-sync.mjs siguiente` (en cada mensaje también te llega como "[Softnexus · proceso]"). Si dice que hay un **sello pendiente**, ese es el siguiente paso: nunca propongas abrir el PR, unir, ni pasar a otra cosa antes. El guard bloquea abrir un PR sin sello 1 o con tareas del plano sin terminar.
 
 ## Paso 0 — ¿Dónde estamos?
 0. Si la persona no sabe qué quiere hacer o pregunta qué comandos hay, usa la skill `sn-help`.
@@ -45,7 +45,7 @@ Clasifica el **tipo**:
 
 ## Paso 2 — Investigar el código ANTES de preguntar
 Lee `AGENTS.md`, `DESIGN.md`, `openspec/specs/` del área y el código relacionado. Nunca preguntes algo que el código responde.
-- **Si el ítem cambia algo que se ve** (pantalla, componente, estilos, animación, móvil): sigue también la skill `sn-ui` en la historia, el plano, la construcción y la evidencia.
+- **Si el ítem cambia algo que se ve** (pantalla, componente, estilos, animación, móvil): sigue también la skill `sn-ui` en la historia, el plano y la construcción (su evidencia, §5, está pausada).
 - **Bug**: intenta reproducirlo (correr la app, el test, leer logs). Anota: pasos, qué pasa, qué debería pasar, archivo/línea sospechoso. Si no se puede reproducir, dilo y pide exactamente el dato que falta.
 
 ## Paso 3 — Clasificar tamaño y riesgo
@@ -100,12 +100,12 @@ Luego usa la skill `openspec-apply-change`.
 - Lógica nueva o bug → primero un test que falla, luego el código (skill `test-driven-development` si está disponible).
 - Bug difícil → skill `systematic-debugging`.
 - Si durante la construcción descubres que la spec estaba mal: para, explica, actualiza la spec, pide aprobación de nuevo.
-- **Si aparece trabajo que no estaba en el plano, o conviene entregar ya lo hecho** (p. ej. van 5 de 7 tareas y las 2 restantes dependen de otra decisión): propón **dividir** en una línea. Con el "sí": `node scripts/sn/sn-sync.mjs dividir <ID>` cierra el plano con las tareas hechas y pasa las pendientes a un ítem nuevo (con su propia tarea en Altum). El ítem actual sigue a evidencia y PR con lo que sí se hizo; el nuevo empieza su propio camino. No metas trabajo nuevo en un plano ya aprobado sin volver a aprobarlo.
+- **Si aparece trabajo que no estaba en el plano, o conviene entregar ya lo hecho** (p. ej. van 5 de 7 tareas y las 2 restantes dependen de otra decisión): propón **dividir** en una línea. Con el "sí": `node scripts/sn/sn-sync.mjs dividir <ID>` cierra el plano con las tareas hechas y pasa las pendientes a un ítem nuevo (con su propia tarea en Altum). El ítem actual sigue al PR con lo que sí se hizo; el nuevo empieza su propio camino. No metas trabajo nuevo en un plano ya aprobado sin volver a aprobarlo.
 - Mantén los archivos pequeños **sin que nadie lo pida**: lo sano es 200–400 líneas y el máximo 1000. Si un archivo que tocas se acerca a 800, pon el código nuevo en un módulo aparte con una responsabilidad clara en esa misma tarea. En código nuevo no se usa `sn-split`: el tamaño se cuida mientras se escribe.
 - Haz commits pequeños mientras avanzas con la skill `sn-ship` (modo commit).
 
-## Paso 8 — Evidencia
-Usa la skill `sn-evidence`. Sin evidencia completa no se continúa.
+## Paso 8 — Evidencia (pausada)
+**La evidencia del proceso está pausada por decisión de Softnexus:** las pruebas se hacen aparte del camino de la historia. No corras `sn-evidence` ni escribas `evidencia.md`, aunque el `AGENTS.md` del proyecto todavía la mencione. Con todas las tareas del plano marcadas, sigue al paso 9. Solo si la persona pide la evidencia expresamente, usa `sn-evidence`.
 
 ## Paso 9 — Entregar
 Usa la skill `sn-ship` (modo PR). Si el riesgo es R2 o más, usa después `sn-request` (sello entrega) para que el líder valide desde su computador. Luego di claramente:
@@ -123,5 +123,5 @@ Cuando un ítem lleva tiempo abierto sin plano ni rama, ofrece las dos salidas e
 ## Reglas de conversación
 - Una pregunta a la vez cuando la persona es nueva; máximo 3 por ronda.
 - Siempre termina tu mensaje con **qué sigue** en una línea: `➡️ Siguiente: …`.
-- Nunca digas "ya funciona" sin evidencia.
+- Nunca digas "ya funciona" sin haberlo comprobado. Con la evidencia pausada, di "construido; las pruebas van aparte".
 - Si la persona dice "solo hazlo" en algo R2+, explica en una frase por qué existe el paso y ofrece el camino más corto que lo respeta.

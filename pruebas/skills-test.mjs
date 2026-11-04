@@ -44,6 +44,11 @@ for (const s of carpetas) {
 // El camino de interfaz está conectado: sin esto la skill existe pero nadie la usa.
 check('sn manda a sn-ui cuando el ítem cambia algo visible', leer('sn', 'SKILL.md').includes('`sn-ui`'));
 check('sn-evidence pide la evidencia de interfaz de sn-ui', /`sn-ui` §5/.test(leer('sn-evidence', 'SKILL.md')));
+// Evidencia del proceso pausada (0.68.0): ningún paso del camino la exige; se reactiva con SN_EVIDENCIA=1.
+check('sn: el paso 8 dice que la evidencia está pausada', /## Paso 8 — Evidencia \(pausada\)/.test(leer('sn', 'SKILL.md')) && !/Sin evidencia completa no se continúa/.test(leer('sn', 'SKILL.md')));
+check('sn-ship no exige evidencia.md para abrir el PR', !/Si no, usa primero `sn-evidence`/.test(leer('sn-ship', 'SKILL.md')));
+check('sn-evidence avisa en su descripción que está pausada', /^description: PAUSADA/m.test(leer('sn-evidence', 'SKILL.md')));
+check('sn-request pide el sello de entrega con el plano construido, sin evidencia', !/Evidencia completa \(`evidencia.md` en verde\)/.test(leer('sn-request', 'SKILL.md')));
 for (const usada of ['frontend-design', 'prototype', 'break-ui', 'review-animations', 'animate', 'animation-performance', 'emil-design-eng', 'mobile-native']) {
   check(`sn-ui nombra una skill que sí viaja en el plugin: ${usada}`, leer('sn-ui', 'SKILL.md').includes(`\`${usada}\``) && carpetas.includes(usada));
 }
