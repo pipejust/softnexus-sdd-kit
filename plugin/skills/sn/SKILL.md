@@ -13,13 +13,25 @@ La persona que te habla puede no saber programar. No le pidas que elija comandos
 **Respuestas cortas (obligatorio).** Máximo 6 líneas salvo que pida detalle: `✅ qué quedó hecho` · `❓ lo único que necesitas de ella` · `➡️ Siguiente: …`. No narres cada comando ni listes todo lo que revisaste. La tarjeta, el plano y el mensaje al líder son las excepciones (tienen su propio formato).
 **El siguiente paso no lo decides tú.** Córrelo: `node scripts/sn/sn-sync.mjs siguiente` (en cada mensaje también te llega como "[Softnexus · proceso]"). Si dice que hay un **sello pendiente**, ese es el siguiente paso: nunca propongas abrir el PR, unir, ni pasar a otra cosa antes. El guard bloquea abrir un PR sin sello 1 o con tareas del plano sin terminar.
 
+## Reglas de Softnexus (antes de todo)
+Lee completo el maestro de reglas `~/AI Projects/Softnexus/softnexus-reglas/REGLAS.md` (R-1) al abrir el chat, al reanudarlo y al compactarse el contexto; los anexos y el `AGENTS.md` del proyecto, por índice cuando el tema lo pide. Si el maestro no existe en esta máquina, dilo en una línea y sigue con el `AGENTS.md` del proyecto. Donde esta skill y el maestro difieran, manda el maestro.
+
+## Tarea de Altum con ID (`/sn <ID>`): protocolo de ejecución inherente
+Si la persona da el ID de una tarea de Altum (`/sn 489`, «aborda la #489» o un número suelto, que siempre es un ID de Altum), aplica **sin que nadie te lo pegue** el protocolo de `${CLAUDE_PLUGIN_ROOT}/references/protocolo-ejecucion.md` (fases 0–5 de la tarea y Fase 6 de cierre de la historia), con `{ID}` = ese número. Léelo completo antes de la Fase 0. Eres el **orquestador**: coordinas un equipo de subagentes y no construyes ni revisas tú lo que le toca a un subagente. Encaje con esta skill:
+- Fase 0 = Paso 0 + traer la tarea con `fetch altum <ID>` (Paso 1) + tarjeta (Paso 3).
+- Fase 1 (plano con subagentes, Sello 1) = Pasos 5–6; el Sello 1 lo da la **autoridad del sello** (el Operator, o el líder del frente en R0–R2 de su frente) y se registra en `validacion.md`.
+- Fase 2 = Paso 7 (con `asegurar` antes de construir). Fases 3–4: revisión de código, UAT y hallazgos A/B con subagentes independientes; no hace falta abrir una sesión nueva para `/code-review`.
+- Fase 5 = Pasos 9–10: PR, **entrega de la evidencia** (capturas, Swagger, diff, informe «antes → ahora → cómo se probó»), Sello 2 sobre esa evidencia y frase de merge de la autoridad del sello, retest en `dev` y cierre de la tarea en Altum. Sin pruebas manuales por tarea.
+- Fase 6 = al cerrar la **última tarea abierta de una historia** de Altum: no cierres la historia; instruye a la autoridad del sello la revisión manual (qué abrir, qué hacer, qué debe ver) y registra su veredicto «cerrar» o «corregir» con la plantilla del protocolo.
+Donde el protocolo y los pasos de abajo difieran, manda el protocolo.
+
 ## Paso 0 — ¿Dónde estamos?
 0. Si la persona no sabe qué quiere hacer o pregunta qué comandos hay, usa la skill `sn-help`.
 0b. **Carpeta vacía o sin el proyecto todavía** (la persona dice "clóname X", "no tengo el proyecto", o la carpeta no tiene código): ve directo al paso 3a y trae el proyecto ANTES de preparar nada. No corras `sn-setup` sobre una carpeta vacía ni busques el repositorio a mano en GitHub.
 0c. **Proyecto que la persona YA tenía clonado** (lo normal: ya había gente trabajando antes de la metodología): **nunca** le propongas clonarlo otra vez ni crear otra carpeta. Primero `git pull` de la rama principal: si alguien ya lo preparó, con eso basta. Si sigue sin `AGENTS.md`/`openspec/`, pasa al punto 1 (se prepara aquí mismo, en su propia rama).
 0d. **Trabajo a medias de antes de la metodología** (la persona está en una rama con commits o cambios que no pertenecen a ningún ítem de `docs/items/`): **adóptalo, no lo rehagas.** Pregúntale en una línea qué estaba haciendo; crea el ítem con `branch:` = su rama; escribe el plano con dos partes: *lo que ya está hecho* (tareas marcadas `[x]`, con los commits que lo respaldan) y *lo que falta* (tareas `[ ]`). El sello 1 aprueba ese plano completo (lo hecho también queda revisado). Después sigue el camino normal desde el paso 7. Si tiene cambios sin commit, guárdalos primero con `sn-ship` (modo commit) en su misma rama.
 1. Si el repo no tiene `AGENTS.md` o no tiene `openspec/` → di: "Este proyecto todavía no está preparado. Lo preparo primero." y usa la skill `sn-setup`. Luego vuelve aquí.
-2. Corre `openspec list --json`. Si la persona ya tiene un change activo sin terminar, **no abras otro** (WIP = 1): muéstrale en qué va con `sn-status` y pregúntale si quiere terminarlo primero. Solo un urgente R3+ (producción caída) salta esta regla.
+2. Corre `openspec list --json`. Se permiten hasta N changes activos a la vez según la capacidad medida de la máquina (tope 3–4 tareas; R-25), sin archivos compartidos entre ellos. Si ya se llegó al tope, **no abras otro**: muéstrale en qué va con `sn-status` y pregúntale cuál termina primero. Solo un urgente R3+ (producción caída) salta esta regla.
 3. Rama actual: si está en `main`/`master`, no se construye ahí (se creará rama en el paso 5).
 3a. **Si la persona no tiene el proyecto en su computador** ("no lo tengo", "clóname el proyecto X"): `node scripts/sn/sn-sync.mjs clone <nombre>`. **Si la carpeta no tiene el motor** (está vacía o el repo no está preparado), usa el del plugin: `node "${CLAUDE_PLUGIN_ROOT}/scripts/sn-sync.mjs" clone <nombre> --in <carpeta>` (y `… projects` para listar los suyos). Lo busca en Altum por nombre y lo clona; luego se trabaja ahí. **Antes de clonar, pregunta SIEMPRE dónde ponerlo** (el comando se niega sin ruta; no inventes una): "¿En qué carpeta lo dejo? Puedes darme una carpeta madre (ej. `~/Proyectos`) y dentro creo la del proyecto, o la ruta exacta donde quieres que quede el contenido (ej. `~/Proyectos/cursos`)." - Carpeta madre → `… clone <nombre> --in ~/Proyectos` (queda en `~/Proyectos/<nombre-del-proyecto>`). - Ruta exacta → `… clone <nombre> --into ~/Proyectos/cursos` (el contenido del repositorio queda ahí, sin otra carpeta dentro). - Aquí mismo → `… clone <nombre> --here` (solo si la carpeta actual está vacía). Si la carpeta madre ya se llama como el proyecto, no se crea otra igual adentro. Si la carpeta elegida ya tiene archivos, no se clona encima: te lo dice y se elige otra.
 **Un proyecto puede tener varios repositorios** (app, web, consola...), incluso de proveedores distintos (GitHub, Azure DevOps...). Si es el caso, el comando no elige solo: los lista y hay que volver a llamarlo con `--repo <nombre>`. Pregúntale a la persona **cuál** quiere y, si no sabe, muéstrale la lista (`… repos <proyecto>`). Con varios, la carpeta se llama como el repositorio elegido.
@@ -49,7 +61,8 @@ Lee `AGENTS.md`, `DESIGN.md`, `openspec/specs/` del área y el código relaciona
 - **Bug**: intenta reproducirlo (correr la app, el test, leer logs). Anota: pasos, qué pasa, qué debería pasar, archivo/línea sospechoso. Si no se puede reproducir, dilo y pide exactamente el dato que falta.
 
 ## Paso 3 — Clasificar tamaño y riesgo
-**Tamaño**: XS ≤2h · S 2–4h · M 4–8h · L 8–16h · XL >16h (prohibido, se divide).
+**Tamaño de la tarea**: XS ≤0,5 h · S >0,5–1 h · M >1–2 h · L >2–4 h · XL >4 h (prohibido salvo excepción escrita del Operator; se divide). Horas de reloj del equipo de subagentes, sin contar sellos ni revisión manual; el límite superior es inclusivo; el plano escribe las horas estimadas. Las tareas creadas en Altum antes del 2026-11-25 conservan su letra hasta re-estimarse en su plano; si re-estimadas pasan de 4 h, se parten y no se ejecutan.
+**Tamaño de la historia de Altum** (el padre del ítem): la suma de las horas del plano de sus tareas (sin plano, el tope de la letra: XS 0,5 · S 1 · M 2 · L 4), máximo 8 h (>8 h = XL, prohibida salvo excepción escrita). Las historias que ya existían el 2026-11-25 conservan su medida por tareas abiertas (tope 4 abiertas) hasta cerrarse.
 **Riesgo**: R0 texto/CSS · R1 UI aislada · R2 API, lógica, tabla nueva · R3 login, permisos, pagos, datos personales, migraciones · R4 producción, infraestructura, borrar datos.
 Ante la duda, sube el riesgo.
 
@@ -68,7 +81,7 @@ Con el "sí", **crea el ítem** en `docs/items/<ID>.md` desde la plantilla (`${C
 ## Paso 4 — Elegir camino
 - **XS + R0** (texto, color, typo): sin OpenSpec. Crea rama, cambia, toma screenshot, corre lint → salta al paso 8.
 - **R4**: detente. Redacta la propuesta y di: "Esto lo tiene que aprobar el líder técnico antes de tocar nada." No ejecutes.
-- **L**: propone dividir en 2–5 partes que se puedan probar solas. Cada parte = un ítem. Arranca solo la primera.
+- **XL (>4 h)**: detente; propone dividir en partes de ≤4 h que se puedan probar solas, salvo excepción escrita del Operator. Cada parte = un ítem. Arranca solo la primera.
 - **Resto**: sigue.
 
 ## Paso 5 — Historia Ready
@@ -109,11 +122,12 @@ Luego usa la skill `openspec-apply-change`.
 
 ## Paso 9 — Entregar
 Usa la skill `sn-ship` (modo PR). Si el riesgo es R2 o más, usa después `sn-request` (sello entrega) para que el líder valide desde su computador. Luego di claramente:
-"✅ Listo para revisión. Ahora: 1) abre una sesión NUEVA de Claude y escribe `/code-review` (el que construyó no se revisa a sí mismo); 2) prueba tú mismo en el enlace de vista previa; 3) cuando el PR se apruebe y se una a main, escribe `/sn` otra vez y te ayudo a cerrar."
+"✅ Listo para revisión. Ahora: 1) abre una sesión NUEVA de Claude y escribe `/code-review` (el que construyó no se revisa a sí mismo); 2) revisa la evidencia que te entrego (capturas, Swagger, diff, antes → ahora → cómo se probó) y da el Sello 2 (la prueba manual se hace al cerrar la historia); 3) cuando el PR se apruebe y se una a main, escribe `/sn` otra vez y te ayudo a cerrar."
 
 ## Paso 10 — Cerrar (cuando el PR ya está unido a main)
 Si al entrar detectas un change cuyo PR ya está merged (`gh pr view --json state`): usa `openspec-archive-change` y haz commit del archivo.
 **La tarea ya se cerró sola en Altum al unirse el PR** (lo hace el CI de GitHub, o el siguiente `git pull` si el proyecto no tiene el CI). Confírmalo: `node scripts/sn/sn-sync.mjs asegurar <ID del ítem>`. Debe decir "Cerrada en Altum"; díselo a la persona con el número ("La tarea #152 quedó cerrada en Altum"). Si dice que sigue abierta o Altum responde que la bloquea otra tarea, explica cuál y que se cerrará cuando esa termine: no lo des por terminado sin decirlo.
+**Si era la última tarea abierta de su historia en Altum**, la historia no se cierra sola: sigue la Fase 6 del protocolo (instruye la revisión manual a la autoridad del sello y registra su veredicto «cerrar» o «corregir»).
 Después, `sn-explain` (microlección de 5 min). Si hubo retrabajo o errores en el camino, sugiere `sn-learn`.
 
 ## Descartar un ítem (se decidió no hacerlo)

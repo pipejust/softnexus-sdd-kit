@@ -44,7 +44,8 @@ Además revisa: cambios sin commit (`git status`), rama equivocada (trabajando e
 🗺️ PROYECTO <nombre> — rama <rama>
 <emoji> <change>: etapa <n>/9 <nombre etapa>
    Tareas: <x>/<total> · PR: <#num o "no hay"> · Última actividad: <hace…>
-⚠️ <alertas: cambios sin guardar, WIP>1, trabajo viejo, estás en main>
+⚠️ <alertas: cambios sin guardar, más changes activos que el tope (3–4), trabajo viejo, estás en main, historia con todas sus tareas resueltas y revisión manual pendiente>
 ➡️ Siguiente: <una sola acción concreta>
 ```
-Si hay más de un change activo de la misma persona, dilo como alerta: "Tienes 2 cosas abiertas; termina una antes de seguir".
+Si hay más changes activos que el tope medido (3–4 tareas en paralelo, sin archivos compartidos), dilo como alerta: "Tienes 5 cosas abiertas; el tope es 4, termina una antes de seguir".
+Si una historia de Altum tiene todas sus tareas resueltas y no tiene veredicto, dilo como alerta: "La historia #NNN espera tu revisión manual (Fase 6 del protocolo)" y ofrece el guion de revisión.

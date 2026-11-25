@@ -12,10 +12,10 @@ context: |
 
 rules:
   proposal:
-    - Declarar tamaño (XS/S/M/L; XL prohibido, dividir) y riesgo (R0–R4).
+    - Declarar tamaño (XS ≤0,5 h · S >0,5–1 h · M >1–2 h · L >2–4 h · XL >4 h prohibido salvo excepción escrita, dividir; horas de reloj del equipo, con las horas estimadas) y riesgo (R0–R4).
     - Incluir "Fuera de alcance" explícito.
     - Si riesgo >= R3, incluir plan de rollback.
-    - Máximo 1 día de trabajo humano+agente; si no cabe, proponer slices.
+    - Máximo 4 h de reloj del equipo (L); si no cabe, proponer slices.
   specs:
     - Cada requisito con escenarios Given/When/Then.
     - Mínimo un escenario happy path, uno de fallo y uno de borde por requisito.
