@@ -355,8 +355,15 @@ export async function pullAltum(connector, since, root = '.', { includeClosed = 
   return { created, changed, deleted, deActen, checked: live.length, skippedClosed: live.filter((b) => !b.item && !b.open && !includeClosed).length };
 }
 
-export function fetchAltumTask(connector, taskId) {
-  return api(connector, 'GET', `/tasks/${encodeURIComponent(taskId)}`);
+// Acepta el id (UUID o acten:…) o el número que la gente ve en Altum (548 o #548): GET /tasks/{id}
+// solo entiende el id, así que el número se busca entre las tareas del proyecto conectado.
+export async function fetchAltumTask(connector, taskId) {
+  const numero = String(taskId).trim().match(/^#?(\d+)$/)?.[1];
+  if (!numero) return api(connector, 'GET', `/tasks/${encodeURIComponent(taskId)}`);
+  const { items } = await listTasks(connector, { project_id: connector.project_id });
+  const tarea = items.find((t) => t.project_id === connector.project_id && String(t.number) === numero);
+  if (!tarea) throw new Error(`No hay una tarea #${numero} en el proyecto conectado de Altum (o tu clave no la alcanza).`);
+  return api(connector, 'GET', `/tasks/${encodeURIComponent(tarea.id)}`);
 }
 
 export function backlogMarkdown(backlog, { all = false, equipo = [], yo = null } = {}) {

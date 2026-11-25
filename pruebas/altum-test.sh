@@ -305,6 +305,12 @@ check "El ítem importado no crea una tarea duplicada en Altum" "[ \$(state | gr
 
 ALT_ID=$(grep '^ext.altum:' docs/items/ALT-77.md | cut -d' ' -f2)
 check "fetch trae una tarea de Altum por su id (para arrancar /sn desde ella)" "sn fetch altum $ALT_ID | grep -q 'Exportar clientes a Excel'"
+check "fetch acepta el número de la tarea (/sn 77) y la resuelve al id" "sn fetch altum 77 | grep -q \"\\\"id\\\": \\\"$ALT_ID\\\"\""
+check "fetch acepta el número con # (#77)" "sn fetch altum '#77' | grep -q 'Exportar clientes a Excel'"
+out=$(sn fetch altum 5 2>&1)
+check "fetch no trae el número de una tarea de otro proyecto" "echo \"\$out\" | grep -q 'No hay una tarea .5 en el proyecto' && ! echo \"\$out\" | grep -q 'Portal de facturación'"
+out=$(sn fetch altum 999 2>&1)
+check "fetch con un número que no existe lo dice claro" "echo \"\$out\" | grep -q 'No hay una tarea .999 en el proyecto'"
 
 echo "== Un repo = un proyecto de una empresa: elegir y leer lo que ya existe"
 out=$(sn projects altum)

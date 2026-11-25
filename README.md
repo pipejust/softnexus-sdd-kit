@@ -6,6 +6,12 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
+## Versión 0.69.1
+
+- **`fetch altum` acepta el número de la tarea:** `sn-sync fetch altum 548` (o `#548`) busca la tarea #548
+  del proyecto conectado y la trae por su id. Antes solo servía el UUID y el número daba `HTTP 404`,
+  aunque el protocolo (0.3) y `/sn <ID>` piden usar el número. Si el número no existe en el proyecto, lo dice.
+
 ## Versión 0.69.0
 
 Llega el protocolo de ejecución de una tarea de Altum, que viene del maestro de reglas softnexus-reglas v1.2.0.
