@@ -6,6 +6,23 @@ Capa propia: plugin **softnexus-sdd** — una sola puerta (`/sn`) que conduce to
 
 Especificación completa: `../METODOLOGIA-ESPECIFICACION.md` · Manual del equipo: `../MANUAL-NINOS.md`.
 
+## Versión 0.69.0
+
+Llega el protocolo de ejecución de una tarea de Altum, que viene del maestro de reglas softnexus-reglas v1.2.0.
+
+- **`/sn <ID>`:** al recibir el ID de una tarea de Altum, `/sn` aplica el protocolo de
+  `references/protocolo-ejecucion.md` sin que nadie lo pegue. Son las fases 0 a 5 por tarea: reglas y
+  capacidad de la máquina, plano con Sello 1, construcción con subagentes, revisión y UAT, hallazgos, y
+  entrega de evidencia con Sello 2. Al cerrar la última tarea de una historia viene la Fase 6: revisión
+  manual guiada y veredicto «cerrar» o «corregir».
+- **Maestro de reglas:** `/sn` lee `~/AI Projects/Softnexus/softnexus-reglas/REGLAS.md` al abrir el
+  chat. Si no existe en la máquina, lo dice y sigue con el `AGENTS.md` del proyecto.
+- **Tamaños nuevos:** XS ≤0,5 h · S >0,5–1 h · M >1–2 h · L >2–4 h · XL >4 h (prohibida). Son horas
+  de reloj del equipo de agentes. Una historia suma las horas de sus tareas, con un máximo de 8 h.
+- **Trabajo en paralelo:** se pueden tener varios changes activos según la capacidad de la máquina,
+  con un tope de 3 a 4 (antes era uno a la vez).
+- **Sello 2:** se da sobre la evidencia entregada; la prueba manual pasa al cierre de la historia.
+
 ## Versión 0.68.0
 
 La evidencia del proceso (`sn-evidence`) queda **pausada**. Por decisión de Softnexus, las pruebas se
@@ -209,4 +226,4 @@ En Claude Code, dentro del repo: `/sn-setup`. Lee el código, instala OpenSpec y
 | Ver o copiar historias y bugs (con sus commits) | `/sn-items` |
 | Conectar Altum, GitHub/Orca, n8n o Matrix | `/sn-connect` |
 
-Todo lo demás lo conduce `/sn`: tarjeta → historia → plano (OpenSpec) → **sello: aprobación** → construir → evidencia → commits/PR → **sello: revisión** en sesión nueva (`/code-review`) y prueba humana → archivar → microlección.
+Todo lo demás lo conduce `/sn`: tarjeta → historia → plano (OpenSpec) → **sello: aprobación** → construir → evidencia → commits/PR → **sello: revisión** en sesión nueva (`/code-review`) y evidencia entregada (la prueba manual va al cerrar la historia) → archivar → microlección.

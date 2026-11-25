@@ -18,7 +18,7 @@ La persona no tiene que saber qué preguntar. **Tú sí.**
    - ¿Qué queda fuera de este alcance?
    - ¿Hay referencia visual?
 3. Cuando no queden preguntas abiertas, escribe la historia **dentro del ítem** `docs/items/<ID>.md` (secciones Historia, Criterios de aceptación, Estados de UI, Referencia visual, Fuera de alcance, Datos y permisos, Cómo se prueba) y deja vacía la sección Preguntas abiertas. Si el ítem no existe todavía, créalo desde `${CLAUDE_PLUGIN_ROOT}/plantillas/docs/items/_plantilla.md`.
-4. Clasifica tamaño y riesgo. Si es L, propone la división en slices. Si es XL, la división es obligatoria.
+4. Clasifica tamaño (XS ≤0,5 h · S >0,5–1 h · M >1–2 h · L >2–4 h · XL >4 h; horas de reloj del equipo de subagentes) y riesgo. Si es XL, la división es obligatoria salvo excepción escrita del Operator.
 
 ## Calidad de criterios
 - Observable: "la contraseña guardada empieza por `$2b$`", no "la contraseña es segura".

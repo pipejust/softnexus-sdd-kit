@@ -3,7 +3,7 @@
 > Una historia no entra a desarrollo (no está "Ready") hasta que todos los campos obligatorios (*) están llenos.
 > No hace falta llenarla a mano: `/sn-story "<texto vago>"` entrevista a la persona y la completa.
 
-**ID:** SN-___  **Proyecto:** ___  **Tamaño*:** XS/S/M/L  **Riesgo*:** R0–R4
+**ID:** SN-___  **Proyecto:** ___  **Tamaño*:** XS ≤0,5 h · S >0,5–1 h · M >1–2 h · L >2–4 h (XL >4 h prohibida)  **Riesgo*:** R0–R4
 
 ## Historia*
 Como **<rol>** quiero **<acción>** para **<beneficio>**.

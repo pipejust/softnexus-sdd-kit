@@ -3,6 +3,7 @@
 > Fuente única de contexto para cualquier agente (Claude Code, Codex, Cursor, Copilot).
 > `CLAUDE.md` solo importa este archivo. Máximo ~150 líneas: lo que no aplica a TODA tarea va en una skill o en `openspec/specs/`.
 > Dueño: <tech lead>. Cambios a este archivo = PR revisado por el tech lead.
+> Reglas de Softnexus: maestro `~/AI Projects/Softnexus/softnexus-reglas/REGLAS.md` (se lee completo al abrir el chat, R-1). Aquí solo va lo propio del proyecto; donde choque, manda el maestro.
 
 ## 1. Qué es este proyecto
 - Producto: <una frase: quién lo usa y para qué>
@@ -30,8 +31,9 @@ node scripts/check-file-size.mjs   # ningún archivo > 1000 líneas
 
 ## 4. Flujo obligatorio: Spec Driven (OpenSpec)
 Todo trabajo entra por **`/sn`** (idea, bug, error, mejora, correo del cliente). `/sn` conduce el camino:
-ítem → tarjeta (tipo, tamaño, riesgo) → historia Ready (`sn-story`) → spec (`openspec-propose`) → **SELLO: aprobación humana** → construir (`openspec-apply-change`, TDD) → evidencia (`sn-evidence`) → commits y PR (`sn-ship`) → **SELLO: revisión en sesión nueva + prueba humana** → merge → archivar (`openspec-archive-change`) → microlección (`sn-explain`).
+ítem → tarjeta (tipo, tamaño, riesgo) → historia Ready (`sn-story`) → spec (`openspec-propose`) → **SELLO: aprobación humana** → construir (`openspec-apply-change`, TDD) → evidencia (`sn-evidence`) → commits y PR (`sn-ship`) → **SELLO: revisión en sesión nueva + evidencia entregada al humano (la prueba manual va al cerrar la historia)** → merge → archivar (`openspec-archive-change`) → microlección (`sn-explain`).
 `/sn-status` dice en qué etapa va cada ítem y qué sigue. `/sn-help` dice qué hacer si no sabes. Cuando un sello necesita al líder (R3–R4 plano, R2+ entrega): `/sn-request` lo pide por git y el líder valida desde su computador con `/sn-validate`. `/sn-learn` convierte errores repetidos en reglas. Cada ítem vive en `docs/items/<ID>.md` y cada commit lleva `Refs: <ID>`; `/sn-items` los muestra con su trazabilidad y `/sn-connect` los mantiene al día en sistemas externos.
+Una tarea de Altum (`/sn <ID>`) se ejecuta con el protocolo del plugin (`references/protocolo-ejecucion.md`), sin pegarlo: fases 0–5 por tarea, que terminan con la entrega de evidencia, y Fase 6 al resolverse la última tarea de una historia (revisión manual y veredicto de la autoridad del sello).
 Ninguna línea de código de producto sin un change aprobado en `openspec/changes/`. Única excepción: XS + R0 (texto, color, typo), que igual lleva evidencia.
 
 ## 5. Reglas que nunca se negocian

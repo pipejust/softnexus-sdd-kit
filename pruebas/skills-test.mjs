@@ -44,6 +44,10 @@ for (const s of carpetas) {
 // El camino de interfaz está conectado: sin esto la skill existe pero nadie la usa.
 check('sn manda a sn-ui cuando el ítem cambia algo visible', leer('sn', 'SKILL.md').includes('`sn-ui`'));
 check('sn-evidence pide la evidencia de interfaz de sn-ui', /`sn-ui` §5/.test(leer('sn-evidence', 'SKILL.md')));
+// Protocolo de ejecución (0.69.0): /sn <ID> lo aplica sin pegarlo y la escala de tamaños es por horas.
+check('sn apunta al protocolo de ejecución y el archivo existe', /references\/protocolo-ejecucion\.md/.test(leer('sn', 'SKILL.md')) && existsSync(new URL('../plugin/references/protocolo-ejecucion.md', import.meta.url)));
+check('El protocolo trae la Fase 6 y la plantilla del veredicto', /## Fase 6/.test(readFileSync(new URL('../plugin/references/protocolo-ejecucion.md', import.meta.url), 'utf8')) && /Veredicto: CERRAR \| CORREGIR/.test(readFileSync(new URL('../plugin/references/protocolo-ejecucion.md', import.meta.url), 'utf8')));
+check('Sin la escala vieja de tamaños ni WIP = 1 en sn y sn-story', !/≤2h|8–16h|>16h|WIP = 1/.test(leer('sn', 'SKILL.md') + leer('sn-story', 'SKILL.md')));
 // Evidencia del proceso pausada (0.68.0): ningún paso del camino la exige; se reactiva con SN_EVIDENCIA=1.
 check('sn: el paso 8 dice que la evidencia está pausada', /## Paso 8 — Evidencia \(pausada\)/.test(leer('sn', 'SKILL.md')) && !/Sin evidencia completa no se continúa/.test(leer('sn', 'SKILL.md')));
 check('sn-ship no exige evidencia.md para abrir el PR', !/Si no, usa primero `sn-evidence`/.test(leer('sn-ship', 'SKILL.md')));

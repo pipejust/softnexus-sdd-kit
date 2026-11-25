@@ -36,8 +36,8 @@ export function siguientePaso(item) {
     case 'building': return { paso: `Construyendo (${item.tasks_done}/${item.tasks_total})`, siguiente: 'seguir con la siguiente tarea del plano. Si apareció trabajo fuera del plano: dividir.' };
     case 'built': return EVIDENCIA_PAUSADA ? entregar(r, 'Construido') : { paso: 'Construido', siguiente: 'evidencia completa (sn-evidence). Sin evidencia no hay PR.' };
     case 'verified': return entregar(r, 'Con evidencia');
-    case 'in_review': return { paso: 'En revisión', siguiente: 'revisión en una sesión NUEVA (/code-review) y prueba humana; el líder aprueba y une el PR.', sello: true };
-    case 'merged': return { paso: 'Unido', siguiente: 'cerrar: /sn archiva el plano y confirma la tarea cerrada en Altum.' };
+    case 'in_review': return { paso: 'En revisión', siguiente: 'revisión en una sesión NUEVA (/code-review) y entrega de la evidencia (capturas, Swagger, diff); el líder da el Sello 2 y une el PR.', sello: true };
+    case 'merged': return { paso: 'Unido', siguiente: 'cerrar: /sn archiva el plano y confirma la tarea cerrada en Altum; si era la última de su historia, instruye la revisión manual de la historia (Fase 6).' };
     case 'done': return { paso: 'Terminado', siguiente: 'nada.' };
     default: return { paso: item.stage_label || item.stage, siguiente: '/sn-status' };
   }
